@@ -1,0 +1,109 @@
+{
+  "theme": {
+    "name": "Performance Pro Hybrid",
+    "archetype": "Archetype 2 (The Performance Pro) mixed with Archetype 5 (Luxury)",
+    "description": "A dark, elite athletic UI combined with premium, high-end metallic touches for the player cards. Deep obsidian backgrounds contrast with pure white text, electric blaze accents, and rich gradient player cards."
+  },
+  "colors": {
+    "background": {
+      "main": "#0A0A0A",
+      "surface": "#111111",
+      "surface_elevated": "#1A1A1A",
+      "surface_glass": "rgba(26, 26, 26, 0.7)"
+    },
+    "text": {
+      "primary": "#FFFFFF",
+      "secondary": "#A1A1AA",
+      "muted": "#71717A",
+      "inverse": "#000000"
+    },
+    "accents": {
+      "primary": "#FF3B30",
+      "secondary": "#007AFF",
+      "success": "#10B981",
+      "pitch_grass": "#1A472A",
+      "pitch_lines": "rgba(255,255,255,0.5)"
+    },
+    "card_tiers": {
+      "bronze": "linear-gradient(135deg, #4A3018 0%, #CD7F32 100%)",
+      "silver": "linear-gradient(135deg, #4A4A4A 0%, #E0E0E0 100%)",
+      "gold": "linear-gradient(135deg, #B8860B 0%, #FFD700 100%)",
+      "special": "linear-gradient(135deg, #0F0C29 0%, #302B63 50%, #24243E 100%)",
+      "ballon_dor": "linear-gradient(135deg, #000000 0%, #222222 100%)"
+    }
+  },
+  "typography": {
+    "fonts": {
+      "heading": "Bebas Neue, sans-serif",
+      "body": "Inter, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "hierarchy": {
+      "h1": "text-5xl sm:text-6xl tracking-tight uppercase",
+      "h2": "text-3xl sm:text-4xl tracking-tight uppercase",
+      "h3": "text-2xl tracking-tight",
+      "body": "text-base leading-relaxed tracking-wide",
+      "card_overall": "text-4xl font-bold leading-none",
+      "card_name": "text-lg font-bold uppercase tracking-tight"
+    }
+  },
+  "layout": {
+    "spacing": "Generous spacing. Use p-6, p-8 for containers. Gap-8 for grids.",
+    "pitch_grid": "Use absolute positioning over a 100% width relative container with aspect ratio. Use percentage-based top/left to place players in formations like 4-3-3, 4-2-3-1, etc."
+  },
+  "components": {
+    "player_card": {
+      "structure": "FUT inspired. Not a simple rectangle. Use clip-path: polygon(10% 0, 90% 0, 100% 10%, 100% 100%, 50% 90%, 0 100%, 0 10%); or a glowing border box. Top-left: Overall and Position. Center: Letter Avatar (rounded-full, bright bg). Bottom: Name, Club monogram, Season, Flag.",
+      "effects": "For Gold/Special/Ballon d'Or, use framer-motion to add a shimmer effect (animated linear gradient overlay) and box-shadow drop-shadows. Ballon d'Or gets a #FFD700 solid 1px border."
+    },
+    "dice_button": {
+      "structure": "Large, central call to action.",
+      "effects": "When clicked, show a 3D rotating dice animation via framer-motion (rotateX, rotateY) before revealing the drafted team/player."
+    },
+    "pitch_view": {
+      "structure": "A green textured container (use the pitch image). Overlay white SVG lines for the football field. Players are represented as mini-cards or circular avatars placed via absolute top/left percentages based on selected formation."
+    },
+    "match_ticker": {
+      "structure": "Football Manager style. A minimalist dark panel showing minute-by-minute text events. '74: GOAL! Messi scores.'",
+      "effects": "Events fade in sequentially. Scoreboard at the top updates with a pulse effect on goal."
+    }
+  },
+  "animations": {
+    "dice_roll": "rotate 3D, scale down and up, duration 1.5s, ease in out",
+    "card_reveal": "rotateY(180deg) 3D flip, from scale 0.8 to 1",
+    "goal_pulse": "scale(1.2), color shift to #10B981, return to normal",
+    "trophy_lift": "y: [50, 0], opacity: [0, 1], scale: [0.8, 1], spring physics"
+  },
+  "icons": {
+    "library": "lucide-react",
+    "usage": "Use for UI elements (mute, settings, stats), not for player faces."
+  },
+  "media": {
+    "images": {
+      "pitch_texture": {
+        "url": "https://images.unsplash.com/photo-1544914379-806667cd9489?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHwxfHxmb290YmFsbCUyMHBpdGNoJTIwZ3JlZW4lMjBncmFzcyUyMHRleHR1cmV8ZW58MHx8fHwxNzgyNTAwOTAwfDA&ixlib=rb-4.1.0&q=85",
+        "category": "background",
+        "description": "Green grass texture for the pitch background."
+      },
+      "dark_texture": {
+        "url": "https://images.pexels.com/photos/31650385/pexels-photo-31650385.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "category": "background",
+        "description": "Dark metallic abstract texture for high-end card backgrounds or main app background overlay."
+      },
+      "trophy": {
+        "url": "https://images.unsplash.com/photo-1637203727318-fb31b63e2377?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjh8MHwxfHNlYXJjaHwxfHxjaGFtcGlvbnMlMjBsZWFndWUlMjB0cm9waHl8ZW58MHx8fHwxNzgyNTAwOTAwfDA&ixlib=rb-4.1.0&q=85",
+        "category": "celebration",
+        "description": "Trophy image for the tournament winner screen."
+      }
+    }
+  },
+  "instructions_to_main_agent": [
+    "Ensure all components use `data-testid` attributes as requested.",
+    "Implement the UI entirely in the frontend using React, standard Tailwind classes, and Framer Motion for animations.",
+    "Use standard `localStorage` to manage save state for the draft and tournament.",
+    "Follow the specific formation coordinates to map players to the pitch accurately.",
+    "Do not use external CSS for the pitch, rely on inline styles for absolute positioning or Tailwind classes if possible.",
+    "Create realistic FUT-style cards utilizing the CSS gradients provided in this JSON.",
+    "Make sure the typography combinations (Bebas Neue for Headings, Inter for Body) are loaded and applied correctly."
+  ]
+}
