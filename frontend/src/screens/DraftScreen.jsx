@@ -7,21 +7,27 @@ import { Crest } from "../components/Crest";
 import { FORMATIONS, positionPenalty } from "../data/formations";
 import { rollRandom, rollLucky } from "../engine/draftEngine";
 import { sound } from "../engine/sounds";
-import { RefreshCw, ChevronRight } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 
-export const DraftScreen = ({ formationId, xi, setXi, slotIndex, setSlotIndex, changes, onUseChange, onComplete }) => {
+// New flow: roll dice → pool shown alongside pitch → user picks ANY player from pool, then places on ANY empty slot.
+// After placement, dice resets (must roll again). Pool can be re-rolled with CHANGE.
+export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onComplete }) => {
   const formation = FORMATIONS[formationId];
   const [pool, setPool] = useState(null); // { season, team }
   const [rolling, setRolling] = useState(false);
+  const [selectedPlayerIdx, setSelectedPlayerIdx] = useState(-1);
 
-  const currentSlot = formation.slots[slotIndex];
+  const filledCount = xi.filter(Boolean).length;
   const totalSlots = formation.slots.length;
+  const isComplete = filledCount >= totalSlots;
 
   const handleRoll = () => {
+    if (isComplete) return;
     setRolling(true);
     sound.dice();
     setTimeout(() => {
       setPool(rollRandom());
+      setSelectedPlayerIdx(-1);
       setRolling(false);
       sound.cardReveal();
     }, 900);
@@ -31,77 +37,112 @@ export const DraftScreen = ({ formationId, xi, setXi, slotIndex, setSlotIndex, c
     if (changes.remaining <= 0) { sound.error(); return; }
     setRolling(true);
     sound.dice();
-    // If this is the "lucky" change, boost odds
     const lucky = changes.luckyRemaining > 0;
     setTimeout(() => {
       const newRoll = lucky ? rollLucky() : rollRandom();
       setPool(newRoll);
+      setSelectedPlayerIdx(-1);
       onUseChange(lucky);
       setRolling(false);
       sound.cardReveal();
     }, 900);
   };
 
-  const handlePick = (player) => {
+  const sortedPool = useMemo(() => {
+    if (!pool) return [];
+    // Sort by overall desc - user picks freely
+    return pool.team.players.slice().sort((a, b) => b.overall - a.overall);
+  }, [pool]);
+
+  const selectedPlayer = selectedPlayerIdx >= 0 ? sortedPool[selectedPlayerIdx] : null;
+
+  const handleSelectPlayer = (idx) => {
+    sound.click();
+    setSelectedPlayerIdx(idx);
+  };
+
+  const handlePlaceOnSlot = (slotIdx, slot) => {
+    if (!selectedPlayer) {
+      // No player selected — small nudge
+      if (pool) sound.error();
+      return;
+    }
+    if (xi[slotIdx]) {
+      // slot already filled - replace? for simplicity, do nothing
+      sound.error();
+      return;
+    }
     sound.click();
     const newXi = [...xi];
-    newXi[slotIndex] = { ...player, _season: pool.season, _club: pool.team.club, _crest: pool.team.crest, _country: pool.team.country };
+    newXi[slotIdx] = {
+      ...selectedPlayer,
+      _season: pool.season,
+      _club: pool.team.club,
+      _crest: pool.team.crest,
+      _country: pool.team.country,
+    };
     setXi(newXi);
+    // After placement, clear pool; must roll again
     setPool(null);
-    if (slotIndex + 1 >= totalSlots) {
-      onComplete(newXi);
-    } else {
-      setSlotIndex(slotIndex + 1);
+    setSelectedPlayerIdx(-1);
+    if (newXi.filter(Boolean).length >= totalSlots) {
+      setTimeout(() => onComplete(newXi), 400);
     }
   };
 
-  // Sort team's players by compatibility w/ current slot
-  const sortedPool = useMemo(() => {
-    if (!pool) return [];
-    const ranked = pool.team.players.map((p) => ({
-      ...p,
-      _penalty: positionPenalty(currentSlot.pos, p.primary, p.secondary),
-    }));
-    ranked.sort((a, b) => a._penalty - b._penalty || b.overall - a.overall);
-    return ranked;
-  }, [pool, currentSlot]);
+  // For pitch: when player is selected, mark slots as "fit" or "out" so user knows compat
+  const slotHints = useMemo(() => {
+    if (!selectedPlayer) return null;
+    return formation.slots.map((slot, idx) => {
+      if (xi[idx]) return "filled";
+      const p = positionPenalty(slot.pos, selectedPlayer.primary, selectedPlayer.secondary);
+      if (p <= 1) return "fit";
+      if (p >= 6) return "out";
+      return "ok";
+    });
+  }, [selectedPlayer, formation, xi]);
 
-  const progress = ((slotIndex) / totalSlots) * 100;
+  const progress = (filledCount / totalSlots) * 100;
 
   return (
     <div className="px-5 md:px-10 py-6 max-w-7xl mx-auto">
       {/* Top bar */}
-      <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
         <div>
           <div className="font-mono text-xs text-amber-300 tracking-widest">ADIM 2 / 4 · DRAFT</div>
-          <h2 className="font-display text-3xl md:text-4xl tracking-tight">{slotIndex + 1}/{totalSlots} — {currentSlot.pos} POZİSYONU</h2>
+          <h2 className="font-display text-3xl md:text-4xl tracking-tight">{filledCount} / {totalSlots} OYUNCU YERLEŞTİ</h2>
+          <div className="text-xs text-white/55 mt-1">Zar at, beğendiğin oyuncuyu seç, sahada istediğin boş slota koy.</div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <div className="text-[10px] uppercase tracking-widest text-white/60">CHANGE HAKKI</div>
-            <div className="font-display text-2xl text-amber-300" data-testid="changes-remaining">{changes.remaining} / 3</div>
-          </div>
+        <div className="text-right">
+          <div className="text-[10px] uppercase tracking-widest text-white/60">CHANGE HAKKI</div>
+          <div className="font-display text-2xl text-amber-300" data-testid="changes-remaining">{changes.remaining} / 3</div>
         </div>
       </div>
 
       {/* Progress */}
-      <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden mb-6">
+      <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden mb-5">
         <div className="h-full bg-amber-300 transition-all" style={{ width: `${progress}%` }} />
       </div>
 
       <div className="grid lg:grid-cols-12 gap-6">
         {/* Left: Pitch */}
-        <div className="lg:col-span-4 glass rounded-2xl p-5">
-          <div className="text-xs text-white/60 mb-3 font-mono tracking-widest">KADRO {formation.label}</div>
-          <Pitch formationId={formationId} xi={xi} activeSlotIndex={slotIndex} compact />
-          <div className="mt-4 text-center">
-            <div className="text-[10px] text-white/50 tracking-widest">ŞU AN SEÇİYORSUN</div>
-            <div className="font-display text-2xl text-amber-300">{currentSlot.pos}</div>
+        <div className="lg:col-span-5 glass rounded-2xl p-5">
+          <div className="text-xs text-white/60 mb-3 font-mono tracking-widest flex items-center justify-between">
+            <span>KADRO · {formation.label}</span>
+            {selectedPlayer && <span className="text-amber-300">Bir boş slota tıkla</span>}
           </div>
+          <Pitch
+            formationId={formationId}
+            xi={xi}
+            onSlotClick={handlePlaceOnSlot}
+            slotHints={slotHints}
+            interactive={!!selectedPlayer}
+            compact
+          />
         </div>
 
         {/* Right: dice + selection */}
-        <div className="lg:col-span-8 glass rounded-2xl p-5 min-h-[420px]">
+        <div className="lg:col-span-7 glass rounded-2xl p-5 min-h-[420px]">
           <AnimatePresence mode="wait">
             {!pool && !rolling && (
               <motion.div
@@ -109,10 +150,19 @@ export const DraftScreen = ({ formationId, xi, setXi, slotIndex, setSlotIndex, c
                 initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className="h-full flex flex-col items-center justify-center text-center min-h-[420px]"
               >
-                <p className="text-white/60 max-w-md text-sm mb-6">
-                  Zarı çevir — rastgele bir sezon ve takım kadrosu açılsın. Beğenmezsen kalan {changes.remaining} change hakkını kullanabilirsin.
-                </p>
-                <DiceButton onRoll={handleRoll} testId="roll-dice-button" />
+                {isComplete ? (
+                  <>
+                    <div className="font-display text-3xl text-amber-300 tracking-tight mb-3">KADRO TAMAM!</div>
+                    <p className="text-white/60">Devam etmek için sayfa yönlendirecek...</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-white/60 max-w-md text-sm mb-6">
+                      Zarı çevir — rastgele bir sezon ve takım kadrosu açılsın. Oyuncuyu sahada istediğin pozisyona yerleştir.
+                    </p>
+                    <DiceButton onRoll={handleRoll} testId="roll-dice-button" />
+                  </>
+                )}
               </motion.div>
             )}
 
@@ -131,12 +181,12 @@ export const DraftScreen = ({ formationId, xi, setXi, slotIndex, setSlotIndex, c
                 key="reveal"
                 initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
               >
-                <div className="flex items-center justify-between mb-5 gap-4">
+                <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
                   <div className="flex items-center gap-3">
                     <Crest code={pool.team.crest} size="lg" />
                     <div>
                       <div className="font-display text-2xl md:text-3xl tracking-tight" data-testid="rolled-team-name">{pool.team.club}</div>
-                      <div className="text-xs text-white/60 font-mono tracking-widest">SEZON · {pool.season} {pool.team.country}</div>
+                      <div className="text-xs text-white/60 font-mono tracking-widest" data-testid="rolled-season">SEZON · {pool.season} {pool.team.country}</div>
                     </div>
                   </div>
                   <button
@@ -150,34 +200,33 @@ export const DraftScreen = ({ formationId, xi, setXi, slotIndex, setSlotIndex, c
                   </button>
                 </div>
 
-                <div className="text-[11px] text-white/50 mb-3 font-mono tracking-widest">
-                  {currentSlot.pos} POZİSYONUNA EN UYGUN OYUNCULAR ÖNDE — TIKLAYARAK SEÇ
+                <div className="text-[11px] text-white/55 mb-3 font-mono tracking-widest">
+                  {selectedPlayer ? (
+                    <span className="text-amber-300">SAHADA BOŞ BİR SLOTA TIKLAYARAK YERLEŞTİR</span>
+                  ) : (
+                    "BİR OYUNCUYA TIKLAYARAK SEÇ"
+                  )}
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[460px] overflow-y-auto pr-1">
                   {sortedPool.map((p, idx) => (
-                    <div key={idx} className="relative">
-                      <PlayerCard
-                        player={p}
-                        season={pool.season}
-                        club={pool.team.club}
-                        crest={pool.team.crest}
-                        country={pool.team.country}
-                        size="sm"
-                        testId={`pool-player-${idx}`}
-                        onClick={() => handlePick(p)}
-                      />
-                      {p._penalty <= 1 ? (
-                        <span className="absolute -top-1 -right-1 text-[9px] font-bold bg-emerald-400 text-black px-1.5 py-0.5 rounded">FIT</span>
-                      ) : p._penalty >= 6 ? (
-                        <span className="absolute -top-1 -right-1 text-[9px] font-bold bg-red-500 text-white px-1.5 py-0.5 rounded">OUT</span>
-                      ) : null}
-                    </div>
+                    <PlayerCard
+                      key={idx}
+                      player={p}
+                      season={pool.season}
+                      club={pool.team.club}
+                      crest={pool.team.crest}
+                      country={pool.team.country}
+                      size="sm"
+                      selected={selectedPlayerIdx === idx}
+                      testId={`pool-player-${idx}`}
+                      onClick={() => handleSelectPlayer(idx)}
+                    />
                   ))}
                 </div>
 
-                <div className="mt-5 text-right text-[10px] text-white/40 font-mono">
-                  TIP: <span className="text-emerald-400">FIT</span> = doğru pozisyon, <span className="text-red-500">OUT</span> = ciddi uyum kaybı
+                <div className="mt-3 text-[10px] text-white/40 font-mono">
+                  TIP: <span className="text-emerald-400">YEŞİL</span> slot = pozisyona uyumlu · <span className="text-red-400">KIRMIZI</span> = ciddi uyumsuzluk (overall cezası)
                 </div>
               </motion.div>
             )}

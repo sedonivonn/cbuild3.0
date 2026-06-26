@@ -260,7 +260,17 @@ const GroupTable = ({ title, table }) => {
         <tbody>
           {table.map((row, i) => (
             <tr key={i} className={`${row.team.isUser ? "text-amber-300" : "text-white/85"}`}>
-              <td className="py-1 flex items-center gap-1.5"><Crest code={row.team.crest} size="sm" /><span className="truncate max-w-[110px]">{row.team.club}</span></td>
+              <td className="py-1">
+                <div className="flex items-center gap-1.5">
+                  <Crest code={row.team.crest} size="sm" />
+                  <div className="flex flex-col leading-tight min-w-0">
+                    <span className="truncate max-w-[110px] text-[11px]">{row.team.club}</span>
+                    {!row.team.isUser && (
+                      <span className="text-[9px] font-mono text-white/45 tracking-wider">{row.team.season}</span>
+                    )}
+                  </div>
+                </div>
+              </td>
               <td className="text-center">{row.P}</td>
               <td className="text-center">{row.W}</td>
               <td className="text-center">{row.GD}</td>
@@ -308,7 +318,12 @@ const KnockoutCard = ({ pair }) => {
 const Row = ({ team, score, isWin, pen }) => (
   <div className={`flex items-center gap-2 ${isWin ? "text-amber-300" : "text-white/80"}`}>
     <Crest code={team.crest} size="sm" />
-    <span className="truncate flex-1 text-xs">{team.label}</span>
+    <div className="flex flex-col leading-tight flex-1 min-w-0">
+      <span className="truncate text-xs">{team.club || team.label}</span>
+      {!team.isUser && team.season && (
+        <span className="text-[9px] font-mono text-white/45 tracking-wider">SEZON · {team.season}</span>
+      )}
+    </div>
     <span className="font-display text-lg">{score ?? "—"}</span>
     {pen !== undefined && <span className="text-[10px] text-white/60">({pen})</span>}
   </div>

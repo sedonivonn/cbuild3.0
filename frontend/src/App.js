@@ -29,7 +29,6 @@ function App() {
   const [screen, setScreen] = useState(initial?.screen || "home");
   const [formationId, setFormationId] = useState(initial?.formationId || null);
   const [xi, setXi] = useState(initial?.xi || []);
-  const [slotIndex, setSlotIndex] = useState(initial?.slotIndex || 0);
   const [changes, setChanges] = useState(initial?.changes || { remaining: 3, luckyRemaining: 1 });
   const [tactic, setTactic] = useState(initial?.tactic || null);
   const [tournament, setTournament] = useState(initial?.tournament || null);
@@ -39,8 +38,8 @@ function App() {
 
   // Persist
   useEffect(() => {
-    saveState({ screen, formationId, xi, slotIndex, changes, tactic, tournament });
-  }, [screen, formationId, xi, slotIndex, changes, tactic, tournament]);
+    saveState({ screen, formationId, xi, changes, tactic, tournament });
+  }, [screen, formationId, xi, changes, tactic, tournament]);
 
   const teamStats = useMemo(() => {
     if (!formationId || xi.length === 0) return null;
@@ -55,7 +54,6 @@ function App() {
     // reset all
     setFormationId(null);
     setXi([]);
-    setSlotIndex(0);
     setChanges({ remaining: 3, luckyRemaining: 1 });
     setTactic(null);
     setTournament(null);
@@ -69,7 +67,6 @@ function App() {
     // init xi as empty array of slots
     const formation = FORMATIONS[formationId];
     setXi(new Array(formation.slots.length).fill(null));
-    setSlotIndex(0);
     setScreen("draft");
     sound.click();
   };
@@ -96,7 +93,7 @@ function App() {
   const handleReset = () => {
     if (!window.confirm("Tüm ilerlemeyi sıfırlayıp baştan başlamak istediğinden emin misin?")) return;
     try { localStorage.removeItem(SAVE_KEY); } catch (_) {}
-    setFormationId(null); setXi([]); setSlotIndex(0); setChanges({ remaining: 3, luckyRemaining: 1 }); setTactic(null); setTournament(null); setActiveMatch(null); setTrophyTeam(null);
+    setFormationId(null); setXi([]); setChanges({ remaining: 3, luckyRemaining: 1 }); setTactic(null); setTournament(null); setActiveMatch(null); setTrophyTeam(null);
     setScreen("home");
   };
 
@@ -131,8 +128,6 @@ function App() {
           formationId={formationId}
           xi={xi}
           setXi={setXi}
-          slotIndex={slotIndex}
-          setSlotIndex={setSlotIndex}
           changes={changes}
           onUseChange={handleUseChange}
           onComplete={handleDraftComplete}
