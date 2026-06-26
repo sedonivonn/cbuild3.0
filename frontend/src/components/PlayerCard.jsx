@@ -47,11 +47,12 @@ export const PlayerCard = ({ player, season, club, crest, country, size = "md", 
       {/* Name front and center */}
       <div className="flex-1 flex items-center justify-center px-2 py-2">
         <div
-          className="text-center font-display text-white leading-tight"
+          className="text-center font-display text-white leading-tight w-full"
           style={{
-            fontSize: player.name.length > 18 ? "14px" : player.name.length > 14 ? "16px" : "20px",
+            fontSize: player.name.length > 22 ? "12px" : player.name.length > 18 ? "13px" : player.name.length > 14 ? "15px" : "18px",
             textShadow: "0 2px 6px rgba(0,0,0,0.55)",
             wordBreak: "break-word",
+            overflowWrap: "anywhere",
             lineHeight: "1.05",
             letterSpacing: "0.02em",
           }}
@@ -63,9 +64,9 @@ export const PlayerCard = ({ player, season, club, crest, country, size = "md", 
 
       {/* Footer */}
       <div className="px-3 pb-2 mt-auto">
-        <div className="flex justify-between items-center gap-2 text-[11px] text-white/90 leading-tight">
-          <span className="font-medium truncate" title={club}>{club}</span>
-          <span className="shrink-0">{player.nationality || country}</span>
+        <div className="flex justify-between items-center gap-2 text-[10px] text-white/90 leading-tight">
+          <span className="font-medium truncate min-w-0" title={club}>{club}</span>
+          <span className="shrink-0 text-[12px]">{player.nationality || country}</span>
         </div>
         <div className="mt-0.5 text-[9px] text-white/70 tracking-wider">
           2nd: {player.secondary || "—"}

@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 3 frontend testing - all 8 requested fixes validated via Playwright + DOM inspection. (1) Home page UNCHANGED: 0 <img> elements, centered hero + 3 feature cards (ZAR SISTEMI / TAKTIK / 32 TAKIM), start-draft-button present. (2) Formation preview circles MEASURABLY smaller than draft circles: preview circle = 32x32px (w-8 in readOnly mode), draft circle = 48x48px (w-12 interactive). Confirmed preview_smaller_than_draft=true. (3) Player card FULL NAMES render — pool contained 'STEFAN EFFENBERG', 'BIXENTE LIZARAZU', 'MEMPHIS DEPAY', 'ANTHONY LOPES', 'HOUSSEM AOUAR', 'BRUNO GUIMARAES', 'MOUSSA DEMBELE', 'LEO DUBOIS', 'JOACHIM ANDERSEN' — all fully rendered, no truncation. (4) STRICT canPlace rule WORKS: selected an RW primary player (Memphis Depay, primary=RW, secondary=CAM/LW) — all 10 non-RW slots got red dimmed border (rgba(248,113,113,0.5)) and disabled=true, only slot 10 (RW) got green border (rgb(52,211,153)) and disabled=false. GK/CB/LB/CM/CDM/CAM slots all correctly rejected. (5) CROSS-TEAM LOCK WORKS: after placing GK on slot 0, rolled a new pool — the GK player in that new pool returned disabled=true. (6) Engine chemistry bonus verified by source code inspection: matchEngine.js lines 24-39 add USER_CHEMISTRY {attack:4,midfield:4,defense:4,keeper:3,overall:3} via applyChemistry(stats,isUser); applied inside simulateMatch (line 44), simulateExtraTime (line 178), simulatePenalties (line 191); tournamentEngine.js playGroupMatch/playKnockout pass isUserTeam(homeRef)/isUserTeam(awayRef) as homeIsUser/awayIsUser flags (lines 49-69). (7) Season-year display verified visually on draft reveal ('SEZON · 2020' next to LYON crest) and via source inspection in iteration_2 of TournamentScreen.jsx (GroupTable line 269 + KnockoutCard lines 322-324 gate team.season on !team.isUser). (8) Tactics screen NOT modified — code path unchanged from iteration_1 verified pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "DraftScreen pool",
+        "issues": ["Minor visual nit: PlayerCard uses Tailwind 'opacity-40' on disabled prop, but framer-motion's animate={{opacity:1}} inline style overrides Tailwind class. Measured computed opacity on a disabled GK card was 0.999 instead of 0.4. The card IS functionally disabled (disabled=true, click does nothing, cursor-not-allowed applies), but it does NOT visually fade to 40% as spec requires. FIX: in PlayerCard.jsx pass animate={{ opacity: disabled ? 0.4 : 1, y:0, rotateY:0 }} so framer-motion animates to the dimmed value, OR drop the framer-motion opacity animation when disabled."]
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Minor visual) PlayerCard.jsx: framer-motion's animate={{opacity:1}} on line 28 overrides Tailwind 'opacity-40' class for disabled cards. Recommend: change animate to animate={{ opacity: disabled ? 0.4 : 1, y:0, rotateY:0 }} so disabled cards visibly fade as the spec requires. Functionally cards ARE disabled and unclickable already — this is purely a visual fade issue."
+  ],
+  "critical_code_review_comments": [
+    "formations.js canPlace(slotPos, player) is correctly strict — only primary OR secondary match, no FAMILY fallback. hasAvailableSlot(formation, xi, player) iterates empty slots and returns true if any one is canPlace.",
+    "Pitch.jsx readOnly mode swaps Tag to div and uses circleClass w-7/w-8 (28-32px) vs w-11/w-12 (44-48px) in interactive mode — confirmed by DOM measurement: 32px vs 48px.",
+    "DraftScreen.jsx correctly tags sortedPool entries with _placeable (hasAvailableSlot) and passes disabled={!p._placeable} to PlayerCard. handleSelectPlayer early-returns on !_placeable; handlePlaceOnSlot double-checks canPlace before placing.",
+    "matchEngine.js USER_CHEMISTRY (+4/+4/+4/+3/+3) wired through simulateMatch, simulateExtraTime, simulatePenalties. tournamentEngine.js threads isUserTeam(ref) correctly to homeIsUser/awayIsUser so user team gets the bonus.",
+    "PlayerCard.jsx font auto-scale ladder (22>:12px, 18>:13px, 14>:15px, else:18px) — works in practice; long names like 'CRISTIANO RONALDO' and 'JOACHIM ANDERSEN' all fit. ONE caveat: framer-motion opacity animation overrides 'opacity-40' Tailwind class for disabled state — see action item."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend only)", "frontend": "100% functional, 1 minor cosmetic nit on disabled-card fade"},
+  "test_credentials": "none required",
+  "seed_data_creation": "none - frontend-only app with bundled JS data",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration_3 confirms all 8 user-requested fixes are functionally correct: home unchanged (0 imgs), formation preview circles measurably smaller (32px vs 48px draft), full player names render, STRICT canPlace correctly blocks non-matching slots (selecting RW player → only RW slot enabled, all 10 other slots disabled with red border), cross-team lock works (after placing GK, GK in next pool is disabled=true), chemistry bonus +4/+4/+4/+3/+3 confirmed in source, season-year displays on draft reveal and tournament screens. ONE minor cosmetic issue: framer-motion's animate prop overrides Tailwind opacity-40 on disabled PlayerCards — they remain functionally disabled but don't visually fade. Recommend fixing animate prop in PlayerCard.jsx to animate to opacity:disabled?0.4:1.",
+  "rca of the issue": "No app-breaking bugs. The only finding is a CSS-precedence cosmetic issue in PlayerCard.jsx: framer-motion's animate={{opacity:1}} (line 28) generates an inline style which has higher specificity than Tailwind's 'opacity-40' utility class (line 31). Result: computed opacity on a disabled card is ~1.0 instead of 0.4. The card still has disabled attribute, click handler doesn't fire, and cursor-not-allowed shows. Fix: pass disabled into the animate object: animate={{ opacity: disabled ? 0.4 : 1, y: 0, rotateY: 0 }}."
+}

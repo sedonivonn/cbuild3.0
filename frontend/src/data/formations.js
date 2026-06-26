@@ -124,3 +124,18 @@ export function positionPenalty(slotPos, primary, secondary) {
   if (fam.includes(secondary)) return 3;
   return 6;
 }
+
+// STRICT placement rule: player can only be placed where slot.pos matches
+// either their primary or secondary position. No "family" fallback.
+// This prevents e.g. a winger being placed in defense.
+export function canPlace(slotPos, player) {
+  if (!player) return false;
+  return slotPos === player.primary || slotPos === player.secondary;
+}
+
+// Given a player and the formation+filled xi, returns true if there is at least
+// one EMPTY slot in the formation where this player could legally be placed.
+export function hasAvailableSlot(formation, xi, player) {
+  if (!formation) return false;
+  return formation.slots.some((slot, idx) => !xi[idx] && canPlace(slot.pos, player));
+}

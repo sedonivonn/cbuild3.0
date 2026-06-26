@@ -52,7 +52,10 @@ export function playGroupMatch(homeRef, awayRef, userStats, userTacticId, isUser
   const away = isUserTeam(awayRef) ? { ...userStats, name: awayRef.label } : { ...stubChampionStats(awayRef), name: awayRef.label };
   const homeTactic = isUserTeam(homeRef) ? userTacticId : aiPickTactic(home, away);
   const awayTactic = isUserTeam(awayRef) ? userTacticId : aiPickTactic(away, home);
-  const result = simulateMatch({ home, away, homeTacticId: homeTactic, awayTacticId: awayTactic });
+  const result = simulateMatch({
+    home, away, homeTacticId: homeTactic, awayTacticId: awayTactic,
+    homeIsUser: isUserTeam(homeRef), awayIsUser: isUserTeam(awayRef),
+  });
   return { home: homeRef, away: awayRef, result, homeTactic, awayTactic };
 }
 
@@ -61,6 +64,9 @@ export function playKnockout(homeRef, awayRef, userStats, userTacticId, isUserTe
   const away = isUserTeam(awayRef) ? { ...userStats, name: awayRef.label } : { ...stubChampionStats(awayRef), name: awayRef.label };
   const homeTactic = isUserTeam(homeRef) ? userTacticId : aiPickTactic(home, away);
   const awayTactic = isUserTeam(awayRef) ? userTacticId : aiPickTactic(away, home);
-  const tie = simulateKnockout({ home, away, homeTacticId: homeTactic, awayTacticId: awayTactic, twoLeg });
+  const tie = simulateKnockout({
+    home, away, homeTacticId: homeTactic, awayTacticId: awayTactic, twoLeg,
+    homeIsUser: isUserTeam(homeRef), awayIsUser: isUserTeam(awayRef),
+  });
   return { home: homeRef, away: awayRef, tie, homeTactic, awayTactic };
 }

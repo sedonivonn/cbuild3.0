@@ -4,13 +4,15 @@ import { DiceButton } from "../components/DiceButton";
 import { PlayerCard } from "../components/PlayerCard";
 import { Pitch } from "../components/Pitch";
 import { Crest } from "../components/Crest";
-import { FORMATIONS, positionPenalty } from "../data/formations";
+import { FORMATIONS, canPlace, hasAvailableSlot } from "../data/formations";
 import { rollRandom, rollLucky } from "../engine/draftEngine";
 import { sound } from "../engine/sounds";
 import { RefreshCw } from "lucide-react";
 
-// New flow: roll dice → pool shown alongside pitch → user picks ANY player from pool, then places on ANY empty slot.
-// After placement, dice resets (must roll again). Pool can be re-rolled with CHANGE.
+// Free placement draft with strict primary/secondary rules.
+// - A player can ONLY be placed on a slot whose pos == player.primary OR player.secondary.
+// - Players who have no available (empty + compatible) slot are disabled in the pool.
+// - Filled slots can't be clicked again.
 export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onComplete }) => {
   const formation = FORMATIONS[formationId];
   const [pool, setPool] = useState(null); // { season, team }
@@ -48,27 +50,35 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
     }, 900);
   };
 
+  // Sort by overall desc and tag each player with placeable flag
   const sortedPool = useMemo(() => {
     if (!pool) return [];
-    // Sort by overall desc - user picks freely
-    return pool.team.players.slice().sort((a, b) => b.overall - a.overall);
-  }, [pool]);
+    const arr = pool.team.players.slice().sort((a, b) => b.overall - a.overall);
+    return arr.map((p) => ({ ...p, _placeable: hasAvailableSlot(formation, xi, p) }));
+  }, [pool, formation, xi]);
 
   const selectedPlayer = selectedPlayerIdx >= 0 ? sortedPool[selectedPlayerIdx] : null;
 
   const handleSelectPlayer = (idx) => {
+    const p = sortedPool[idx];
+    if (!p || !p._placeable) {
+      sound.error();
+      return;
+    }
     sound.click();
     setSelectedPlayerIdx(idx);
   };
 
   const handlePlaceOnSlot = (slotIdx, slot) => {
     if (!selectedPlayer) {
-      // No player selected — small nudge
       if (pool) sound.error();
       return;
     }
     if (xi[slotIdx]) {
-      // slot already filled - replace? for simplicity, do nothing
+      sound.error();
+      return;
+    }
+    if (!canPlace(slot.pos, selectedPlayer)) {
       sound.error();
       return;
     }
@@ -82,7 +92,6 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
       _country: pool.team.country,
     };
     setXi(newXi);
-    // After placement, clear pool; must roll again
     setPool(null);
     setSelectedPlayerIdx(-1);
     if (newXi.filter(Boolean).length >= totalSlots) {
@@ -90,15 +99,13 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
     }
   };
 
-  // For pitch: when player is selected, mark slots as "fit" or "out" so user knows compat
+  // For pitch: when player is selected, mark slots as "fit" or "blocked"
   const slotHints = useMemo(() => {
     if (!selectedPlayer) return null;
     return formation.slots.map((slot, idx) => {
       if (xi[idx]) return "filled";
-      const p = positionPenalty(slot.pos, selectedPlayer.primary, selectedPlayer.secondary);
-      if (p <= 1) return "fit";
-      if (p >= 6) return "out";
-      return "ok";
+      if (canPlace(slot.pos, selectedPlayer)) return "fit";
+      return "blocked";
     });
   }, [selectedPlayer, formation, xi]);
 
@@ -111,7 +118,7 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
         <div>
           <div className="font-mono text-xs text-amber-300 tracking-widest">ADIM 2 / 4 · DRAFT</div>
           <h2 className="font-display text-3xl md:text-4xl tracking-tight">{filledCount} / {totalSlots} OYUNCU YERLEŞTİ</h2>
-          <div className="text-xs text-white/55 mt-1">Zar at, beğendiğin oyuncuyu seç, sahada istediğin boş slota koy.</div>
+          <div className="text-xs text-white/55 mt-1">Zar at, beğendiğin oyuncuyu seç, sahada onun pozisyonuna uygun boş slota koy.</div>
         </div>
         <div className="text-right">
           <div className="text-[10px] uppercase tracking-widest text-white/60">CHANGE HAKKI</div>
@@ -129,7 +136,7 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
         <div className="lg:col-span-5 glass rounded-2xl p-5">
           <div className="text-xs text-white/60 mb-3 font-mono tracking-widest flex items-center justify-between">
             <span>KADRO · {formation.label}</span>
-            {selectedPlayer && <span className="text-amber-300">Bir boş slota tıkla</span>}
+            {selectedPlayer && <span className="text-amber-300">UYUMLU SLOTA TIKLA</span>}
           </div>
           <Pitch
             formationId={formationId}
@@ -158,7 +165,7 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
                 ) : (
                   <>
                     <p className="text-white/60 max-w-md text-sm mb-6">
-                      Zarı çevir — rastgele bir sezon ve takım kadrosu açılsın. Oyuncuyu sahada istediğin pozisyona yerleştir.
+                      Zarı çevir — rastgele bir sezon ve takım kadrosu açılsın. Oyuncuyu kendi mevkisine uygun bir boş slota yerleştir.
                     </p>
                     <DiceButton onRoll={handleRoll} testId="roll-dice-button" />
                   </>
@@ -202,9 +209,9 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
 
                 <div className="text-[11px] text-white/55 mb-3 font-mono tracking-widest">
                   {selectedPlayer ? (
-                    <span className="text-amber-300">SAHADA BOŞ BİR SLOTA TIKLAYARAK YERLEŞTİR</span>
+                    <span className="text-amber-300">SAHADA YEŞİL SLOTA TIKLAYARAK YERLEŞTİR</span>
                   ) : (
-                    "BİR OYUNCUYA TIKLAYARAK SEÇ"
+                    "BİR OYUNCUYA TIKLAYARAK SEÇ — KAPALI KARTLARIN POZİSYONU KADRONA UYMUYOR"
                   )}
                 </div>
 
@@ -219,6 +226,7 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
                       country={pool.team.country}
                       size="sm"
                       selected={selectedPlayerIdx === idx}
+                      disabled={!p._placeable}
                       testId={`pool-player-${idx}`}
                       onClick={() => handleSelectPlayer(idx)}
                     />
@@ -226,7 +234,7 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
                 </div>
 
                 <div className="mt-3 text-[10px] text-white/40 font-mono">
-                  TIP: <span className="text-emerald-400">YEŞİL</span> slot = pozisyona uyumlu · <span className="text-red-400">KIRMIZI</span> = ciddi uyumsuzluk (overall cezası)
+                  TIP: Bir oyuncuyu yalnızca <span className="text-emerald-400">ana</span> veya <span className="text-emerald-400">ikinci</span> mevkisinde sahaya koyabilirsin.
                 </div>
               </motion.div>
             )}
