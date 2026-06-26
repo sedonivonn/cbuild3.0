@@ -5,20 +5,22 @@ function initials(name) {
   return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
 }
 
-export const Pitch = ({ formationId, xi = [], onSlotClick = () => {}, activeSlotIndex = -1, compact = false }) => {
+export const Pitch = ({ formationId, xi = [], onSlotClick = () => {}, activeSlotIndex = -1, compact = false, readOnly = false }) => {
   const formation = FORMATIONS[formationId];
   if (!formation) return null;
+  const Tag = readOnly ? "div" : "button";
   return (
     <div className={`pitch w-full ${compact ? "aspect-[3/4]" : "aspect-[3/4]"} max-w-[480px] mx-auto`} data-testid="pitch-container">
       {formation.slots.map((slot, idx) => {
         const player = xi[idx];
         const active = idx === activeSlotIndex;
+        const interactiveProps = readOnly
+          ? {}
+          : { type: "button", onClick: () => onSlotClick(idx, slot), "data-testid": `pitch-slot-${idx}` };
         return (
-          <button
+          <Tag
             key={slot.id + idx}
-            type="button"
-            onClick={() => onSlotClick(idx, slot)}
-            data-testid={`pitch-slot-${idx}`}
+            {...interactiveProps}
             className="absolute -translate-x-1/2 -translate-y-1/2 group focus:outline-none"
             style={{ top: `${slot.top}%`, left: `${slot.left}%` }}
           >
@@ -42,7 +44,7 @@ export const Pitch = ({ formationId, xi = [], onSlotClick = () => {}, activeSlot
               )}
             </div>
             <div className="text-[10px] text-white/90 text-center mt-1 font-display tracking-wider">{slot.pos}</div>
-          </button>
+          </Tag>
         );
       })}
     </div>

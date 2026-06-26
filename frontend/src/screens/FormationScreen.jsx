@@ -42,7 +42,7 @@ export const FormationScreen = ({ selected, onSelect, onContinue }) => {
               </div>
               <p className="text-xs text-white/60 mb-4 min-h-[34px]">{f.description}</p>
               <div className="scale-90 origin-top">
-                <Pitch formationId={f.id} xi={[]} />
+                <Pitch formationId={f.id} xi={[]} readOnly />
               </div>
             </motion.button>
           );
