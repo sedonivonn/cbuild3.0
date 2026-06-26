@@ -25,10 +25,10 @@ export const PlayerCard = ({ player, season, club, crest, country, size = "md", 
       disabled={disabled}
       data-testid={testId}
       initial={{ opacity: 0, y: 12, rotateY: -20 }}
-      animate={{ opacity: 1, y: 0, rotateY: 0 }}
+      animate={{ opacity: disabled ? 0.4 : 1, y: 0, rotateY: 0 }}
       transition={{ type: "spring", stiffness: 220, damping: 22 }}
       whileHover={!disabled ? { y: -6 } : {}}
-      className={`fut-card ${tier} ${sizes[size]} ${selected ? "ring-2 ring-amber-300" : ""} ${disabled ? "opacity-40 cursor-not-allowed" : ""} relative flex flex-col text-left`}
+      className={`fut-card ${tier} ${sizes[size]} ${selected ? "ring-2 ring-amber-300" : ""} ${disabled ? "cursor-not-allowed grayscale" : ""} relative flex flex-col text-left`}
       style={{ flexShrink: 0 }}
     >
       <div className="shine" />
