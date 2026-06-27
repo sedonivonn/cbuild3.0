@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DiceButton } from "../components/DiceButton";
 import { PlayerCard } from "../components/PlayerCard";
@@ -8,7 +8,13 @@ import { FORMATIONS, canPlace, hasAvailableSlot } from "../data/formations";
 import { effOverall } from "../data/ballonDor";
 import { rollRandom, rollLucky } from "../engine/draftEngine";
 import { sound } from "../engine/sounds";
-import { RefreshCw, X } from "lucide-react";
+import { SEASONS } from "../data/seasons";
+import { RefreshCw } from "lucide-react";
+
+// All "season club" labels used by the slot machine spinner
+const ALL_TEAM_LABELS = Object.entries(SEASONS).flatMap(([season, teams]) =>
+  teams.map((t) => ({ label: `${season} ${t.club}`, crest: t.crest }))
+);
 
 // Free placement draft with strict primary/secondary (wing-mirror flex) rules,
 // duplicate-name lockout across all teams, click-filled-slot-to-remove, and pool

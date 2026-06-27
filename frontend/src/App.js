@@ -170,7 +170,7 @@ function App() {
           sound.trophy();
           setTrophyTeam(m.championRef);
         }
-      }} />}}
+      }} />}
       {trophyTeam && <TrophyScreen teamLabel={trophyTeam.label} onRestart={() => { setTrophyTeam(null); handleReset(); }} />}
     </div>
   );
