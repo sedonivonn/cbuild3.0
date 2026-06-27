@@ -99,6 +99,52 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
     if (userMatch) onMatch(userMatch);
   };
 
+  // Auto-complete the rest of the bracket when user is eliminated, so they can
+  // still watch how the tournament finishes (who knocks out who, who wins).
+  const autoCompleteBracket = (baseState) => {
+    let s = { ...baseState };
+    // Ensure QF built
+    if (!s.qf || s.qf.length === 0) {
+      s.qf = [];
+      for (let i = 0; i < 8; i += 2) {
+        const w1 = s.r16[i].tie.winner === "home" ? s.r16[i].home : s.r16[i].away;
+        const w2 = s.r16[i + 1].tie.winner === "home" ? s.r16[i + 1].home : s.r16[i + 1].away;
+        s.qf.push({ home: w1, away: w2, played: false });
+      }
+    }
+    if (s.qf.some((p) => !p.played)) {
+      s.qf = s.qf.map((p) =>
+        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, true), played: true })
+      );
+    }
+    if (!s.sf || s.sf.length === 0) {
+      s.sf = [];
+      for (let i = 0; i < 4; i += 2) {
+        const w1 = s.qf[i].tie.winner === "home" ? s.qf[i].home : s.qf[i].away;
+        const w2 = s.qf[i + 1].tie.winner === "home" ? s.qf[i + 1].home : s.qf[i + 1].away;
+        s.sf.push({ home: w1, away: w2, played: false });
+      }
+    }
+    if (s.sf.some((p) => !p.played)) {
+      s.sf = s.sf.map((p) =>
+        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, true), played: true })
+      );
+    }
+    if (!s.final || s.final.length === 0) {
+      const w1 = s.sf[0].tie.winner === "home" ? s.sf[0].home : s.sf[0].away;
+      const w2 = s.sf[1].tie.winner === "home" ? s.sf[1].home : s.sf[1].away;
+      s.final = [{ home: w1, away: w2, played: false }];
+    }
+    if (s.final.some((p) => !p.played)) {
+      s.final = s.final.map((p) =>
+        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, false), played: true })
+      );
+    }
+    s.champion = s.final[0].tie.winner === "home" ? s.final[0].home : s.final[0].away;
+    s.stage = "eliminated_done";
+    return s;
+  };
+
   const playR16 = () => {
     sound.swoosh();
     const r16 = state.r16.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, true), played: true }));
@@ -113,7 +159,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
       const userWon = (isUserTeam(userTie.home) && userTie.tie.winner === "home") || (isUserTeam(userTie.away) && userTie.tie.winner === "away");
       onMatch({ stage: "Son 16", knockout: userTie, userWon });
       if (!userWon) {
-        const next = { ...state, r16, qf, stage: "eliminated", eliminatedAt: "Son 16" };
+        const next = autoCompleteBracket({ ...state, r16, qf, eliminatedAt: "Son 16" });
         setState(next); onSaveState && onSaveState(next);
         return;
       }
@@ -136,7 +182,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
       const userWon = (isUserTeam(userTie.home) && userTie.tie.winner === "home") || (isUserTeam(userTie.away) && userTie.tie.winner === "away");
       onMatch({ stage: "Çeyrek Final", knockout: userTie, userWon });
       if (!userWon) {
-        const next = { ...state, qf, sf, stage: "eliminated", eliminatedAt: "Çeyrek Final" };
+        const next = autoCompleteBracket({ ...state, qf, sf, eliminatedAt: "Çeyrek Final" });
         setState(next); onSaveState && onSaveState(next);
         return;
       }
@@ -156,7 +202,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
       const userWon = (isUserTeam(userTie.home) && userTie.tie.winner === "home") || (isUserTeam(userTie.away) && userTie.tie.winner === "away");
       onMatch({ stage: "Yarı Final", knockout: userTie, userWon });
       if (!userWon) {
-        const next = { ...state, sf, final, stage: "eliminated", eliminatedAt: "Yarı Final" };
+        const next = autoCompleteBracket({ ...state, sf, final, eliminatedAt: "Yarı Final" });
         setState(next); onSaveState && onSaveState(next);
         return;
       }
@@ -227,7 +273,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
         </div>
       )}
 
-      {(state.stage === "r16" || state.stage === "qf" || state.stage === "sf" || state.stage === "final" || state.stage === "done" || state.stage === "eliminated") && (
+      {(state.stage === "r16" || state.stage === "qf" || state.stage === "sf" || state.stage === "final" || state.stage === "done" || state.stage === "eliminated" || state.stage === "eliminated_done") && (
         <div className="space-y-8">
           <Bracket title="SON 16" pairs={state.r16} />
           {state.qf && <Bracket title="ÇEYREK FİNAL" pairs={state.qf} />}
@@ -239,6 +285,17 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
               <Trophy size={48} className="text-amber-300 mx-auto mb-3" />
               <div className="font-mono text-xs tracking-widest text-amber-300">KUPA SAHİBİ</div>
               <div className="font-display text-4xl tracking-tight mt-2">{state.champion.label}</div>
+            </motion.div>
+          )}
+          {state.stage === "eliminated_done" && state.champion && (
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="glass rounded-2xl p-6 text-center">
+              <div className="font-mono text-xs tracking-widest text-red-400">{state.eliminatedAt || "ELENDİN"}</div>
+              <div className="font-display text-2xl mt-1 text-white/70">Senin için final geçti — ama turnuva devam etti.</div>
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <Trophy size={40} className="text-amber-300 mx-auto mb-2" />
+                <div className="font-mono text-xs tracking-widest text-amber-300">ŞAMPİYON</div>
+                <div className="font-display text-3xl tracking-tight mt-1">{state.champion.label}</div>
+              </div>
             </motion.div>
           )}
           {state.stage === "eliminated" && (
@@ -263,6 +320,7 @@ function currentStageLabel(state) {
     case "final": return "FİNAL";
     case "done": return "TAMAMLANDI";
     case "eliminated": return "ELENDİN";
+    case "eliminated_done": return "ELENDİN · TURNUVA TAMAMLANDI";
     default: return "";
   }
 }

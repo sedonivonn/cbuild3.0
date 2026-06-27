@@ -1,5 +1,6 @@
 import React from "react";
 import { FORMATIONS } from "../data/formations";
+import { effOverall } from "../data/ballonDor";
 
 function initials(name) {
   return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
@@ -80,7 +81,7 @@ export const Pitch = ({
             >
               {player ? (
                 <>
-                  <span className="leading-none text-amber-300 font-mono">{player.overall}</span>
+                  <span className="leading-none text-amber-300 font-mono">{effOverall(player)}</span>
                   <span className="leading-tight text-white mt-0.5">{initials(player.name)}</span>
                 </>
               ) : (

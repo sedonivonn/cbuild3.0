@@ -1,0 +1,33 @@
+{
+  "summary": "Iteration 7 (frontend-only retest of the 4 new features added in iteration 6): ALL 5 VALIDATIONS PASS. (1) PITCH BALLON D'OR 99 FIX — visually confirmed on confirm-screen pitch: a 4-3-3 with 10 Ballon d'Or winners + Manuel Neuer rendered every Ballon d'Or slot as OVR=99 (Messi 99, CR7 99, Kakà 99, Modrić 99, Benzema 99, Ronaldinho 99, Weah 99, Roberto Carlos 91—non-winner, Cafu 90—non-winner, Iniesta 91—non-winner, Neuer 92—non-winner). effOverall is correctly used in Pitch.jsx line 84. (2) AUTO-COMPLETE BRACKET ON ELIMINATION — verified end-to-end: injected a MIDTIER overall=82 XI into localStorage, played 6 matchdays (qualified to R16), played R16 (lost to 2020 Bayern Munich 4-1 aggregate), and immediately after the modal closed, state.stage='eliminated_done', state.eliminatedAt='Son 16', state.qf/sf/final ALL populated with played=true, state.champion='2025 Paris Saint-Germain'. DOM showed SON 16 + ÇEYREK FİNAL + YARI FİNAL + FİNAL + ŞAMPİYON sections all rendered. (3) SHARE DRAFT — share-draft-button copies a URL of the form https://.../#d=<base64> to clipboard, label switches to 'KOPYALANDI' for ~2s; opening that URL in a fresh session (localStorage cleared) triggers window.confirm('Paylaşılan bir kadro buldum...'), and after accept the user lands on the confirm screen with the XI/formation/teamName restored. (4) MATCH ENGINE BALANCE — source-confirmed in /app/frontend/src/engine/matchEngine.js: USER_CHEMISTRY={attack:4,midfield:4,defense:4,keeper:3,overall:3} (line 27), underdogBoost function returning min(0.035, diff*0.005) (lines 32-37), xgPerShot ceiling tightened to 0.11 (line 82), and homeIsUser/awayIsUser boost wired (lines 91-92). (5) E2E SMOKE — no PAGEERRORs, no crashes through home→formation→draft (skipped via injection)→confirm→tactics→tournament→groups→post_group→advance-to-r16→play-r16→eliminated_done.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "POSITIVE — /app/frontend/src/components/Pitch.jsx line 3 imports effOverall and line 84 renders {effOverall(player)} for the in-slot OVR number. Confirmed visually that Ballon d'Or winners show 99 regardless of their season-specific p.overall.",
+    "POSITIVE — /app/frontend/src/screens/TournamentScreen.jsx lines 102-146: autoCompleteBracket(state) helper correctly builds QF from R16 winners, SF from QF winners, Final from SF winners (single match, neutral), and sets state.champion + state.stage='eliminated_done'. Called from playR16/playQF/playSF when !userWon. Confirmed end-to-end with MIDTIER user — full bracket auto-filled after R16 elimination.",
+    "POSITIVE — /app/frontend/src/engine/shareCode.js: encodeDraft/decodeDraft use URL-safe base64 with utf8ToBase64/base64ToUtf8 wrappers that handle unicode (Turkish team names like 'TEST 11' round-tripped fine). readDraftFromUrl regex /[#&]d=([^&]+)/ correctly extracts the code. clearDraftFromUrl uses history.replaceState (no extra navigation). Round-trip confirmed live.",
+    "POSITIVE — /app/frontend/src/screens/ConfirmScreen.jsx lines 17-30: handleShare encodes the draft, copies to clipboard, sets copied=true with a 2.2s timeout reset. data-testid='share-draft-button' present. Fallback prompt() path on clipboard failure is sensible. UI swaps between Share2/KADROYU PAYLAŞ and Check/KOPYALANDI cleanly.",
+    "POSITIVE — /app/frontend/src/App.js lines 43-59: useEffect on mount calls readDraftFromUrl(), shows confirm() prompt, loads xi/formationId/teamName, resets changes to {0,0} (so shared drafts can't farm extra rolls), and jumps to confirm screen. clearDraftFromUrl() called regardless of confirm choice — good (avoids re-prompt loop on refresh).",
+    "POSITIVE — /app/frontend/src/engine/matchEngine.js: USER_CHEMISTRY {4,4,4,3,3} (down from {6,6,6,4,5}) verified at line 27. underdogBoost function (lines 32-37) returns min(0.035, diff*0.005) — clamped, only positive when oppOverall > userOverall. xgPerShot ceiling 0.11 (line 82). Boost applied on lines 91-92. Math is sound — keeps user competitive vs top-tier historical sides without breaking balance.",
+    "NIT — autoCompleteBracket in TournamentScreen.jsx still calls onMatch(...) BEFORE the auto-complete (the user-leg modal), and then the auto-complete runs synchronously while the modal is showing. The state update after setState(next) happens behind the modal — user only sees the populated bracket after they click DEVAM ET. This is the intended UX (you watch your own loss, then see the rest filled in when you close), and is correct.",
+    "NIT — Share draft preserves _season/_club/_crest/_country as compact keys (se/cl/cr/co) which keeps payload ~1KB for 11 players. URL hash kept ~1.4KB for our 11-player test — well under any browser cap.",
+    "NIT — eliminated_done card uses red 'eliminatedAt' badge + golden ŞAMPİYON section — clean visual separation between the two pieces of info."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only app, backend testing skipped per request)",
+    "frontend": "100% — all 5 required validations PASS (Pitch OVR=99, auto-complete bracket, share URL round-trip, match engine balance source-verified, e2e smoke)"
+  },
+  "test_credentials": "none required (no auth in this app)",
+  "seed_data_creation": "Injected two test XIs directly into localStorage SAVE_KEY='ucl_draft_save_v1' (per iteration_6 hint): (a) 11 Ballon d'Or winners in 4-3-3 to test Pitch OVR=99; (b) MIDTIER overall=82 placeholder XI to qualify from groups but lose in R16 and trigger autoCompleteBracket.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 4 iteration-6 feature additions verified live. For future iterations: (1) the localStorage injection trick (SAVE_KEY='ucl_draft_save_v1' + 'ucl_match_speed_v1'='ultra') is the fastest way to skip the draft fight and exercise tournament/match flows. (2) MatchScreen modal close CTA is button.btn-primary inside [data-testid='match-modal'] (text varies: 'DEVAM ET' for groups, 'RÖVANŞ MAÇI →' for first knockout leg, 'KAPAT' / 'TAKTIK SEÇİMİNE GEÇ' for final). Selector '[data-testid=\"match-modal\"] button.btn-primary' works for all of them with force=True. (3) overall=68 user gets eliminated in groups (never reaches R16); overall=82 typically qualifies and loses R16 (perfect for testing auto-complete). (4) ULTRA speed in localStorage('ucl_match_speed_v1') makes simulation ~instant.",
+  "rca of the issue": "No issues found. All four iteration-6 feature implementations are correct end-to-end."
+}

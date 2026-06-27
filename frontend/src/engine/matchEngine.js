@@ -21,10 +21,20 @@ function counterBonus(aId, bId) {
   return (a?.counters?.[bId]) || 0;
 }
 
-// User-team chemistry bonus: makes the user's drafted XI feel like a real team
-// (the AI champions are historical, settled squads). Without this the game is
-// too punishing in groups. Strong but not OP so games are competitive.
-const USER_CHEMISTRY = { attack: 6, midfield: 6, defense: 6, keeper: 4, overall: 5 };
+// User-team chemistry bonus: balanced so the user can compete with mid-tier
+// historical champions, but elite eras (2009/2011 Barça, 2014/2017 Real, 2013/2020
+// Bayern, etc.) remain a true challenge. The goal is *close, organic games*.
+const USER_CHEMISTRY = { attack: 4, midfield: 4, defense: 4, keeper: 3, overall: 3 };
+
+// Slight underdog clutch: when user faces a much stronger opponent, give them a
+// small extra xG conversion floor so they always have a "punch chance" — keeps
+// games dramatic ("kıl payı eleniyordum" feel).
+function underdogBoost(userStats, oppStats) {
+  if (!userStats || !oppStats) return 0;
+  const diff = (oppStats.overall ?? 80) - (userStats.overall ?? 80);
+  if (diff <= 0) return 0;
+  return Math.min(0.035, diff * 0.005);
+}
 
 function applyChemistry(stats, isUser) {
   if (!isUser) return stats;
@@ -68,16 +78,18 @@ export function simulateMatch({ home, away, homeTacticId, awayTacticId, neutral 
   // xG per shot: depends on (Attack - Defense)
   const xgPerShot = (atk, def, tacticXgFor, oppoXgAgainst) => {
     const diff = atk - def;
-    // base ~0.1 xG per shot, scaled by diff
-    let v = 0.10 + Math.max(-0.06, Math.min(0.14, diff * 0.012));
+    // base ~0.10 xG per shot, scaled by diff; tightened ceiling for more close games
+    let v = 0.10 + Math.max(-0.06, Math.min(0.11, diff * 0.011));
     v *= tacticXgFor;
-    v *= oppoXgAgainst; // opponent's "how leaky" multiplier - higher = more goals against them
+    v *= oppoXgAgainst;
     return Math.max(0.04, v);
   };
 
-  // Convert opponent's xgAgainst from their tactic (lower xgAgainst = better defense)
-  const aXgPer = xgPerShot(aAtk, bDef, A.tactic.mods.xgFor, B.tactic.mods.xgAgainst);
-  const bXgPer = xgPerShot(bAtk, aDef, B.tactic.mods.xgFor, A.tactic.mods.xgAgainst);
+  let aXgPer = xgPerShot(aAtk, bDef, A.tactic.mods.xgFor, B.tactic.mods.xgAgainst);
+  let bXgPer = xgPerShot(bAtk, aDef, B.tactic.mods.xgFor, A.tactic.mods.xgAgainst);
+  // Underdog boost — keeps user competitive vs elite historical sides
+  if (homeIsUser) aXgPer += underdogBoost(home, away);
+  if (awayIsUser) bXgPer += underdogBoost(away, home);
 
   const aXg = +(aShots * aXgPer).toFixed(2);
   const bXg = +(bShots * bXgPer).toFixed(2);

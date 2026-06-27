@@ -1,7 +1,10 @@
-import React from "react";
+import React, { useState } from "react";
 import { motion } from "framer-motion";
 import { Pitch } from "../components/Pitch";
 import { PlayerCard } from "../components/PlayerCard";
+import { Share2, Check } from "lucide-react";
+import { encodeDraft, buildShareUrl } from "../engine/shareCode";
+import { sound } from "../engine/sounds";
 
 const Stat = ({ label, v, color }) => (
   <div className="rounded-md py-2 bg-white/5 text-center">
@@ -11,6 +14,20 @@ const Stat = ({ label, v, color }) => (
 );
 
 export const ConfirmScreen = ({ formationId, xi, teamStats, teamName, onBack, onContinue }) => {
+  const [copied, setCopied] = useState(false);
+  const handleShare = () => {
+    const code = encodeDraft({ formationId, teamName, xi });
+    const url = buildShareUrl(code);
+    if (!url) return;
+    try {
+      navigator.clipboard.writeText(url);
+      sound.click();
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2200);
+    } catch (_) {
+      window.prompt("Kopyalamak için Ctrl+C", url);
+    }
+  };
   return (
     <div className="px-5 md:px-10 py-8 max-w-7xl mx-auto">
       <div className="flex items-end justify-between flex-wrap gap-4 mb-6">
@@ -19,7 +36,10 @@ export const ConfirmScreen = ({ formationId, xi, teamStats, teamName, onBack, on
           <h2 className="font-display text-4xl md:text-5xl tracking-tight">KADRONU ONAYLA</h2>
           <div className="text-white/60 text-sm mt-1">"{teamName || "DRAFT TAKIMI"}" — onaylamadan taktiğe geçemezsin.</div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          <button type="button" onClick={handleShare} className="btn-ghost flex items-center gap-2" data-testid="share-draft-button">
+            {copied ? <><Check size={14} /> KOPYALANDI</> : <><Share2 size={14} /> KADROYU PAYLAŞ</>}
+          </button>
           <button type="button" onClick={onBack} className="btn-ghost" data-testid="confirm-back-button">← DRAFT'A DÖN</button>
           <button type="button" onClick={onContinue} className="btn-primary" data-testid="confirm-continue-button">TAKTIK SEÇİMİNE GEÇ →</button>
         </div>

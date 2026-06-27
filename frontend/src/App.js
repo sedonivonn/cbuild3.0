@@ -11,6 +11,7 @@ import { TopBar } from "./components/TopBar";
 import { sound } from "./engine/sounds";
 import { FORMATIONS } from "./data/formations";
 import { computeTeamStats } from "./engine/overallEngine";
+import { readDraftFromUrl, clearDraftFromUrl } from "./engine/shareCode";
 
 const SAVE_KEY = "ucl_draft_save_v1";
 
@@ -37,6 +38,25 @@ function App() {
   const [activeMatch, setActiveMatch] = useState(null);
   const [trophyTeam, setTrophyTeam] = useState(null);
   const [soundOn, setSoundOn] = useState(sound.isEnabled());
+
+  // Read shared draft from URL hash on first mount
+  useEffect(() => {
+    const shared = readDraftFromUrl();
+    if (shared && shared.formationId && shared.xi && shared.xi.length > 0) {
+      const ok = window.confirm("Paylaşılan bir kadro buldum. Yüklemek ister misin?");
+      if (ok) {
+        setTeamName(shared.teamName || "");
+        setFormationId(shared.formationId);
+        setXi(shared.xi);
+        setChanges({ remaining: 0, luckyRemaining: 0 });
+        setTactic(null);
+        setTournament(null);
+        setScreen("confirm");
+      }
+      clearDraftFromUrl();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Persist
   useEffect(() => {
