@@ -14,15 +14,18 @@ export const Pitch = ({
   readOnly = false,
   slotHints = null, // array of "fit"|"blocked"|"filled"|null
   interactive = true,
+  allowRemove = false,
 }) => {
   const formation = FORMATIONS[formationId];
   if (!formation) return null;
   const Tag = readOnly ? "div" : "button";
-  // Smaller circles in readOnly (formation preview) mode
+
   const circleClass = readOnly
     ? "w-7 h-7 md:w-8 md:h-8 text-[8px]"
-    : "w-11 h-11 md:w-12 md:h-12 text-[10px]";
+    : "w-12 h-12 md:w-14 md:h-14 text-[11px]";
   const labelClass = readOnly ? "text-[8px] mt-0.5" : "text-[10px] mt-1";
+  // bigger invisible hit area in interactive mode for easier tapping
+  const hitArea = readOnly ? "" : "p-2 -m-2";
 
   return (
     <div className={`pitch w-full ${compact ? "aspect-[3/4]" : "aspect-[3/4]"} max-w-[480px] mx-auto`} data-testid="pitch-container">
@@ -30,12 +33,12 @@ export const Pitch = ({
         const player = xi[idx];
         const active = idx === activeSlotIndex;
         const hint = slotHints ? slotHints[idx] : null;
-        // Visual rules
         let borderStyle, glow, dim = false, clickable = true;
         if (player) {
           borderStyle = "2px solid rgba(255,215,0,0.6)";
           glow = "0 6px 16px rgba(0,0,0,0.5)";
-          clickable = false; // filled slot not clickable
+          // allow removing on click when no selection is active
+          clickable = allowRemove;
         } else if (hint === "fit") {
           borderStyle = "2px solid #34d399";
           glow = "0 0 12px rgba(52,211,153,0.55)";
@@ -60,7 +63,7 @@ export const Pitch = ({
           <Tag
             key={slot.id + idx}
             {...interactiveProps}
-            className={`absolute -translate-x-1/2 -translate-y-1/2 group focus:outline-none ${
+            className={`absolute -translate-x-1/2 -translate-y-1/2 group focus:outline-none ${hitArea} ${
               (!interactive || !clickable) && !readOnly ? "cursor-not-allowed" : ""
             }`}
             style={{ top: `${slot.top}%`, left: `${slot.left}%`, opacity: dim ? 0.55 : 1 }}

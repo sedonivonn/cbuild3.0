@@ -1,17 +1,20 @@
 import React from "react";
 import { motion } from "framer-motion";
+import { isBallonDor, effOverall } from "../data/ballonDor";
 
-function tierClass(o) {
+function tierClass(player) {
+  if (isBallonDor(player.name)) return "tier-blackicon";
+  const o = effOverall(player);
   if (o >= 99) return "tier-ballondor";
-  if (o >= 95) return "tier-icon";
-  if (o >= 89) return "tier-gold";
-  if (o >= 80) return "tier-silver";
+  if (o >= 90) return "tier-purple";
+  if (o >= 81) return "tier-gold";
+  if (o >= 70) return "tier-silver";
   return "tier-bronze";
 }
 
 export const PlayerCard = ({ player, season, club, crest, country, size = "md", onClick, selected = false, disabled = false, testId }) => {
   if (!player) return null;
-  const tier = tierClass(player.overall);
+  const tier = tierClass(player);
   // Slightly larger cards so full name fits
   const sizes = {
     sm: "w-36",
@@ -35,7 +38,7 @@ export const PlayerCard = ({ player, season, club, crest, country, size = "md", 
       {/* Header */}
       <div className="flex justify-between items-start px-3 pt-2">
         <div className="flex flex-col leading-tight">
-          <span className="font-display text-3xl text-white drop-shadow">{player.overall}</span>
+          <span className="font-display text-3xl text-white drop-shadow">{effOverall(player)}</span>
           <span className="font-display text-sm tracking-wider text-white/85">{player.primary}</span>
         </div>
         <div className="text-right">
@@ -73,7 +76,7 @@ export const PlayerCard = ({ player, season, club, crest, country, size = "md", 
         </div>
       </div>
 
-      {player.overall >= 99 && (
+      {(player.overall >= 99 || isBallonDor(player.name)) && (
         <div className="absolute top-1 left-1 right-1 mx-auto w-fit px-2 py-0.5 rounded-full text-[9px] font-bold tracking-widest"
              style={{ background: "#FFD700", color: "#000" }}>
           BALLON D'OR

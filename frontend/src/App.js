@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { HomeScreen } from "./screens/HomeScreen";
 import { FormationScreen } from "./screens/FormationScreen";
 import { DraftScreen } from "./screens/DraftScreen";
+import { ConfirmScreen } from "./screens/ConfirmScreen";
 import { TacticsScreen } from "./screens/TacticsScreen";
 import { TournamentScreen } from "./screens/TournamentScreen";
 import { MatchScreen } from "./screens/MatchScreen";
@@ -27,6 +28,7 @@ function saveState(state) {
 function App() {
   const initial = loadSave();
   const [screen, setScreen] = useState(initial?.screen || "home");
+  const [teamName, setTeamName] = useState(initial?.teamName || "");
   const [formationId, setFormationId] = useState(initial?.formationId || null);
   const [xi, setXi] = useState(initial?.xi || []);
   const [changes, setChanges] = useState(initial?.changes || { remaining: 3, luckyRemaining: 1 });
@@ -38,8 +40,8 @@ function App() {
 
   // Persist
   useEffect(() => {
-    saveState({ screen, formationId, xi, changes, tactic, tournament });
-  }, [screen, formationId, xi, changes, tactic, tournament]);
+    saveState({ screen, teamName, formationId, xi, changes, tactic, tournament });
+  }, [screen, teamName, formationId, xi, changes, tactic, tournament]);
 
   const teamStats = useMemo(() => {
     if (!formationId || xi.length === 0) return null;
@@ -51,7 +53,7 @@ function App() {
 
   const handleStart = () => {
     sound.click();
-    // reset all
+    setTeamName("");
     setFormationId(null);
     setXi([]);
     setChanges({ remaining: 3, luckyRemaining: 1 });
@@ -64,7 +66,6 @@ function App() {
 
   const handleFormationContinue = () => {
     if (!formationId) return;
-    // init xi as empty array of slots
     const formation = FORMATIONS[formationId];
     setXi(new Array(formation.slots.length).fill(null));
     setScreen("draft");
@@ -73,6 +74,16 @@ function App() {
 
   const handleDraftComplete = (newXi) => {
     setXi(newXi);
+    setScreen("confirm");
+    sound.click();
+  };
+
+  const handleConfirmBack = () => {
+    setScreen("draft");
+    sound.click();
+  };
+
+  const handleConfirmContinue = () => {
     setScreen("tactics");
     sound.click();
   };
@@ -93,7 +104,8 @@ function App() {
   const handleReset = () => {
     if (!window.confirm("Tüm ilerlemeyi sıfırlayıp baştan başlamak istediğinden emin misin?")) return;
     try { localStorage.removeItem(SAVE_KEY); } catch (_) {}
-    setFormationId(null); setXi([]); setChanges({ remaining: 3, luckyRemaining: 1 }); setTactic(null); setTournament(null); setActiveMatch(null); setTrophyTeam(null);
+    setTeamName(""); setFormationId(null); setXi([]); setChanges({ remaining: 3, luckyRemaining: 1 });
+    setTactic(null); setTournament(null); setActiveMatch(null); setTrophyTeam(null);
     setScreen("home");
   };
 
@@ -102,7 +114,6 @@ function App() {
     setSoundOn(v);
   };
 
-  // Team stats wired for tournament
   const userTournamentStats = useMemo(() => {
     if (!teamStats) return null;
     return {
@@ -115,13 +126,14 @@ function App() {
   }, [teamStats]);
 
   const hasSave = !!(initial && initial.screen && initial.screen !== "home" && initial.formationId);
+  const displayedTeamName = teamName?.trim() || "DRAFT TAKIMI";
 
   return (
     <div className="min-h-screen text-white">
       <TopBar onSoundToggle={handleSoundToggle} soundOn={soundOn} onReset={handleReset} />
       {screen === "home" && <HomeScreen onStart={handleStart} hasSave={hasSave} onContinue={handleContinue} />}
       {screen === "formation" && (
-        <FormationScreen selected={formationId} onSelect={setFormationId} onContinue={handleFormationContinue} />
+        <FormationScreen selected={formationId} onSelect={setFormationId} onContinue={handleFormationContinue} teamName={teamName} setTeamName={setTeamName} />
       )}
       {screen === "draft" && formationId && (
         <DraftScreen
@@ -133,6 +145,9 @@ function App() {
           onComplete={handleDraftComplete}
         />
       )}
+      {screen === "confirm" && formationId && (
+        <ConfirmScreen formationId={formationId} xi={xi} teamStats={teamStats} teamName={displayedTeamName} onBack={handleConfirmBack} onContinue={handleConfirmContinue} />
+      )}
       {screen === "tactics" && formationId && (
         <TacticsScreen formationId={formationId} xi={xi} teamStats={teamStats} tactic={tactic} setTactic={setTactic} onContinue={handleTacticsContinue} />
       )}
@@ -140,6 +155,7 @@ function App() {
         <TournamentScreen
           userStats={userTournamentStats}
           userTacticId={tactic}
+          userTeamName={displayedTeamName}
           savedState={tournament}
           onSaveState={setTournament}
           onMatch={setActiveMatch}
@@ -147,7 +163,14 @@ function App() {
         />
       )}
 
-      {activeMatch && <MatchScreen match={activeMatch} onClose={() => setActiveMatch(null)} />}
+      {activeMatch && <MatchScreen match={activeMatch} onClose={() => {
+        const m = activeMatch;
+        setActiveMatch(null);
+        if (m && m.stage === "Final" && m.userWon && m.championRef) {
+          sound.trophy();
+          setTrophyTeam(m.championRef);
+        }
+      }} />}}
       {trophyTeam && <TrophyScreen teamLabel={trophyTeam.label} onRestart={() => { setTrophyTeam(null); handleReset(); }} />}
     </div>
   );

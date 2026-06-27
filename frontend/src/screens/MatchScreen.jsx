@@ -1,60 +1,127 @@
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Crest } from "../components/Crest";
 import { sound } from "../engine/sounds";
+import { Gauge, FastForward, Zap, Pause } from "lucide-react";
+
+// Sim speed: ms delay between events
+const SPEEDS = [
+  { key: "slow",    label: "YAVAŞ",  icon: Pause,       delay: 900 },
+  { key: "normal",  label: "NORMAL", icon: Gauge,       delay: 400 },
+  { key: "fast",    label: "HIZLI",  icon: FastForward, delay: 130 },
+  { key: "ultra",   label: "ULTRA",  icon: Zap,         delay: 25  },
+];
+
+const SPEED_KEY = "ucl_match_speed_v1";
+
+function loadSpeed() {
+  try { return localStorage.getItem(SPEED_KEY) || "normal"; } catch (_) { return "normal"; }
+}
+function saveSpeed(k) {
+  try { localStorage.setItem(SPEED_KEY, k); } catch (_) {}
+}
 
 export const MatchScreen = ({ match, onClose }) => {
   const [visibleIdx, setVisibleIdx] = useState(0);
-  const [phase, setPhase] = useState("kickoff"); // kickoff -> playing -> done
+  const [phase, setPhase] = useState("kickoff"); // kickoff -> playing -> done -> penalties -> finished
   const [legIdx, setLegIdx] = useState(0);
+  const [speedKey, setSpeedKey] = useState(loadSpeed());
+  const [penShotIdx, setPenShotIdx] = useState(0);
+  const finishedRef = useRef(false);
+
+  const speed = SPEEDS.find((s) => s.key === speedKey) || SPEEDS[1];
 
   const isKnockout = !!match.knockout;
   const legs = useMemo(() => {
     if (!isKnockout) return [match.result];
-    if (match.knockout.tie.legs) return match.knockout.tie.legs.map((l) => l);
+    if (match.knockout.tie.legs) return match.knockout.tie.legs;
     return [match.knockout.tie.match];
   }, [match, isKnockout]);
 
-  const homeName = isKnockout ? match.knockout.home.label : match.home.label;
-  const awayName = isKnockout ? match.knockout.away.label : match.away.label;
+  // True per-leg home/away: in leg 2 of a 2-leg tie, pair.away hosts.
+  const isSecondLeg = isKnockout && legs.length === 2 && legIdx === 1;
+  const homeRef = isKnockout
+    ? (isSecondLeg ? match.knockout.away : match.knockout.home)
+    : match.home;
+  const awayRef = isKnockout
+    ? (isSecondLeg ? match.knockout.home : match.knockout.away)
+    : match.away;
+  const homeName = homeRef.label || homeRef.name;
+  const awayName = awayRef.label || awayRef.name;
 
   const currentLeg = legs[legIdx];
   const events = currentLeg?.events || [];
+  const isLastLeg = legIdx === legs.length - 1;
+  const tie = isKnockout ? match.knockout.tie : null;
+  const hasPenalties = isKnockout && tie?.penalties;
 
   useEffect(() => {
     sound.whistleStart();
     setPhase("kickoff");
     setVisibleIdx(0);
-    const k = setTimeout(() => setPhase("playing"), 1200);
+    setPenShotIdx(0);
+    finishedRef.current = false;
+    const k = setTimeout(() => setPhase("playing"), 800);
     return () => clearTimeout(k);
   }, [legIdx]);
 
+  // Event ticker
   useEffect(() => {
     if (phase !== "playing") return;
     if (visibleIdx >= events.length) {
       const t = setTimeout(() => {
         sound.whistleEnd();
-        setPhase("done");
-      }, 600);
+        // If last leg and there are penalties, transition to penalty phase
+        if (isLastLeg && hasPenalties) {
+          setPhase("penalties");
+        } else {
+          setPhase("done");
+        }
+      }, 400);
       return () => clearTimeout(t);
     }
     const e = events[visibleIdx];
-    const delay = 400;
     const t = setTimeout(() => {
       if (e.type === "GOAL") sound.goal();
       setVisibleIdx(visibleIdx + 1);
-    }, delay);
+    }, speed.delay);
     return () => clearTimeout(t);
-  }, [phase, visibleIdx, events]);
+  }, [phase, visibleIdx, events, speed.delay, isLastLeg, hasPenalties]);
+
+  // Penalty reveal (slow, suspense)
+  useEffect(() => {
+    if (phase !== "penalties") return;
+    const shots = tie?.penalties?.shots || [];
+    if (penShotIdx >= shots.length) {
+      const t = setTimeout(() => setPhase("done"), 800);
+      return () => clearTimeout(t);
+    }
+    // Each penalty shot reveals with slower delay (suspense). Speed scales but capped slow.
+    const baseDelay = Math.max(550, speed.delay * 2);
+    const t = setTimeout(() => {
+      const s = shots[penShotIdx];
+      if (s.scored) sound.goal();
+      else sound.error();
+      setPenShotIdx(penShotIdx + 1);
+    }, baseDelay);
+    return () => clearTimeout(t);
+  }, [phase, penShotIdx, tie, speed.delay]);
+
+  // Trigger trophy on close handled by parent via match.userWon + match.stage === "Final"
+  const handleClose = () => {
+    if (finishedRef.current) return;
+    finishedRef.current = true;
+    onClose();
+  };
 
   const nextLeg = () => {
     if (legIdx + 1 < legs.length) {
       setLegIdx(legIdx + 1);
     } else {
-      onClose();
+      handleClose();
     }
   };
 
+  // Score accumulation
   const goalsSoFar = useMemo(() => {
     let h = 0, a = 0;
     events.slice(0, visibleIdx).forEach((e) => {
@@ -65,8 +132,26 @@ export const MatchScreen = ({ match, onClose }) => {
     return { h, a };
   }, [events, visibleIdx]);
 
-  const finalHomeScore = phase === "done" ? currentLeg.home.score : goalsSoFar.h;
-  const finalAwayScore = phase === "done" ? currentLeg.away.score : goalsSoFar.a;
+  // Adjust scoreboard for leg2 swap perspective
+  // In leg 2 events have side relative to original simulateMatch home/away which was swapped from pair.
+  // currentLeg.home/away already follow swapped (i.e. leg2.home = pair.away). So events.side==="home" means current host scored.
+  const displayedHomeScore = phase === "done" || phase === "penalties" || phase === "finished"
+    ? currentLeg.home.score
+    : goalsSoFar.h;
+  const displayedAwayScore = phase === "done" || phase === "penalties" || phase === "finished"
+    ? currentLeg.away.score
+    : goalsSoFar.a;
+
+  // Penalty progress display
+  const penShots = tie?.penalties?.shots || [];
+  const penShown = penShots.slice(0, penShotIdx);
+  // For penalties we always present pair.home left, pair.away right (consistent)
+  const penPairHomeName = (match.knockout?.home?.label) || homeName;
+  const penPairAwayName = (match.knockout?.away?.label) || awayName;
+  const penHomeScored = penShown.filter((s) => s.side === "home" && s.scored).length;
+  const penAwayScored = penShown.filter((s) => s.side === "away" && s.scored).length;
+
+  const showAggregateBlock = phase === "done" && isKnockout && isLastLeg;
 
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center px-4 bg-black/85 backdrop-blur-md" data-testid="match-modal">
@@ -75,82 +160,100 @@ export const MatchScreen = ({ match, onClose }) => {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         className="glass rounded-2xl max-w-3xl w-full p-6 md:p-8"
       >
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
           <div className="font-mono text-xs tracking-widest text-amber-300">
-            {match.stage ? match.stage : "GRUP AŞAMASI"} {legs.length > 1 && ` · LEG ${legIdx + 1}/${legs.length}`}
+            {match.stage ? match.stage : "GRUP AŞAMASI"}{legs.length > 1 && ` · LEG ${legIdx + 1}/${legs.length} · ${isSecondLeg ? "RÖVANŞ" : "İLK MAÇ"}`}
           </div>
-          <div className="font-mono text-xs tracking-widest text-white/50">{phase === "kickoff" ? "KICK-OFF" : phase === "done" ? "FULL-TIME" : "PLAYING"}</div>
+          <SpeedPicker speedKey={speedKey} onChange={(k) => { setSpeedKey(k); saveSpeed(k); }} />
         </div>
 
         {/* Scoreboard */}
-        <div className="grid grid-cols-3 items-center gap-4 mb-4">
+        <div className="grid grid-cols-3 items-center gap-4 mb-3">
           <div className="text-right">
-            <div className="font-display text-xl md:text-2xl tracking-tight truncate" data-testid="home-name">{homeName}</div>
+            <div className="font-display text-lg md:text-2xl tracking-tight truncate" data-testid="home-name">{homeName}</div>
+            <div className="text-[10px] text-white/40 font-mono tracking-widest">{isKnockout ? "EV SAHİBİ" : ""}</div>
           </div>
           <div className="text-center">
             <motion.div
-              key={`${finalHomeScore}-${finalAwayScore}-${legIdx}`}
+              key={`${displayedHomeScore}-${displayedAwayScore}-${legIdx}`}
               initial={{ scale: 1 }}
               animate={{ scale: [1.0, 1.18, 1.0] }}
-              transition={{ duration: 0.6 }}
+              transition={{ duration: 0.5 }}
               className="font-display text-5xl md:text-6xl text-amber-300"
               data-testid="scoreboard"
             >
-              {finalHomeScore} <span className="text-white/30">·</span> {finalAwayScore}
+              {displayedHomeScore} <span className="text-white/30">·</span> {displayedAwayScore}
             </motion.div>
           </div>
           <div>
-            <div className="font-display text-xl md:text-2xl tracking-tight truncate" data-testid="away-name">{awayName}</div>
+            <div className="font-display text-lg md:text-2xl tracking-tight truncate" data-testid="away-name">{awayName}</div>
+            <div className="text-[10px] text-white/40 font-mono tracking-widest">{isKnockout ? "DEPLASMAN" : ""}</div>
           </div>
         </div>
 
         {/* Ticker */}
-        <div className="bg-black/40 rounded-xl p-4 max-h-64 overflow-y-auto border border-white/5">
-          <AnimatePresence>
-            {events.slice(0, visibleIdx).map((e, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, x: -8 }}
-                animate={{ opacity: 1, x: 0 }}
-                className={`flex items-center gap-3 py-1 text-sm ${e.type === "GOAL" ? "text-amber-300 goal-pulse rounded" : e.type === "SAVE" ? "text-emerald-300" : "text-white/60"}`}
-                data-testid={`match-event-${i}`}
-              >
-                <span className="font-mono text-xs w-10">{e.minute}'</span>
-                <span className="flex-1">{e.text}</span>
-              </motion.div>
-            ))}
-            {phase === "kickoff" && (
-              <div className="text-center text-white/40 font-display text-lg tracking-widest py-4">KICK-OFF</div>
-            )}
-            {phase === "playing" && visibleIdx === 0 && (
-              <div className="text-white/40 text-sm text-center py-4">Maç başladı...</div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Stats */}
-        {phase === "done" && (
-          <div className="grid grid-cols-3 gap-3 mt-4 text-center text-xs text-white/70">
-            <StatBar label="ŞUT" h={currentLeg.home.shots} a={currentLeg.away.shots} />
-            <StatBar label="İSABETLİ" h={currentLeg.home.onTarget} a={currentLeg.away.onTarget} />
-            <StatBar label="XG" h={currentLeg.home.xg?.toFixed(2)} a={currentLeg.away.xg?.toFixed(2)} />
+        {phase !== "penalties" && (
+          <div className="bg-black/40 rounded-xl p-4 max-h-56 overflow-y-auto border border-white/5">
+            <AnimatePresence>
+              {events.slice(0, visibleIdx).map((e, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className={`flex items-center gap-3 py-1 text-sm ${e.type === "GOAL" ? "text-amber-300 goal-pulse rounded" : e.type === "SAVE" ? "text-emerald-300" : "text-white/60"}`}
+                  data-testid={`match-event-${i}`}
+                >
+                  <span className="font-mono text-xs w-10">{e.minute}'</span>
+                  <span className="flex-1">{e.text}</span>
+                </motion.div>
+              ))}
+              {phase === "kickoff" && (
+                <div className="text-center text-white/40 font-display text-lg tracking-widest py-4">KICK-OFF</div>
+              )}
+              {phase === "playing" && visibleIdx === 0 && (
+                <div className="text-white/40 text-sm text-center py-4">Maç başladı...</div>
+              )}
+            </AnimatePresence>
           </div>
         )}
 
-        {/* Knockout aggregate */}
-        {phase === "done" && isKnockout && legIdx === legs.length - 1 && (
-          <div className="mt-4 text-center">
-            {match.knockout.tie.aggregate && (
+        {/* Penalty reveal */}
+        {phase === "penalties" && (
+          <div className="bg-black/50 rounded-xl p-4 border border-amber-300/30" data-testid="penalty-block">
+            <div className="text-center font-display text-2xl text-amber-300 tracking-widest mb-3">PENALTI ATIŞLARI</div>
+            <div className="grid grid-cols-2 gap-3 text-center">
+              <PenaltyColumn name={penPairHomeName} shots={penShown.filter((s) => s.side === "home")} totalScored={penHomeScored} />
+              <PenaltyColumn name={penPairAwayName} shots={penShown.filter((s) => s.side === "away")} totalScored={penAwayScored} />
+            </div>
+            <div className="text-center mt-3 text-[10px] text-white/40 font-mono tracking-widest">
+              {penShotIdx} / {penShots.length} ATIŞ
+            </div>
+          </div>
+        )}
+
+        {/* Stats */}
+        {phase === "done" && currentLeg && phase !== "penalties" && (
+          <div className="grid grid-cols-3 gap-3 mt-4 text-center text-xs text-white/70">
+            <StatBar label="ŞUT"      h={currentLeg.home.shots}    a={currentLeg.away.shots} />
+            <StatBar label="İSABETLİ" h={currentLeg.home.onTarget} a={currentLeg.away.onTarget} />
+            <StatBar label="XG"       h={currentLeg.home.xg?.toFixed(2)} a={currentLeg.away.xg?.toFixed(2)} />
+          </div>
+        )}
+
+        {/* Aggregate / result */}
+        {showAggregateBlock && (
+          <div className="mt-4 text-center" data-testid="aggregate-result">
+            {tie?.aggregate && (
               <div className="font-display text-lg tracking-widest text-amber-300">
-                TOPLAM: {match.knockout.tie.aggregate.a} - {match.knockout.tie.aggregate.b}
+                TOPLAM: {match.knockout.home.label} {tie.aggregate.a} - {tie.aggregate.b} {match.knockout.away.label}
               </div>
             )}
-            {match.knockout.tie.decidedBy === "penalties" && (
+            {tie?.decidedBy === "penalties" && tie?.penalties && (
               <div className="font-mono text-xs tracking-widest text-amber-300 mt-1">
-                PENALTILAR: {match.knockout.tie.penalties.a} - {match.knockout.tie.penalties.b}
+                PENALTILAR: {tie.penalties.a} - {tie.penalties.b}
               </div>
             )}
-            <div className="font-display text-3xl mt-2 text-white">
+            <div className="font-display text-3xl mt-2 text-white" data-testid="user-result">
               {match.userWon ? "TUR ATLADIN" : "ELENDİN"}
             </div>
           </div>
@@ -158,16 +261,62 @@ export const MatchScreen = ({ match, onClose }) => {
 
         <div className="mt-5 flex justify-end gap-2">
           {phase === "done" && legIdx + 1 < legs.length && (
-            <button type="button" className="btn-ghost" onClick={nextLeg} data-testid="next-leg-button">2. MAÇ OYNA →</button>
+            <button type="button" className="btn-ghost" onClick={nextLeg} data-testid="next-leg-button">RÖVANŞ MAÇI →</button>
           )}
-          {phase === "done" && (
-            <button type="button" className="btn-primary" onClick={onClose} data-testid="close-match-button">DEVAM ET</button>
+          {phase === "done" && legIdx + 1 >= legs.length && (
+            <button type="button" className="btn-primary" onClick={handleClose} data-testid="close-match-button">DEVAM ET</button>
           )}
         </div>
       </motion.div>
     </div>
   );
 };
+
+const SpeedPicker = ({ speedKey, onChange }) => (
+  <div className="flex items-center gap-1 glass !bg-white/5 rounded-full p-0.5" data-testid="speed-picker">
+    {SPEEDS.map((s) => {
+      const Icon = s.icon;
+      const active = s.key === speedKey;
+      return (
+        <button
+          key={s.key}
+          type="button"
+          onClick={() => onChange(s.key)}
+          data-testid={`speed-${s.key}`}
+          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-mono tracking-wider transition-all ${
+            active ? "bg-amber-300 text-black" : "text-white/60 hover:text-white"
+          }`}
+        >
+          <Icon size={11} />
+          {s.label}
+        </button>
+      );
+    })}
+  </div>
+);
+
+const PenaltyColumn = ({ name, shots, totalScored }) => (
+  <div>
+    <div className="font-display text-base tracking-tight truncate mb-1">{name}</div>
+    <div className="font-display text-3xl text-amber-300 mb-2">{totalScored}</div>
+    <div className="flex justify-center gap-1 flex-wrap">
+      {shots.map((s, i) => (
+        <motion.span
+          key={i}
+          initial={{ scale: 0, rotate: -90 }}
+          animate={{ scale: 1, rotate: 0 }}
+          transition={{ type: "spring", stiffness: 280, damping: 18 }}
+          className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold ${
+            s.scored ? "bg-emerald-400 text-black" : "bg-red-500 text-white"
+          }`}
+          data-testid={`pen-shot`}
+        >
+          {s.scored ? "●" : "✕"}
+        </motion.span>
+      ))}
+    </div>
+  </div>
+);
 
 const StatBar = ({ label, h, a }) => (
   <div className="bg-white/5 rounded px-2 py-1.5">

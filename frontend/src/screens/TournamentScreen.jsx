@@ -32,13 +32,13 @@ function buildTeamRefs(userTeam) {
   return [user, ...champions];
 }
 
-export const TournamentScreen = ({ userStats, userTacticId, onMatch, onTrophy, savedState, onSaveState }) => {
+export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatch, onTrophy, savedState, onSaveState }) => {
   const [state, setState] = useState(savedState || null);
 
   // Init on mount if no saved state
   useEffect(() => {
     if (state) return;
-    const teamRefs = buildTeamRefs({ label: "DRAFT TAKIMI", stats: userStats });
+    const teamRefs = buildTeamRefs({ label: userTeamName || "DRAFT TAKIMI", stats: userStats });
     const groups = drawGroups(teamRefs);
     const fixtures = generateGroupFixtures(groups);
     const fresh = {
@@ -89,7 +89,8 @@ export const TournamentScreen = ({ userStats, userTacticId, onMatch, onTrophy, s
     if (nextMd >= 6) {
       const standings = next.groups.map((g, gi) => computeStandings(g, newResults[gi]));
       next.standings = standings;
-      next.stage = "r16";
+      // Show post-group summary first, then transition to R16 on user action
+      next.stage = "post_group";
       const r16 = buildR16(standings);
       next.r16 = r16.map((pair) => ({ ...pair, played: false }));
     }
@@ -170,11 +171,11 @@ export const TournamentScreen = ({ userStats, userTacticId, onMatch, onTrophy, s
     const winnerRef = fin[0].tie.winner === "home" ? fin[0].home : fin[0].away;
     const userTie = fin[0];
     const userWon = (isUserTeam(userTie.home) && userTie.tie.winner === "home") || (isUserTeam(userTie.away) && userTie.tie.winner === "away");
-    onMatch({ stage: "Final", knockout: userTie, userWon });
+    // Pass trophy candidate via the match payload — App.js will trigger trophy after modal closes
+    onMatch({ stage: "Final", knockout: userTie, userWon, championRef: winnerRef });
     const next = { ...state, final: fin, stage: "done", champion: winnerRef };
     setState(next);
     onSaveState && onSaveState(next);
-    if (userWon) { sound.trophy(); onTrophy && onTrophy(winnerRef); }
   };
 
   return (
@@ -192,6 +193,31 @@ export const TournamentScreen = ({ userStats, userTacticId, onMatch, onTrophy, s
         <div>
           <div className="text-xs text-white/60 font-mono tracking-widest mb-3">
             MAÇ GÜNÜ {Math.min(state.matchdayIndex + 1, 6)} / 6
+          </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {liveStandings.map((table, gi) => (
+              <GroupTable key={gi} title={`GROUP ${String.fromCharCode(65 + gi)}`} table={table} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {state.stage === "post_group" && (
+        <div className="space-y-6">
+          <div className="glass rounded-2xl p-5 text-center">
+            <div className="font-mono text-xs text-amber-300 tracking-widest">GRUP AŞAMASI TAMAMLANDI</div>
+            <div className="font-display text-3xl tracking-tight mt-1">Tüm gruplardaki nihai sıralama aşağıda. Hazır olduğunda Son 16'ya geç.</div>
+            <button
+              type="button"
+              className="btn-primary mt-4"
+              onClick={() => {
+                const next = { ...state, stage: "r16" };
+                setState(next); onSaveState && onSaveState(next);
+              }}
+              data-testid="advance-to-r16-button"
+            >
+              SON 16'YA İLERLE →
+            </button>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
             {liveStandings.map((table, gi) => (
@@ -230,6 +256,7 @@ export const TournamentScreen = ({ userStats, userTacticId, onMatch, onTrophy, s
 function currentStageLabel(state) {
   switch (state.stage) {
     case "group": return "GRUP AŞAMASI";
+    case "post_group": return "GRUP SONU";
     case "r16": return "SON 16";
     case "qf": return "ÇEYREK FİNAL";
     case "sf": return "YARI FİNAL";

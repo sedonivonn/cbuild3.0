@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 import { TACTICS } from "../data/tactics";
 import { Pitch } from "../components/Pitch";
-import { Flame, Network, Shield } from "lucide-react";
+import { Flame, Network, Shield, Plus, Minus } from "lucide-react";
 import { sound } from "../engine/sounds";
+import { analyzeTactic } from "../engine/tacticAnalysis";
 
 const ICONS = { Flame, Network, Shield };
 
@@ -35,7 +36,7 @@ export const TacticsScreen = ({ formationId, xi, teamStats, tactic, setTactic, o
             <span className="font-display text-5xl text-amber-300" data-testid="team-overall">{teamStats?.overall || 0}</span>
             <span className="text-white/60 font-mono text-xs">OVR</span>
           </div>
-          <Pitch formationId={formationId} xi={xi} compact />
+          <Pitch formationId={formationId} xi={xi} compact readOnly />
           <div className="grid grid-cols-4 gap-2 mt-4 text-center">
             <Stat label="KLC" v={teamStats?.keeper} />
             <Stat label="DEF" v={teamStats?.defense} />
@@ -46,38 +47,72 @@ export const TacticsScreen = ({ formationId, xi, teamStats, tactic, setTactic, o
 
         {/* Tactic Cards */}
         <div className="lg:col-span-8 grid md:grid-cols-3 gap-4">
-          {Object.values(TACTICS).map((t) => {
-            const active = tactic === t.id;
-            const Icon = ICONS[t.icon] || Flame;
-            return (
-              <motion.button
-                key={t.id}
-                type="button"
-                onClick={() => { sound.click(); setTactic(t.id); }}
-                whileHover={{ y: -4 }}
-                data-testid={`tactic-${t.id}`}
-                className={`text-left rounded-2xl p-5 glass border ${active ? "ring-2 ring-amber-300" : "border-white/10"}`}
-                style={{ borderColor: active ? undefined : "rgba(255,255,255,0.08)" }}
-              >
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
-                     style={{ background: t.color + "22", color: t.color }}>
-                  <Icon size={22} />
-                </div>
-                <h3 className="font-display text-2xl tracking-tight">{t.name}</h3>
-                <div className="text-xs text-white/60 mt-1 mb-3">{t.tagline}</div>
-                <p className="text-sm text-white/75 leading-relaxed">{t.description}</p>
-                <div className="grid grid-cols-2 gap-2 mt-4 text-[11px] text-white/70">
-                  <Mod label="HÜCUM" v={t.mods.attack} />
-                  <Mod label="ORTA" v={t.mods.midfield} />
-                  <Mod label="DEF" v={t.mods.defense} />
-                  <Mod label="KALECİ" v={t.mods.keeper} />
-                </div>
-              </motion.button>
-            );
-          })}
+          {Object.values(TACTICS).map((t) => (
+            <TacticCard
+              key={t.id}
+              tactic={t}
+              active={tactic === t.id}
+              teamStats={teamStats}
+              onSelect={() => { sound.click(); setTactic(t.id); }}
+            />
+          ))}
         </div>
       </div>
     </div>
+  );
+};
+
+const TacticCard = ({ tactic, active, teamStats, onSelect }) => {
+  const Icon = ICONS[tactic.icon] || Flame;
+  const analysis = useMemo(() => analyzeTactic(teamStats, tactic.id), [teamStats, tactic.id]);
+  const pros = analysis.filter((a) => a.sign === "+");
+  const cons = analysis.filter((a) => a.sign === "-");
+  return (
+    <motion.button
+      type="button"
+      onClick={onSelect}
+      whileHover={{ y: -4 }}
+      data-testid={`tactic-${tactic.id}`}
+      className={`text-left rounded-2xl p-5 glass border ${active ? "ring-2 ring-amber-300" : "border-white/10"}`}
+      style={{ borderColor: active ? undefined : "rgba(255,255,255,0.08)" }}
+    >
+      <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
+           style={{ background: tactic.color + "22", color: tactic.color }}>
+        <Icon size={22} />
+      </div>
+      <h3 className="font-display text-2xl tracking-tight">{tactic.name}</h3>
+      <div className="text-xs text-white/60 mt-1 mb-3">{tactic.tagline}</div>
+      <p className="text-sm text-white/75 leading-relaxed">{tactic.description}</p>
+
+      {/* Base mod table */}
+      <div className="grid grid-cols-2 gap-2 mt-4 text-[11px] text-white/70">
+        <Mod label="HÜCUM" v={tactic.mods.attack} />
+        <Mod label="ORTA" v={tactic.mods.midfield} />
+        <Mod label="DEF" v={tactic.mods.defense} />
+        <Mod label="KALECİ" v={tactic.mods.keeper} />
+      </div>
+
+      {/* DYNAMIC analysis tailored to user XI */}
+      {(pros.length > 0 || cons.length > 0) && (
+        <div className="mt-4 pt-3 border-t border-white/5">
+          <div className="text-[10px] text-white/40 tracking-widest font-mono mb-2">KADRONA GÖRE</div>
+          <div className="space-y-1.5">
+            {pros.map((p, i) => (
+              <div key={`p${i}`} className="flex items-start gap-2 text-[11px] leading-snug text-emerald-300" data-testid={`tactic-${tactic.id}-pro-${i}`}>
+                <Plus size={12} className="mt-0.5 shrink-0" />
+                <span>{p.text}</span>
+              </div>
+            ))}
+            {cons.map((c, i) => (
+              <div key={`c${i}`} className="flex items-start gap-2 text-[11px] leading-snug text-red-300" data-testid={`tactic-${tactic.id}-con-${i}`}>
+                <Minus size={12} className="mt-0.5 shrink-0" />
+                <span>{c.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </motion.button>
   );
 };
 

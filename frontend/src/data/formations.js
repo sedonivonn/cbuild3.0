@@ -125,12 +125,24 @@ export function positionPenalty(slotPos, primary, secondary) {
   return 6;
 }
 
-// STRICT placement rule: player can only be placed where slot.pos matches
-// either their primary or secondary position. No "family" fallback.
-// This prevents e.g. a winger being placed in defense.
+// Wide attackers / midfielders are all interchangeable across left/right and across LM↔LW etc.
+const WING_GROUP = new Set(["LW", "RW", "LM", "RM"]);
+const WING_MIRROR = { LW: "RW", RW: "LW", LM: "RM", RM: "LM" };
+
+// STRICT placement rule with broad wing flexibility:
+// A player can be placed where slot.pos matches their primary OR secondary,
+// OR if both slot.pos and (player.primary or player.secondary) are wing positions
+// — wingers and wide midfielders are interchangeable across all 4 flank slots.
 export function canPlace(slotPos, player) {
   if (!player) return false;
-  return slotPos === player.primary || slotPos === player.secondary;
+  if (slotPos === player.primary || slotPos === player.secondary) return true;
+  if (WING_GROUP.has(slotPos) && (WING_GROUP.has(player.primary) || WING_GROUP.has(player.secondary))) {
+    return true;
+  }
+  // explicit mirror (covers cases above already, kept for clarity)
+  if (slotPos === WING_MIRROR[player.primary]) return true;
+  if (slotPos === WING_MIRROR[player.secondary]) return true;
+  return false;
 }
 
 // Given a player and the formation+filled xi, returns true if there is at least

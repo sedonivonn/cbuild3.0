@@ -103,8 +103,13 @@ html, body, #root {
 .tier-bronze   { background: linear-gradient(160deg, #3a230f 0%, #7a4a22 45%, #b87838 100%); }
 .tier-silver   { background: linear-gradient(160deg, #2c2c30 0%, #6a6a72 50%, #cfcfd6 100%); }
 .tier-gold     { background: linear-gradient(160deg, #6a4a0a 0%, #b88a18 45%, #f4cf48 100%); }
+.tier-purple   { background: linear-gradient(160deg, #1a0830 0%, #4b1a8c 50%, #7c2dd6 100%); box-shadow: 0 0 0 1px rgba(177,107,255,0.35), 0 8px 24px rgba(124,45,214,0.25); }
 .tier-special  { background: linear-gradient(160deg, #0c0a25 0%, #2b2660 50%, #1b1b3c 100%); }
 .tier-icon     { background: linear-gradient(160deg, #1d1d1d 0%, #4a4a4a 50%, #e6dcc4 100%); }
+.tier-blackicon{
+    background: linear-gradient(160deg, #000000 0%, #131313 50%, #1c1c1c 100%);
+    box-shadow: 0 0 0 2px #FFD700, 0 0 28px rgba(255,215,0,0.35);
+}
 .tier-ballondor{
     background: linear-gradient(160deg, #050505 0%, #1b1407 45%, #4f3b07 100%);
     box-shadow: 0 0 0 2px #FFD700, 0 0 28px rgba(255,215,0,0.4);

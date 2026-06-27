@@ -23,8 +23,8 @@ function counterBonus(aId, bId) {
 
 // User-team chemistry bonus: makes the user's drafted XI feel like a real team
 // (the AI champions are historical, settled squads). Without this the game is
-// too punishing in groups. +4 attack, +4 mid, +4 def, +3 keeper = noticeable.
-const USER_CHEMISTRY = { attack: 4, midfield: 4, defense: 4, keeper: 3, overall: 3 };
+// too punishing in groups. Strong but not OP so games are competitive.
+const USER_CHEMISTRY = { attack: 6, midfield: 6, defense: 6, keeper: 4, overall: 5 };
 
 function applyChemistry(stats, isUser) {
   if (!isUser) return stats;
@@ -150,6 +150,7 @@ export function simulateKnockout({ home, away, homeTacticId, awayTacticId, twoLe
     const et = simulateExtraTime({ home: away, away: home, homeTacticId: awayTacticId, awayTacticId: homeTacticId, homeIsUser: awayIsUser, awayIsUser: homeIsUser });
     leg2.home.score += et.home;
     leg2.away.score += et.away;
+    leg2.events = [...(leg2.events || []), ...et.events];
     const aggA2 = leg1.home.score + leg2.away.score;
     const aggB2 = leg1.away.score + leg2.home.score;
     if (aggA2 !== aggB2) {
@@ -166,6 +167,7 @@ export function simulateKnockout({ home, away, homeTacticId, awayTacticId, twoLe
   const et = simulateExtraTime({ home, away, homeTacticId, awayTacticId, homeIsUser, awayIsUser });
   match.home.score += et.home;
   match.away.score += et.away;
+  match.events = [...(match.events || []), ...et.events];
   if (match.home.score !== match.away.score) {
     return { match, et, winner: match.home.score > match.away.score ? "home" : "away", decidedBy: "extra_time" };
   }
@@ -174,17 +176,29 @@ export function simulateKnockout({ home, away, homeTacticId, awayTacticId, twoLe
 }
 
 function simulateExtraTime({ home, away, homeTacticId, awayTacticId, homeIsUser = false, awayIsUser = false }) {
-  // 30 min, halved chances
+  // 30 min (91-120), halved chances - returns events too
   const A = applyTactic(applyChemistry(home, homeIsUser), homeTacticId);
   const B = applyTactic(applyChemistry(away, awayIsUser), awayTacticId);
   const aXgPer = 0.09 + Math.max(-0.04, Math.min(0.10, (A.attack - (B.defense * 0.6 + B.keeper * 0.4)) * 0.01));
   const bXgPer = 0.09 + Math.max(-0.04, Math.min(0.10, (B.attack - (A.defense * 0.6 + A.keeper * 0.4)) * 0.01));
   const aShots = 2 + Math.floor(Math.random() * 3);
   const bShots = 2 + Math.floor(Math.random() * 3);
+  const events = [];
   let aGoals = 0, bGoals = 0;
-  for (let i = 0; i < aShots; i++) if (Math.random() < aXgPer * 1.4) aGoals++;
-  for (let i = 0; i < bShots; i++) if (Math.random() < bXgPer * 1.4) bGoals++;
-  return { home: aGoals, away: bGoals };
+  const allShots = [];
+  for (let i = 0; i < aShots; i++) allShots.push({ side: "home", minute: 91 + Math.floor(Math.random() * 29) });
+  for (let i = 0; i < bShots; i++) allShots.push({ side: "away", minute: 91 + Math.floor(Math.random() * 29) });
+  allShots.sort((x, y) => x.minute - y.minute);
+  for (const sh of allShots) {
+    const xg = sh.side === "home" ? aXgPer : bXgPer;
+    if (Math.random() < xg * 1.4) {
+      if (sh.side === "home") aGoals++; else bGoals++;
+      events.push({ minute: sh.minute, side: sh.side, type: "GOAL", text: `${sh.minute}' UZATMADA GOL! ${sh.side === "home" ? home.name : away.name}` });
+    } else if (Math.random() < 0.4) {
+      events.push({ minute: sh.minute, side: sh.side, type: "SAVE", text: `${sh.minute}' UZATMA kurtarış!` });
+    }
+  }
+  return { home: aGoals, away: bGoals, events };
 }
 
 function simulatePenalties(home, away, homeIsUser = false, awayIsUser = false) {
@@ -194,25 +208,31 @@ function simulatePenalties(home, away, homeIsUser = false, awayIsUser = false) {
   const aatk = A.attack, batk = B.attack;
   let a = 0, b = 0;
   const shots = [];
+  // 5 standard rounds (alternating home then away each round)
   for (let i = 0; i < 5; i++) {
     const aGoal = Math.random() < scorePenChance(aatk, bkeep);
-    const bGoal = Math.random() < scorePenChance(batk, akeep);
+    shots.push({ side: "home", scored: aGoal, round: i + 1, sudden: false });
     if (aGoal) a++;
+    const bGoal = Math.random() < scorePenChance(batk, akeep);
+    shots.push({ side: "away", scored: bGoal, round: i + 1, sudden: false });
     if (bGoal) b++;
-    shots.push({ home: aGoal, away: bGoal });
   }
-  // sudden death
-  let i = 0;
-  while (a === b && i < 5) {
+  // sudden death (cap 5 rounds)
+  let r = 6;
+  let safety = 0;
+  while (a === b && safety < 5) {
     const aGoal = Math.random() < scorePenChance(aatk, bkeep);
-    const bGoal = Math.random() < scorePenChance(batk, akeep);
+    shots.push({ side: "home", scored: aGoal, round: r, sudden: true });
     if (aGoal) a++;
+    const bGoal = Math.random() < scorePenChance(batk, akeep);
+    shots.push({ side: "away", scored: bGoal, round: r, sudden: true });
     if (bGoal) b++;
-    shots.push({ home: aGoal, away: bGoal, sudden: true });
-    i++;
+    r++; safety++;
   }
-  if (a === b) { // safety
-    if (Math.random() < 0.5) a++; else b++;
+  if (a === b) {
+    // tie-break safety
+    if (Math.random() < 0.5) { a++; shots.push({ side: "home", scored: true, round: r, sudden: true }); }
+    else { b++; shots.push({ side: "away", scored: true, round: r, sudden: true }); }
   }
   return { a, b, shots };
 }
