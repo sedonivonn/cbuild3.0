@@ -21,19 +21,17 @@ function counterBonus(aId, bId) {
   return (a?.counters?.[bId]) || 0;
 }
 
-// User-team chemistry bonus: balanced so the user can compete with mid-tier
-// historical champions, but elite eras (2009/2011 Barça, 2014/2017 Real, 2013/2020
-// Bayern, etc.) remain a true challenge. The goal is *close, organic games*.
-const USER_CHEMISTRY = { attack: 4, midfield: 4, defense: 4, keeper: 3, overall: 3 };
+// User-team chemistry bonus — tuned to keep games competitive but never trivial.
+// Elite eras (2009/2011 Barça, 2014/2017/2024 Real, 2013/2020 Bayern) should
+// still be a stretch — perfect drafts shouldn't auto-win the cup.
+const USER_CHEMISTRY = { attack: 2, midfield: 2, defense: 2, keeper: 2, overall: 2 };
 
-// Slight underdog clutch: when user faces a much stronger opponent, give them a
-// small extra xG conversion floor so they always have a "punch chance" — keeps
-// games dramatic ("kıl payı eleniyordum" feel).
+// Slight underdog clutch: capped smaller so it's a nudge, not a crutch.
 function underdogBoost(userStats, oppStats) {
   if (!userStats || !oppStats) return 0;
   const diff = (oppStats.overall ?? 80) - (userStats.overall ?? 80);
   if (diff <= 0) return 0;
-  return Math.min(0.035, diff * 0.005);
+  return Math.min(0.020, diff * 0.0035);
 }
 
 function applyChemistry(stats, isUser) {

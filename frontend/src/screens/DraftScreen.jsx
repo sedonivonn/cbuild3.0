@@ -62,10 +62,40 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
     }, 900);
   };
 
+  // CHANGE YEAR — keep the same club but pick a different season of that club.
+  const handleChangeYear = () => {
+    if (!pool || changes.remaining <= 0) { sound.error(); return; }
+    const currentClub = pool.team.club;
+    const currentSeason = pool.season;
+    // find every (season, team) in SEASONS where team.club === currentClub and season != currentSeason
+    const candidates = [];
+    for (const [seasonKey, teams] of Object.entries(SEASONS)) {
+      const seasonNum = Number(seasonKey);
+      if (seasonNum === currentSeason) continue;
+      const match = teams.find((t) => t.club === currentClub);
+      if (match) candidates.push({ season: seasonNum, team: match });
+    }
+    if (candidates.length === 0) {
+      sound.error();
+      return;
+    }
+    setRolling(true);
+    sound.dice();
+    setTimeout(() => {
+      const pick = candidates[Math.floor(Math.random() * candidates.length)];
+      setPool(pick);
+      setSelectedPlayerIdx(-1);
+      onUseChange(false); // not lucky-tagged
+      setRolling(false);
+      sound.cardReveal();
+    }, 900);
+  };
+
   // Sort by overall desc; mark _placeable (compatible slot exists AND name not picked)
   const sortedPool = useMemo(() => {
     if (!pool) return [];
-    const arr = pool.team.players.slice().sort((a, b) => b.overall - a.overall);
+    const seasonNum = pool.season;
+    const arr = pool.team.players.slice().sort((a, b) => effOverall(b, seasonNum) - effOverall(a, seasonNum));
     return arr.map((p) => {
       const alreadyPicked = pickedNames.has(p.name);
       const placeable = !alreadyPicked && hasAvailableSlot(formation, xi, p);
@@ -86,15 +116,8 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
   };
 
   const handlePlaceOnSlot = (slotIdx, slot) => {
-    // Slot already filled? When no player is selected, REMOVE the placed player.
+    // Filled slots are permanent — cannot be replaced.
     if (xi[slotIdx]) {
-      if (!selectedPlayer) {
-        sound.click();
-        const newXi = [...xi];
-        newXi[slotIdx] = null;
-        setXi(newXi);
-        return;
-      }
       sound.error();
       return;
     }
@@ -143,7 +166,7 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
           <div className="font-mono text-xs text-amber-300 tracking-widest">ADIM 2 / 4 · DRAFT</div>
           <h2 className="font-display text-3xl md:text-4xl tracking-tight">{filledCount} / {totalSlots} OYUNCU YERLEŞTİ</h2>
           <div className="text-xs text-white/55 mt-1">
-            Oyuncu seç → uygun boş slota yerleştir. Yerleşen oyuncuyu kaldırmak için seçim olmadan slota tıkla.
+            Oyuncu seç → uygun boş slota yerleştir. Yerleşen oyuncu kalıcıdır.
           </div>
         </div>
         <div className="text-right">
@@ -164,8 +187,6 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
             <span>KADRO · {formation.label}</span>
             {selectedPlayer ? (
               <span className="text-amber-300">UYUMLU YEŞİL SLOTA TIKLA</span>
-            ) : filledCount > 0 ? (
-              <span className="text-white/40">DOLU SLOTA TIKLA → KALDIR</span>
             ) : null}
           </div>
           <Pitch
@@ -174,7 +195,6 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
             onSlotClick={handlePlaceOnSlot}
             slotHints={slotHints}
             interactive={true}
-            allowRemove={!selectedPlayer}
             compact
           />
         </div>
@@ -227,15 +247,27 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
                       <div className="text-xs text-white/60 font-mono tracking-widest" data-testid="rolled-season">SEZON · {pool.season} {pool.team.country}</div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleChange}
-                    disabled={changes.remaining <= 0}
-                    data-testid="change-button"
-                    className="btn-ghost flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
-                  >
-                    <RefreshCw size={14} /> CHANGE ({changes.remaining})
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleChangeYear}
+                      disabled={changes.remaining <= 0}
+                      data-testid="change-year-button"
+                      className="btn-ghost flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
+                      title="Aynı kulübün farklı sezonu"
+                    >
+                      <RefreshCw size={14} /> CHANGE YEAR
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleChange}
+                      disabled={changes.remaining <= 0}
+                      data-testid="change-button"
+                      className="btn-ghost flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
+                    >
+                      <RefreshCw size={14} /> CHANGE ({changes.remaining})
+                    </button>
+                  </div>
                 </div>
 
                 <div className="text-[11px] text-white/55 mb-3 font-mono tracking-widest">
@@ -271,7 +303,7 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
                 </div>
 
                 <div className="mt-3 text-[10px] text-white/40 font-mono">
-                  TIP: Kanat oyuncuları (LW↔RW, LM↔RM) iki taraflı oynayabilir. Yerleşmiş oyuncuyu sahadan kaldırmak için sahaya tekrar tıkla.
+                  TIP: Kanat oyuncuları (LW↔RW, LM↔RM) iki taraflı oynayabilir. Yerleşen oyuncu sahada kalıcıdır — dikkatli seç!
                 </div>
               </motion.div>
             )}

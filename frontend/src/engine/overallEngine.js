@@ -8,7 +8,7 @@ export function computeTeamStats(xi) {
 
   const adjusted = xi.map(({ slot, player }) => {
     if (!player) return { value: 60, raw: 60, penalty: 6 };
-    const baseOverall = effOverall(player);
+    const baseOverall = effOverall(player, player._season);
     const penalty = positionPenalty(slot.pos, player.primary, player.secondary);
     const penaltyValue = { 0: 0, 1: 2, 2: 6, 3: 10, 6: 16 }[penalty] ?? 16;
     return {

@@ -15,7 +15,6 @@ export const Pitch = ({
   readOnly = false,
   slotHints = null, // array of "fit"|"blocked"|"filled"|null
   interactive = true,
-  allowRemove = false,
 }) => {
   const formation = FORMATIONS[formationId];
   if (!formation) return null;
@@ -25,8 +24,8 @@ export const Pitch = ({
     ? "w-7 h-7 md:w-8 md:h-8 text-[8px]"
     : "w-12 h-12 md:w-14 md:h-14 text-[11px]";
   const labelClass = readOnly ? "text-[8px] mt-0.5" : "text-[10px] mt-1";
-  // bigger invisible hit area in interactive mode for easier tapping
-  const hitArea = readOnly ? "" : "p-2 -m-2";
+  // Larger hit area for easier tapping. p-3 gives ~24px of extra clickable radius.
+  const hitArea = readOnly ? "" : "p-3 -m-3";
 
   return (
     <div className={`pitch w-full ${compact ? "aspect-[3/4]" : "aspect-[3/4]"} max-w-[480px] mx-auto`} data-testid="pitch-container">
@@ -38,8 +37,8 @@ export const Pitch = ({
         if (player) {
           borderStyle = "2px solid rgba(255,215,0,0.6)";
           glow = "0 6px 16px rgba(0,0,0,0.5)";
-          // allow removing on click when no selection is active
-          clickable = allowRemove;
+          // Yerleşen oyuncu kalıcıdır; slot tıklanamaz.
+          clickable = false;
         } else if (hint === "fit") {
           borderStyle = "2px solid #34d399";
           glow = "0 0 12px rgba(52,211,153,0.55)";
@@ -61,37 +60,42 @@ export const Pitch = ({
               "data-testid": `pitch-slot-${idx}`,
             };
         return (
-          <Tag
+          <div
             key={slot.id + idx}
-            {...interactiveProps}
-            className={`absolute -translate-x-1/2 -translate-y-1/2 group focus:outline-none ${hitArea} ${
-              (!interactive || !clickable) && !readOnly ? "cursor-not-allowed" : ""
-            }`}
-            style={{ top: `${slot.top}%`, left: `${slot.left}%`, opacity: dim ? 0.55 : 1 }}
+            className="absolute -translate-x-1/2 -translate-y-1/2"
+            style={{ top: `${slot.top}%`, left: `${slot.left}%` }}
           >
-            <div
-              className={`${circleClass} rounded-full flex flex-col items-center justify-center font-bold transition-all ${
-                active ? "ring-2 ring-amber-300 scale-110" : ""
+            <Tag
+              {...interactiveProps}
+              className={`relative block ${hitArea} ${
+                (!interactive || !clickable) && !readOnly ? "cursor-not-allowed" : ""
               }`}
-              style={{
-                background: player ? "linear-gradient(160deg,#1c1c20 0%,#36363c 100%)" : "rgba(0,0,0,0.35)",
-                border: borderStyle,
-                boxShadow: glow,
-              }}
+              style={{ opacity: dim ? 0.55 : 1 }}
             >
-              {player ? (
-                <>
-                  <span className="leading-none text-amber-300 font-mono">{effOverall(player)}</span>
-                  <span className="leading-tight text-white mt-0.5">{initials(player.name)}</span>
-                </>
-              ) : (
-                <span className="text-white/80 font-display tracking-wider">{slot.pos}</span>
-              )}
-            </div>
-            <div className={`${labelClass} text-white/90 text-center font-display tracking-wider`}>
-              {player ? <span className="text-amber-200">{slot.pos}</span> : slot.pos}
-            </div>
-          </Tag>
+              <div
+                className={`${circleClass} rounded-full flex flex-col items-center justify-center font-bold transition-all ${
+                  active ? "ring-2 ring-amber-300 scale-110" : ""
+                }`}
+                style={{
+                  background: player ? "linear-gradient(160deg,#1c1c20 0%,#36363c 100%)" : "rgba(0,0,0,0.35)",
+                  border: borderStyle,
+                  boxShadow: glow,
+                }}
+              >
+                {player ? (
+                  <>
+                    <span className="leading-none text-amber-300 font-mono">{effOverall(player, player._season)}</span>
+                    <span className="leading-tight text-white mt-0.5">{initials(player.name)}</span>
+                  </>
+                ) : (
+                  <span className="text-white/80 font-display tracking-wider">{slot.pos}</span>
+                )}
+              </div>
+              <div className={`${labelClass} text-white/90 text-center font-display tracking-wider`}>
+                {player ? <span className="text-amber-200">{slot.pos}</span> : slot.pos}
+              </div>
+            </Tag>
+          </div>
         );
       })}
     </div>
