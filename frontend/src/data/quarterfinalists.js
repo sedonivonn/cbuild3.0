@@ -587,8 +587,8 @@ export const QUARTERFINALISTS = {
   ],
 
   2025: [
-    // 2025-26 season is ongoing; provide a single fresh QF-tier squad placeholder:
-    // Real Madrid 2025-26 (current squad early in the year — reasonable tier)
+    // 2025-26 season is ongoing; Bayern Munich added as an iconic top-tier
+    // squad placeholder until the season's QF teams are confirmed.
     T("Bayern Munich", "🇩🇪", "FCB", [
       P("Manuel Neuer","GK","GK",85,"🇩🇪"),
       P("Konrad Laimer","RB","CM",82,"🇦🇹"),
