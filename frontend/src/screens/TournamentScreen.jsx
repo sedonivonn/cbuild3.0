@@ -402,8 +402,14 @@ const KnockoutCard = ({ pair }) => {
   const aggB = pair.tie?.aggregate?.b;
   const homeWin = winner === "home";
   const awayWin = winner === "away";
+  const isUserPair = pair.home?.isUser || pair.away?.isUser;
   return (
-    <div className="glass rounded-xl p-3 text-sm">
+    <div
+      className={`glass rounded-xl p-3 text-sm transition-all ${
+        isUserPair ? "ring-2 ring-amber-300/70 shadow-[0_0_20px_rgba(252,211,77,0.25)]" : ""
+      }`}
+      data-testid={isUserPair ? "user-knockout-card" : undefined}
+    >
       <Row team={pair.home} score={aggA} isWin={homeWin} pen={pair.tie?.penalties?.a} />
       <div className="h-px my-1.5 bg-white/10" />
       <Row team={pair.away} score={aggB} isWin={awayWin} pen={pair.tie?.penalties?.b} />
@@ -418,12 +424,15 @@ const KnockoutCard = ({ pair }) => {
 };
 
 const Row = ({ team, score, isWin, pen }) => (
-  <div className={`flex items-center gap-2 ${isWin ? "text-amber-300" : "text-white/80"}`}>
+  <div className={`flex items-center gap-2 ${team.isUser ? "text-amber-300 font-semibold" : isWin ? "text-amber-300" : "text-white/80"}`}>
     <Crest code={team.crest} size="sm" />
     <div className="flex flex-col leading-tight flex-1 min-w-0">
       <span className="truncate text-xs">{team.club || team.label}</span>
       {!team.isUser && team.season && (
         <span className="text-[9px] font-mono text-white/45 tracking-wider">SEZON · {team.season}</span>
+      )}
+      {team.isUser && (
+        <span className="text-[9px] font-mono text-amber-200/70 tracking-wider">SENİN TAKIMIN</span>
       )}
     </div>
     <span className="font-display text-lg">{score ?? "—"}</span>

@@ -22,10 +22,11 @@ function saveSpeed(k) {
 
 export const MatchScreen = ({ match, onClose }) => {
   const [visibleIdx, setVisibleIdx] = useState(0);
-  const [phase, setPhase] = useState("kickoff"); // kickoff -> playing -> done -> penalties -> finished
+  const [phase, setPhase] = useState("kickoff"); // kickoff -> playing -> et_confirm -> playing_et -> penalties -> done -> finished
   const [legIdx, setLegIdx] = useState(0);
   const [speedKey, setSpeedKey] = useState(loadSpeed());
   const [penShotIdx, setPenShotIdx] = useState(0);
+  const [etVisibleIdx, setEtVisibleIdx] = useState(0);
   const finishedRef = useRef(false);
 
   const speed = SPEEDS.find((s) => s.key === speedKey) || SPEEDS[1];
@@ -50,28 +51,35 @@ export const MatchScreen = ({ match, onClose }) => {
 
   const currentLeg = legs[legIdx];
   const events = currentLeg?.events || [];
+  const regulationEvents = useMemo(() => events.filter((e) => e.minute <= 90), [events]);
+  const extraTimeEvents = useMemo(() => events.filter((e) => e.minute > 90), [events]);
   const isLastLeg = legIdx === legs.length - 1;
   const tie = isKnockout ? match.knockout.tie : null;
   const hasPenalties = isKnockout && tie?.penalties;
+  // Has ET on THIS specific leg (only the deciding leg has ET events appended).
+  const hasExtraTime = isKnockout && isLastLeg && extraTimeEvents.length > 0;
 
   useEffect(() => {
     sound.whistleStart();
     setPhase("kickoff");
     setVisibleIdx(0);
+    setEtVisibleIdx(0);
     setPenShotIdx(0);
     finishedRef.current = false;
     const k = setTimeout(() => setPhase("playing"), 800);
     return () => clearTimeout(k);
   }, [legIdx]);
 
-  // Event ticker
+  // Regulation event ticker (minutes 1-90)
   useEffect(() => {
     if (phase !== "playing") return;
-    if (visibleIdx >= events.length) {
+    if (visibleIdx >= regulationEvents.length) {
       const t = setTimeout(() => {
         sound.whistleEnd();
-        // If last leg and there are penalties, transition to penalty phase
-        if (isLastLeg && hasPenalties) {
+        if (isLastLeg && hasExtraTime) {
+          // Pause and ask user whether to play extra time
+          setPhase("et_confirm");
+        } else if (isLastLeg && hasPenalties && !hasExtraTime) {
           setPhase("penalties");
         } else {
           setPhase("done");
@@ -79,13 +87,35 @@ export const MatchScreen = ({ match, onClose }) => {
       }, 400);
       return () => clearTimeout(t);
     }
-    const e = events[visibleIdx];
+    const e = regulationEvents[visibleIdx];
     const t = setTimeout(() => {
       if (e.type === "GOAL") sound.goal();
       setVisibleIdx(visibleIdx + 1);
     }, speed.delay);
     return () => clearTimeout(t);
-  }, [phase, visibleIdx, events, speed.delay, isLastLeg, hasPenalties]);
+  }, [phase, visibleIdx, regulationEvents, speed.delay, isLastLeg, hasExtraTime, hasPenalties]);
+
+  // Extra-time event ticker (minutes 91-120)
+  useEffect(() => {
+    if (phase !== "playing_et") return;
+    if (etVisibleIdx >= extraTimeEvents.length) {
+      const t = setTimeout(() => {
+        sound.whistleEnd();
+        if (hasPenalties) {
+          setPhase("penalties");
+        } else {
+          setPhase("done");
+        }
+      }, 400);
+      return () => clearTimeout(t);
+    }
+    const e = extraTimeEvents[etVisibleIdx];
+    const t = setTimeout(() => {
+      if (e.type === "GOAL") sound.goal();
+      setEtVisibleIdx(etVisibleIdx + 1);
+    }, speed.delay);
+    return () => clearTimeout(t);
+  }, [phase, etVisibleIdx, extraTimeEvents, speed.delay, hasPenalties]);
 
   // Penalty reveal (slow, suspense)
   useEffect(() => {
@@ -121,26 +151,56 @@ export const MatchScreen = ({ match, onClose }) => {
     }
   };
 
-  // Score accumulation
+  // Confirm to continue into extra time
+  const startExtraTime = () => {
+    sound.whistleStart();
+    setPhase("playing_et");
+  };
+
+  // Score accumulation (regulation only while playing; full once ET starts/finishes)
   const goalsSoFar = useMemo(() => {
     let h = 0, a = 0;
-    events.slice(0, visibleIdx).forEach((e) => {
+    regulationEvents.slice(0, visibleIdx).forEach((e) => {
       if (e.type === "GOAL") {
         if (e.side === "home") h++; else a++;
       }
     });
     return { h, a };
-  }, [events, visibleIdx]);
+  }, [regulationEvents, visibleIdx]);
 
-  // Adjust scoreboard for leg2 swap perspective
-  // In leg 2 events have side relative to original simulateMatch home/away which was swapped from pair.
-  // currentLeg.home/away already follow swapped (i.e. leg2.home = pair.away). So events.side==="home" means current host scored.
-  const displayedHomeScore = phase === "done" || phase === "penalties" || phase === "finished"
-    ? currentLeg.home.score
-    : goalsSoFar.h;
-  const displayedAwayScore = phase === "done" || phase === "penalties" || phase === "finished"
-    ? currentLeg.away.score
-    : goalsSoFar.a;
+  const etGoalsSoFar = useMemo(() => {
+    let h = 0, a = 0;
+    extraTimeEvents.slice(0, etVisibleIdx).forEach((e) => {
+      if (e.type === "GOAL") {
+        if (e.side === "home") h++; else a++;
+      }
+    });
+    return { h, a };
+  }, [extraTimeEvents, etVisibleIdx]);
+
+  // Display score logic:
+  //  - playing (regulation): live count of regulation goals only
+  //  - et_confirm: regulation-only goals (held)
+  //  - playing_et: regulation + live ET goals
+  //  - penalties / done / finished: full leg score
+  let displayedHomeScore;
+  let displayedAwayScore;
+  if (phase === "playing" || phase === "kickoff") {
+    displayedHomeScore = goalsSoFar.h;
+    displayedAwayScore = goalsSoFar.a;
+  } else if (phase === "et_confirm") {
+    // Final regulation goals (ignore ET)
+    displayedHomeScore = regulationEvents.reduce((s, e) => s + (e.type === "GOAL" && e.side === "home" ? 1 : 0), 0);
+    displayedAwayScore = regulationEvents.reduce((s, e) => s + (e.type === "GOAL" && e.side === "away" ? 1 : 0), 0);
+  } else if (phase === "playing_et") {
+    const regH = regulationEvents.reduce((s, e) => s + (e.type === "GOAL" && e.side === "home" ? 1 : 0), 0);
+    const regA = regulationEvents.reduce((s, e) => s + (e.type === "GOAL" && e.side === "away" ? 1 : 0), 0);
+    displayedHomeScore = regH + etGoalsSoFar.h;
+    displayedAwayScore = regA + etGoalsSoFar.a;
+  } else {
+    displayedHomeScore = currentLeg.home.score;
+    displayedAwayScore = currentLeg.away.score;
+  }
 
   // Penalty progress display
   const penShots = tie?.penalties?.shots || [];
@@ -195,13 +255,25 @@ export const MatchScreen = ({ match, onClose }) => {
         {phase !== "penalties" && (
           <div className="bg-black/40 rounded-xl p-4 max-h-56 overflow-y-auto border border-white/5">
             <AnimatePresence>
-              {events.slice(0, visibleIdx).map((e, i) => (
+              {regulationEvents.slice(0, visibleIdx).map((e, i) => (
                 <motion.div
-                  key={i}
+                  key={`reg-${i}`}
                   initial={{ opacity: 0, x: -8 }}
                   animate={{ opacity: 1, x: 0 }}
                   className={`flex items-center gap-3 py-1 text-sm ${e.type === "GOAL" ? "text-amber-300 goal-pulse rounded" : e.type === "SAVE" ? "text-emerald-300" : "text-white/60"}`}
                   data-testid={`match-event-${i}`}
+                >
+                  <span className="font-mono text-xs w-10">{e.minute}'</span>
+                  <span className="flex-1">{e.text}</span>
+                </motion.div>
+              ))}
+              {(phase === "playing_et" || phase === "done" || phase === "finished") && extraTimeEvents.slice(0, phase === "playing_et" ? etVisibleIdx : extraTimeEvents.length).map((e, i) => (
+                <motion.div
+                  key={`et-${i}`}
+                  initial={{ opacity: 0, x: -8 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className={`flex items-center gap-3 py-1 text-sm ${e.type === "GOAL" ? "text-amber-300 goal-pulse rounded" : e.type === "SAVE" ? "text-emerald-300" : "text-white/60"}`}
+                  data-testid={`match-event-et-${i}`}
                 >
                   <span className="font-mono text-xs w-10">{e.minute}'</span>
                   <span className="flex-1">{e.text}</span>
@@ -213,8 +285,35 @@ export const MatchScreen = ({ match, onClose }) => {
               {phase === "playing" && visibleIdx === 0 && (
                 <div className="text-white/40 text-sm text-center py-4">Maç başladı...</div>
               )}
+              {phase === "playing_et" && etVisibleIdx === 0 && (
+                <div className="text-center text-amber-300 font-display text-base tracking-widest py-3 border-t border-amber-300/30 mt-2">
+                  UZATMA BAŞLADI
+                </div>
+              )}
             </AnimatePresence>
           </div>
+        )}
+
+        {/* Extra-time confirmation modal */}
+        {phase === "et_confirm" && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="mt-4 bg-black/60 border border-amber-300/40 rounded-xl p-5 text-center"
+            data-testid="et-confirm-modal"
+          >
+            <div className="font-mono text-[10px] tracking-widest text-amber-300 mb-2">90. DAKİKA</div>
+            <div className="font-display text-2xl md:text-3xl text-white mb-2">Maç uzatmalara gidiyor.</div>
+            <div className="text-sm text-white/70 mb-4">Devam etmek ister misin? 30 dakikalık uzatma oynanacak, gerekirse penaltılara gidilecek.</div>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={startExtraTime}
+              data-testid="et-continue-button"
+            >
+              DEVAM ET →
+            </button>
+          </motion.div>
         )}
 
         {/* Penalty reveal */}
