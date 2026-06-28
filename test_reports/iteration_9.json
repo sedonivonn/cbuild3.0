@@ -1,0 +1,30 @@
+{
+  "summary": "Iteration 9 frontend-only retest of pool expansion (semis+QF) + tournament opponent overhaul. ALL PASS. (1) ROLL DICE pool expanded — across UI sampling we observed QF-tier teams confirmed against /app/frontend/src/data/quarterfinalists.js: Atalanta 2019, Atlético Madrid 1996, Liverpool 2008. Plus semifinalist hits: Bayern Munich 2013, Juventus 1998, Real Madrid 2012, Lyon 2020, Panathinaikos 1996. No crashes. (2) CHANGE YEAR works for QF teams — Liverpool 2008 (QF) → Liverpool 2018 (same club, different season), 3/3 → 2/3 change credit. (3) TOURNAMENT SCREEN renders 32 teams in 8 groups of 4 (1 user + 31 random semifinalists, one per season 1995-2025). Confirmed variety beyond CL champions: Valencia 2000, Porto 2004, RB Leipzig 2020, PSV Eindhoven 2005, Tottenham 2019, Schalke 04 2011, Ajax 2019, Panathinaikos 1996, Villarreal 2022, Bayer Leverkusen 2002, Lyon 2010 — all semifinalist-pool draws as required. Each opponent labeled 'YYYY Club'. (4) MATCH ENGINE runs cleanly with new opponent pool — Group F MD1: 2025 Arsenal 2-1 TEST TEAM (full minute-by-minute event log rendered), then matchday advanced to MD 2/6. (5) Source-verified /app/frontend/src/engine/draftEngine.js lines 5-9: POOL merges SEASONS + QUARTERFINALISTS by season key — correct. /app/frontend/src/screens/TournamentScreen.jsx lines 11-25 pickOpponentsFromSemifinalists: iterates Object.keys(SEASONS) (one team per season), computes baseOverall as Math.round(avg of top-11 player overalls) — exact spec match. DraftScreen lines 16-25 builds MERGED_POOL identically for the slot spinner. /app/frontend/src/data/quarterfinalists.js contains exactly 31 entries for seasons 1995-2025, one iconic QF team per season as required (2025 Bayern Munich is the documented 2025-26 placeholder). PageError count: 0 across all interactive runs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "POSITIVE — /app/frontend/src/engine/draftEngine.js POOL builder (lines 5-9): properly clones SEASONS into POOL then appends QUARTERFINALISTS per season key, so when both data files share a season (e.g., 1998 has Inter as semifinalist in SEASONS and Inter again as QF in quarterfinalists.js for that same season — see Inter 1998 in quarterfinalists.js), both entries co-exist. This is intentional; duplicates in the same season are fine because they will roll independently.",
+    "POSITIVE — /app/frontend/src/screens/TournamentScreen.jsx pickOpponentsFromSemifinalists (lines 11-25): correctly draws 1 random semifinalist team per SEASONS-season (31 entries), computes baseOverall = Math.round(avg of top-11 sorted-desc overalls), returns full ref with {season, club, country, crest, baseOverall}. buildTeamRefs prepends user team for 32-team total. This matches the spec '31 random semifinalist opponents + 1 user team = 32 teams'.",
+    "POSITIVE — /app/frontend/src/data/quarterfinalists.js: clean structure mirrors seasons.js, exactly 31 (season,team) entries for 1995-2025. Iconic picks are well-curated (Invincibles Arsenal 2003, Roma Totti 2006, Atalanta 2019, Pep City 2018, etc.). Overall ratings tuned to that specific season's level — consistent with seasons.js conventions.",
+    "POSITIVE — Tournament group draw variety verified live: opponents drawn include true mid-tier semifinalists (PSV Eindhoven 2005, Schalke 04 2011, Panathinaikos 1996, Ajax 2019, Lyon 2010, RB Leipzig 2020) — clear proof that the draw is NOT limited to CL champions, satisfying the user's primary requirement.",
+    "NIT — /app/frontend/src/data/quarterfinalists.js line 591: comment says 'Real Madrid 2025-26' but the actual T(...) call uses 'Bayern Munich' — comment is stale, code is correct. Cosmetic only.",
+    "NIT — draftEngine.js STRONG_TEAMS set (lines 14-23) still references only champion-tier 'season-club' pairs. With the new QF pool, lucky-roll could optionally include iconic QF teams (e.g., 2003 Arsenal Invincibles) to add flavour. Not a defect; just a future polish."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only app, no backend)",
+    "frontend": "100% — all 6 iteration-9 validations PASS (QF teams in roll pool, Change Year on QF, 32 teams in tournament, semifinalist variety, matchday plays, no crashes)"
+  },
+  "test_credentials": "none required (no auth in this app)",
+  "seed_data_creation": "Injected synthetic completed-draft state into localStorage key 'ucl_draft_save_v1' (xi of 11 Liverpool 2018-style players + screen='tournament') to quickly reach the Tournament screen without re-playing the full 11-slot draft. State auto-overwrites on next user navigation.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 9 ships clean. Pool now contains SEASONS (124 semifinalists) + QUARTERFINALISTS (31 iconic QF teams) = 155 (season,team) entries / ~2025 player records. Tournament opponents are drawn 1-per-season from SEASONS only (semifinalists), not from QF — the QF teams only affect the draft-roll pool, not the tournament bracket. SAVE_KEY='ucl_draft_save_v1' localStorage injection trick still works to skip ahead — provide {screen, teamName, formationId, xi[11], changes, tactic, tournament:null} and the TournamentScreen useEffect auto-draws the groups on mount. data-testids unchanged from iter 8: roll-dice-button, rolled-team-name, rolled-season, change-button, change-year-button, changes-remaining, pool-player-N, pitch-slot-N. The 'OYNA' button on the tournament screen advances one matchday at a time (modal opens for user's own match, others are auto-played in background).",
+  "rca of the issue": "No issues found. All iteration-9 spec items are correctly implemented and pass live UI verification."
+}

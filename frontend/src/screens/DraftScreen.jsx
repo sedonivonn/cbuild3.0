@@ -9,10 +9,18 @@ import { effOverall } from "../data/ballonDor";
 import { rollRandom, rollLucky } from "../engine/draftEngine";
 import { sound } from "../engine/sounds";
 import { SEASONS } from "../data/seasons";
+import { QUARTERFINALISTS } from "../data/quarterfinalists";
 import { RefreshCw } from "lucide-react";
 
+// Merged pool used by both the slot-machine spinner AND the "Change Year" logic.
+const MERGED_POOL = {};
+for (const k of Object.keys(SEASONS)) MERGED_POOL[k] = [...SEASONS[k]];
+for (const k of Object.keys(QUARTERFINALISTS)) {
+  MERGED_POOL[k] = [...(MERGED_POOL[k] || []), ...QUARTERFINALISTS[k]];
+}
+
 // All "season club" labels used by the slot machine spinner
-const ALL_TEAM_LABELS = Object.entries(SEASONS).flatMap(([season, teams]) =>
+const ALL_TEAM_LABELS = Object.entries(MERGED_POOL).flatMap(([season, teams]) =>
   teams.map((t) => ({ label: `${season} ${t.club}`, crest: t.crest }))
 );
 
@@ -67,9 +75,9 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
     if (!pool || changes.remaining <= 0) { sound.error(); return; }
     const currentClub = pool.team.club;
     const currentSeason = pool.season;
-    // find every (season, team) in SEASONS where team.club === currentClub and season != currentSeason
+    // find every (season, team) in MERGED_POOL where team.club === currentClub and season != currentSeason
     const candidates = [];
-    for (const [seasonKey, teams] of Object.entries(SEASONS)) {
+    for (const [seasonKey, teams] of Object.entries(MERGED_POOL)) {
       const seasonNum = Number(seasonKey);
       if (seasonNum === currentSeason) continue;
       const match = teams.find((t) => t.club === currentClub);

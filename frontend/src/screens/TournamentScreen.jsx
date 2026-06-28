@@ -3,14 +3,31 @@ import { motion } from "framer-motion";
 import { Crest } from "../components/Crest";
 import { computeStandings, buildR16, playGroupMatch, playKnockout } from "../engine/tournamentEngine";
 import { drawGroups, generateGroupFixtures } from "../engine/draftEngine";
-import { CHAMPIONS } from "../data/champions";
+import { SEASONS } from "../data/seasons";
 import { sound } from "../engine/sounds";
 import { Play, Trophy } from "lucide-react";
 
-// Create team refs (32 entries)
+// Pick 1 random semi-finalist per season and compute its baseOverall from top-11 players.
+function pickOpponentsFromSemifinalists() {
+  const out = [];
+  Object.keys(SEASONS).forEach((sk) => {
+    const season = Number(sk);
+    const teams = SEASONS[season];
+    if (!teams || teams.length === 0) return;
+    const team = teams[Math.floor(Math.random() * teams.length)];
+    const sorted = [...team.players].sort((a, b) => b.overall - a.overall).slice(0, 11);
+    const baseOverall = sorted.length
+      ? Math.round(sorted.reduce((s, p) => s + p.overall, 0) / sorted.length)
+      : 80;
+    out.push({ season, club: team.club, country: team.country, crest: team.crest, baseOverall });
+  });
+  return out;
+}
+
+// Create team refs (32 entries: user + 31 random semi-finalists, one per season)
 function buildTeamRefs(userTeam) {
-  const champions = CHAMPIONS.map((c, i) => ({
-    id: `ch-${i}`,
+  const opponents = pickOpponentsFromSemifinalists().map((c, i) => ({
+    id: `op-${i}`,
     label: `${c.season} ${c.club}`,
     club: c.club,
     season: c.season,
@@ -29,7 +46,7 @@ function buildTeamRefs(userTeam) {
     baseOverall: userTeam.stats.overall,
     isUser: true,
   };
-  return [user, ...champions];
+  return [user, ...opponents];
 }
 
 export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatch, onTrophy, savedState, onSaveState }) => {

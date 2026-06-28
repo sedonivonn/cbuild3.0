@@ -1,6 +1,14 @@
 import { SEASONS } from "../data/seasons";
+import { QUARTERFINALISTS } from "../data/quarterfinalists";
 
-const ALL_SEASONS = Object.keys(SEASONS).map(Number).sort((a, b) => a - b);
+// Merged pool: semi-finalists + iconic quarter-finalists, keyed by season.
+const POOL = {};
+for (const k of Object.keys(SEASONS)) POOL[k] = [...SEASONS[k]];
+for (const k of Object.keys(QUARTERFINALISTS)) {
+  POOL[k] = [...(POOL[k] || []), ...QUARTERFINALISTS[k]];
+}
+
+const ALL_SEASONS = Object.keys(POOL).map(Number).sort((a, b) => a - b);
 
 // Strong teams set - used for "lucky change" mechanic (1 of 3 has boosted strong odds)
 const STRONG_TEAMS = new Set([
@@ -19,7 +27,7 @@ function rngSeason() {
 }
 
 function rngTeam(season) {
-  const list = SEASONS[season];
+  const list = POOL[season];
   return list[Math.floor(Math.random() * list.length)];
 }
 
@@ -39,7 +47,7 @@ export function rollLucky() {
     const [seasonStr, ...clubParts] = pick.split("-");
     const season = Number(seasonStr);
     const club = clubParts.join("-");
-    const team = (SEASONS[season] || []).find((t) => t.club === club);
+    const team = (POOL[season] || []).find((t) => t.club === club);
     if (team) return { season, team };
   }
   return rollRandom();
