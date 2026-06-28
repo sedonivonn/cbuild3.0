@@ -414,7 +414,7 @@ const KnockoutCard = ({ pair }) => {
       <div className="h-px my-1.5 bg-white/10" />
       <Row team={pair.away} score={aggB} isWin={awayWin} pen={pair.tie?.penalties?.b} />
       {pair.tie?.decidedBy === "penalties" && (
-        <div className="mt-2 text-[10px] font-mono text-amber-300 tracking-widest">PENALTILAR</div>
+        <div className="mt-2 text-[10px] font-mono text-amber-300 tracking-widest">UZATMA + PENALTI</div>
       )}
       {pair.tie?.decidedBy === "extra_time" && (
         <div className="mt-2 text-[10px] font-mono text-amber-300 tracking-widest">UZATMA</div>

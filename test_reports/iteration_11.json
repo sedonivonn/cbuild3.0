@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 11 frontend-only RETEST of the iter_10 bug. FIX VERIFIED — MatchScreen.jsx line 62 now gates hasExtraTime on `(!!tie?.et || decidedBy==='extra_time' || decidedBy==='penalties')` instead of `extraTimeEvents.length>0`. With Math.random forced to 0.999 (0-0 reg → 0-0 ET → penalties path), the et-confirm-modal NOW pauses at minute 90 BEFORE penalties, exactly as spec'd. Reproduced the exact iter_10 scenario: injected savedState targeting tournament screen with 88-ovr 4-3-3 dummy XI + TIKI_TAKA tactic, played 6 group matchdays, advanced to R16, played leg 1 (no modal, correct — only last leg shows it), clicked next-leg-button, in leg 2 observed et_modal_seen=True with text 'Maç uzatmalara gidiyor', et-continue-button count=1, penalty_before_modal=False, et_events_before_modal=False (empty-ET edge case — the exact bug from iter_10). Clicking DEVAM ET correctly transitioned through the empty ET phase and rendered penalty-block. After the R16 match concluded with TEST FC losing on penalties, returned to TournamentScreen and verified BADGE REGRESSION: 15× 'UZATMA + PENALTI' badges across SON 16 / ÇEYREK FİNAL / YARI FİNAL / FİNAL brackets (every match went to pens under Math.random=0.999), zero 'PENALTILAR' (old text) occurrences. TASK A REGRESSION also verified: user-knockout-card count=1 pre-play AND post-play (persists after elimination), amber ring class present, 'SENİN TAKIMIN' label rendered. TASK B2 implicitly verified: 6 group-stage matches + R16 leg 1 (regulation-only legs) all closed via close-match-button without showing et-confirm-modal — modal only appeared on the leg where ET was actually played. PageError count: 0.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "FIX VERIFIED — /app/frontend/src/screens/MatchScreen.jsx:62 — hasExtraTime now correctly gated on `(!!tie?.et || tie?.decidedBy === 'extra_time' || tie?.decidedBy === 'penalties')`. This correctly handles the zero-event ET scenario (scoreless ET → penalties) which was the iter_10 bug. The downstream playing_et useEffect (lines 101-120) already handled etVisibleIdx>=0 correctly to immediately transition to penalties when extraTimeEvents.length===0.",
+    "VERIFIED — /app/frontend/src/screens/TournamentScreen.jsx:417 — KnockoutCard penalties badge updated to 'UZATMA + PENALTI' (combined wording). Confirmed via 15 live occurrences in brackets and zero 'PENALTILAR' (old text).",
+    "POSITIVE — The fix is minimal and targeted: only the gating condition changed. No regression in any other phase (kickoff, playing, et_confirm, playing_et, penalties, done). TASK A bracket highlight and TASK C two-leg flow all continue to work.",
+    "NIT — Consider adding a unit-like smoke test in tournamentEngine for the deterministic decidedBy outcomes given a fixed Math.random — would catch any future regression in the modal-pause gating logic without needing a full Playwright run."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only app)",
+    "frontend": "100% — Iter_10 regression bug FIXED. TASK B empty-ET edge case (0-0 reg → 0-0 ET → penalties) now correctly pauses at et-confirm-modal. TASK B2 implicit pass (no false modal in regulation-only games). TASK A bracket amber highlight unchanged and still working. Badge text 'UZATMA + PENALTI' verified live (15× on brackets), no stale 'PENALTILAR' text."
+  },
+  "test_credentials": "none required",
+  "seed_data_creation": "Same as iter_10: localStorage 'ucl_draft_save_v1' with screen='tournament', formationId='4-3-3', 11× 88-overall dummy players matching 4-3-3 slot positions, tactic='TIKI_TAKA', tournament=null; 'ucl_match_speed_v1'='ultra'. Math.random monkey-patched to 0.999 via add_init_script before page.goto to force the empty-ET → penalties codepath.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The iter_10 bug is fully fixed and verified end-to-end. If future iterations modify MatchScreen.jsx phase machine or matchEngine.simulateExtraTime, re-run the Math.random=0.999 scenario (full playwright script in iter_11 thoughts) to ensure the empty-ET → penalties pause still works. No outstanding issues from iter_10 or iter_11. If you want to ALSO test the happy-path (ET WITH events, decidedBy='extra_time'), use a Math.random override producing a value like 0.05 (forces near-certain goals) — but note that ET only occurs on tied aggregate, so the seed has to be carefully tuned; the relevant code path through phase 'et_confirm' → 'playing_et' → 'done' (no penalties) is symmetric in MatchScreen and already covered by code review.",
+  "rca of the issue": "RESOLVED. Iter_10 RCA: hasExtraTime was gated on extraTimeEvents.length>0, which evaluated false when simulateExtraTime returned an empty events array (legitimate when both xG checks miss AND save threshold fails). Iter_11 fix changes gating to (!!tie?.et || decidedBy === 'extra_time' || decidedBy === 'penalties'), which is event-count-independent and triggers correctly on every ET path. Live verification with Math.random=0.999 confirmed et-confirm-modal pauses at minute 90 with 'Maç uzatmalara gidiyor' text, DEVAM ET button visible, click transitions through empty-ET to penalty-block."
+}

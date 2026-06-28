@@ -56,8 +56,10 @@ export const MatchScreen = ({ match, onClose }) => {
   const isLastLeg = legIdx === legs.length - 1;
   const tie = isKnockout ? match.knockout.tie : null;
   const hasPenalties = isKnockout && tie?.penalties;
-  // Has ET on THIS specific leg (only the deciding leg has ET events appended).
-  const hasExtraTime = isKnockout && isLastLeg && extraTimeEvents.length > 0;
+  // Has ET on THIS specific leg. We gate on tie.et presence (and decidedBy)
+  // rather than event count, because ET may legitimately produce 0 events
+  // (e.g., scoreless extra time that goes to penalties).
+  const hasExtraTime = isKnockout && isLastLeg && (!!tie?.et || tie?.decidedBy === "extra_time" || tie?.decidedBy === "penalties");
 
   useEffect(() => {
     sound.whistleStart();
