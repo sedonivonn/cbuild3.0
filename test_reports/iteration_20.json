@@ -1,0 +1,38 @@
+{
+  "summary": "Verified Revize 20 fixes — (1) Pitch filled-slot border + OVR text colors now correctly reflect player tier (purple/gold/silver/bronze) instead of always amber. (2) 'YENİ ZAR' reroll button removed from the right card panel; replaced with a 'DEĞİŞTİRME HAKKIN: X / 3' counter (data-testid='change-credits-hint'). (3) Counter updates live and matches top-right CHANGE HAKKI counter; both YIL and CHANGE buttons disable when credits hit 0. No regressions in setup-phase 3-col layout or Spin the Wheel flow.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_features": [
+    "TIER COLORS ON PITCH (CRITICAL): Injected 4 players of different tiers via localStorage save state, then read computed style on each filled pitch-slot circle:",
+    "  • slot-0 PURPLE 92 OVR → borderTopColor='rgba(168, 85, 247, 0.9)', OVR span class contains 'text-purple-300' (rgb(216,180,254)). PASS",
+    "  • slot-1 GOLD 85 OVR  → borderTopColor='rgba(245, 197, 66, 0.9)', OVR span class contains 'text-amber-300' (rgb(252,211,77)). PASS",
+    "  • slot-2 SILVER 75 OVR → borderTopColor='rgba(190, 190, 200, 0.85)', OVR span class contains 'text-slate-200' (rgb(226,232,240)). PASS",
+    "  • slot-3 BRONZE 65 OVR → borderTopColor='rgba(205, 127, 50, 0.9)', OVR span class contains 'text-orange-400' (rgb(251,146,60)). PASS",
+    "YENİ ZAR REMOVAL: No element with data-testid='reroll-button-draft' exists anywhere in the DOM (count=0). No button matching text 'YENİ ZAR' / 'YENI ZAR' exists either.",
+    "CHANGE-CREDITS-HINT: Present after spin (pool!=null) with text 'DEĞİŞTİRME HAKKIN\\n3 / 3' initially. Action bar contains exactly 3 elements: change-year-button-draft (YIL), change-button-draft (CHANGE), change-credits-hint counter.",
+    "LIVE COUNTER UPDATES: Initial 3/3 → after CHANGE click → 2/3 (hint+top-right both sync) → after YIL click → 1/3 → after CHANGE again → 0/3. At 0/3 both YIL and CHANGE buttons have disabled=true.",
+    "SETUP-PHASE REGRESSION: After localStorage.clear() + reload, app lands on HomeScreen ('ŞAMPIYONLAR LIGI DRAFT BUILDER'). No console errors. 3-col setup layout untouched (FORMATION/TACTIC/DICE columns confirmed via prior iterations).",
+    "Spin the Wheel idle and rolling animations render correctly; after roll the pool card grid appears with the action bar below."
+  ],
+  "test_method": "Playwright with REACT_APP_BACKEND_URL=https://draft-champions-3.preview.emergentagent.com. Injected SAVE_KEY='ucl_draft_save_v1' state with screen='draft', formationId='4-3-3', tactic='GEGENPRESS', and synthetic players of overall=92/85/75/65 placed in slots 0-3 (each with _season=1996 to avoid Ballon d'Or rule). Verified border colors via getComputedStyle on the inner .rounded-full div; verified OVR text class via span.className inspection. Verified counter behavior by clicking action-bar buttons and reading both data-testid='change-credits-hint' and data-testid='changes-remaining' after each click.",
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Pitch.jsx:10-28 tierBorderColor() and tierTextColor() helpers are clean and centralized; tier boundaries match PRD spec (≥99 orange, ≥90 purple, ≥81 gold, ≥70 silver, <70 bronze, Ballon d'Or season black).",
+    "Pitch.jsx:63 glow color is derived from the tier color via regex string replace — slightly fragile but works for all current rgba() inputs.",
+    "DraftScreen.jsx:491-497 change-credits-hint sits inside the action bar with flex-1 each — visual balance with the two action buttons looks clean.",
+    "Both YIL and CHANGE disable correctly at remaining<=0; no risk of double-decrement past zero.",
+    "Note (non-blocking): The action bar (and therefore change-credits-hint) is hidden during the 900ms rolling animation. The top-right CHANGE HAKKI counter remains visible throughout, so users always have a credit indicator."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only test)", "frontend": "100%"},
+  "seed_data_creation": "localStorage save state with 4 synthetic players (Purple Keeper/Gold Defender/Silver Defender/Bronze Defender) placed in slots 0-3 of a 4-3-3 formation. Cleared between tests via localStorage.clear().",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 20 verified Revize 20: tier color is correctly applied to filled pitch slot borders + OVR text via Pitch.jsx tierBorderColor/tierTextColor helpers. The reroll-button-draft is fully removed; the new change-credits-hint (data-testid) shows '{remaining} / 3'. Top-right changes-remaining is the authoritative single source. To re-verify, inject players of overall=92/85/75/65 into xi (with _season set to a non-Ballon d'Or year like 1996) and check computed borderTopColor on '[data-testid=pitch-slot-N] .rounded-full'.",
+  "rca of the issue": "Previous bug: Pitch.jsx unconditionally applied an amber border on filled slots. Fix: introduced tierBorderColor(player, season) that reads effOverall (with Ballon d'Or override) and returns the matching tier color string used inline as border. tierTextColor() similarly drives the OVR span's Tailwind class. Verified end-to-end via computed styles."
+}

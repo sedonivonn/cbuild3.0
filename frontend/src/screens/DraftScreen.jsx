@@ -468,7 +468,7 @@ export const DraftScreen = ({
                   ))}
                 </div>
                 {!isDraftComplete && (
-                  <div className="mt-3 pt-3 border-t border-white/10 flex gap-2">
+                  <div className="mt-3 pt-3 border-t border-white/10 flex items-center gap-2">
                     <button
                       type="button"
                       onClick={handleChangeYear}
@@ -488,15 +488,13 @@ export const DraftScreen = ({
                     >
                       <RefreshCw size={12} /> CHANGE
                     </button>
-                    <button
-                      type="button"
-                      onClick={handleRoll}
-                      data-testid="reroll-button-draft"
-                      className="flex-1 btn-primary text-xs py-2"
-                      title="Yeni takım çek"
+                    <div
+                      className="flex-1 text-center"
+                      data-testid="change-credits-hint"
                     >
-                      YENİ ZAR
-                    </button>
+                      <div className="text-[9px] uppercase tracking-widest text-white/55 font-mono">DEĞİŞTİRME HAKKIN</div>
+                      <div className="font-display text-xl text-amber-300 leading-tight">{changes.remaining} / 3</div>
+                    </div>
                   </div>
                 )}
               </>

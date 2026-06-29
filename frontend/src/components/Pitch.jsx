@@ -1,9 +1,30 @@
 import React from "react";
 import { FORMATIONS, applyTacticShift } from "../data/formations";
-import { effOverall } from "../data/ballonDor";
+import { effOverall, isBallonDorSeason } from "../data/ballonDor";
 
 function initials(name) {
   return name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+}
+
+// Map a player to their card tier color (matches PlayerCard tier styling).
+function tierBorderColor(player, season) {
+  if (isBallonDorSeason(player.name, season)) return "rgba(20,20,20,0.95)"; // black icon
+  const o = effOverall(player, season);
+  if (o >= 99) return "rgba(255,107,53,0.95)";  // ballon d'or 99 — orange/red
+  if (o >= 90) return "rgba(168,85,247,0.9)";    // purple
+  if (o >= 81) return "rgba(245,197,66,0.9)";    // gold
+  if (o >= 70) return "rgba(190,190,200,0.85)";  // silver
+  return "rgba(205,127,50,0.9)";                  // bronze
+}
+
+function tierTextColor(player, season) {
+  if (isBallonDorSeason(player.name, season)) return "text-white";
+  const o = effOverall(player, season);
+  if (o >= 99) return "text-orange-300";
+  if (o >= 90) return "text-purple-300";
+  if (o >= 81) return "text-amber-300";
+  if (o >= 70) return "text-slate-200";
+  return "text-orange-400";
 }
 
 export const Pitch = ({
@@ -37,8 +58,9 @@ export const Pitch = ({
         const hint = slotHints ? slotHints[idx] : null;
         let borderStyle, glow, dim = false, clickable = true;
         if (player) {
-          borderStyle = "2px solid rgba(255,215,0,0.6)";
-          glow = "0 6px 16px rgba(0,0,0,0.5)";
+          const tierColor = tierBorderColor(player, player._season);
+          borderStyle = `2px solid ${tierColor}`;
+          glow = `0 6px 16px rgba(0,0,0,0.5), 0 0 14px ${tierColor.replace(/[\d.]+\)$/, "0.5)")}`;
           // Yerleşen oyuncu kalıcıdır; slot tıklanamaz.
           clickable = false;
         } else if (hint === "fit") {
@@ -86,7 +108,7 @@ export const Pitch = ({
               >
                 {player ? (
                   <>
-                    <span className="leading-none text-amber-300 font-mono">{effOverall(player, player._season)}</span>
+                    <span className={`leading-none font-mono ${tierTextColor(player, player._season)}`}>{effOverall(player, player._season)}</span>
                     <span className="leading-tight text-white mt-0.5">{initials(player.name)}</span>
                   </>
                 ) : (
@@ -94,7 +116,7 @@ export const Pitch = ({
                 )}
               </div>
               <div className={`${labelClass} text-white/90 text-center font-display tracking-wider`}>
-                {player ? <span className="text-amber-200">{slot.pos}</span> : slot.pos}
+                {player ? <span className={tierTextColor(player, player._season)}>{slot.pos}</span> : slot.pos}
               </div>
             </Tag>
           </div>
