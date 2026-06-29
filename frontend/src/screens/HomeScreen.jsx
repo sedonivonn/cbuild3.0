@@ -28,6 +28,32 @@ export const HomeScreen = ({ onStart, hasSave, onContinue, onHallOfFame }) => {
           <Sparkles size={14} className="text-amber-300" /> 1995 — 2025 · 31 SEZON · 124 YARI FİNALİST
         </div>
         <h1 className="font-display leading-[0.9] tracking-tight flex items-baseline justify-center gap-1 md:gap-2 text-[7rem] md:text-[12rem]">
+          <span className="inline-flex items-end gap-1 md:gap-1.5 mr-2 md:mr-3 self-center" aria-hidden>
+            <motion.span
+              className="text-2xl md:text-4xl"
+              animate={{ y: [0, -6, 0], rotate: [-6, 6, -6] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut", delay: 0 }}
+              style={{ filter: "drop-shadow(0 0 8px rgba(212,175,55,0.5))" }}
+            >
+              🏆
+            </motion.span>
+            <motion.span
+              className="text-3xl md:text-5xl"
+              animate={{ y: [0, -9, 0], rotate: [-4, 4, -4], scale: [1, 1.06, 1] }}
+              transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut", delay: 0.25 }}
+              style={{ filter: "drop-shadow(0 0 12px rgba(212,175,55,0.6))" }}
+            >
+              🏆
+            </motion.span>
+            <motion.span
+              className="text-2xl md:text-4xl"
+              animate={{ y: [0, -6, 0], rotate: [6, -6, 6] }}
+              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+              style={{ filter: "drop-shadow(0 0 8px rgba(212,175,55,0.5))" }}
+            >
+              🏆
+            </motion.span>
+          </span>
           <span
             style={{
               color: "#d4af37",

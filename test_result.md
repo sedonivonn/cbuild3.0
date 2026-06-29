@@ -156,17 +156,53 @@ frontend:
         -agent: "testing"
         -comment: "CODE-LEVEL VERIFICATION PASSED. Verified KnockoutCard component at lines 577-578 in TournamentScreen.jsx. Both fallbacks correctly implemented: aggA uses ?? pair.tie?.match?.home?.score and aggB uses ?? pair.tie?.match?.away?.score. The nullish coalescing operator ensures that when tie.aggregate is undefined (single-match finals), the component falls back to tie.match.home.score and tie.match.away.score. This fix resolves the '—' display issue for FINAL bracket cards."
 
+  - task: "User's group card highlighted with subtle gold border"
+    implemented: true
+    working: true
+    file: "frontend/src/screens/TournamentScreen.jsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "GroupTable now detects table.some(r => r.team.isUser); when true adds ring-1 ring-amber-300/50 plus inline boxShadow (0 0 0 1px rgba(212,175,55,0.35), 0 0 18px rgba(212,175,55,0.18)) for a soft, non-loud gold frame. data-testid='user-group-card' added for detection."
+        -working: true
+        -agent: "testing"
+        -comment: "CODE-LEVEL VERIFICATION PASSED. Verified GroupTable component at line 529 in TournamentScreen.jsx. All four required conditions confirmed: (1) Line 530: const isUserGroup = table.some((r) => r.team.isUser); (2) Lines 534-536: conditional className includes 'ring-1 ring-amber-300/50 shadow-[0_0_18px_rgba(212,175,55,0.18)]' when isUserGroup is true; (3) Lines 538-542: inline style with boxShadow containing both layers '0 0 0 1px rgba(212,175,55,0.35), 0 0 18px rgba(212,175,55,0.18)'; (4) Line 543: data-testid='user-group-card' set when isUserGroup. Implementation correct."
+
+  - task: "Hero 13-0 has 3 animated trophy emojis to the left"
+    implemented: true
+    working: true
+    file: "frontend/src/screens/HomeScreen.jsx"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Added an inline-flex span before the '13' with three motion.span 🏆 emojis at sizes text-2xl/3xl/2xl with staggered y/rotate/scale loops (2.2s-2.4s, delays 0/0.25/0.5s) and gold drop-shadow filter. Visually verified via screenshot."
+        -working: true
+        -agent: "testing"
+        -comment: "UI VERIFICATION PASSED. Opened http://localhost:3000 and confirmed: (1) THREE trophy emojis (🏆🏆🏆) are visible to the LEFT of '13-0' in the hero heading; (2) Trophies are staggered in size (small-big-small pattern: text-2xl/3xl/2xl at lines 33,41,49); (3) Golden/glowing appearance confirmed in screenshot; (4) Code verified: each trophy has gold drop-shadow filter with rgba(212,175,55) at lines 36,44,52. All requirements met."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 3
+  test_sequence: 4
   run_ui: true
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "User's group card highlighted with subtle gold border"
+    - "Hero 13-0 has 3 animated trophy emojis to the left"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
+
+agent_communication:
+    -agent: "main"
+    -message: "Two small visual additions to verify.\n\n(1) User's group card highlight (TournamentScreen.jsx, GroupTable component near line 529):\n  Code-level verification (preferred): confirm GroupTable computes 'const isUserGroup = table.some((r) => r.team.isUser);' and applies a conditional className containing 'ring-1 ring-amber-300/50 shadow-[0_0_18px_rgba(212,175,55,0.18)]' AND an inline style with boxShadow '0 0 0 1px rgba(212,175,55,0.35), 0 0 18px rgba(212,175,55,0.18)' when isUserGroup is true. data-testid='user-group-card' added.\n  UI verification (optional): hard to reach group stage view without playing through draft; skip if difficult.\n\n(2) Hero 3 animated trophy emojis (HomeScreen.jsx around line 30 in the H1):\n  Open http://localhost:3000. The hero H1 should show 3 🏆 emojis to the LEFT of the '13' digit, all visibly present. They should be staggered in size (small-big-small) and golden. Take a screenshot.\n  Pass if 3 trophy emojis render to the left of '13-0'.\n\nReport PASS/FAIL for each."
 
 agent_communication:
     -agent: "main"

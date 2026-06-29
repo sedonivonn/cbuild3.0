@@ -527,9 +527,22 @@ const StageActions = ({ state, onPlayMd, onPlayR16, onPlayQF, onPlaySF, onPlayFi
 };
 
 const GroupTable = ({ title, table }) => {
+  const isUserGroup = table.some((r) => r.team.isUser);
   return (
-    <div className="glass rounded-xl p-4">
-      <div className="font-display text-base tracking-widest text-amber-300 mb-3">{title}</div>
+    <div
+      className={`glass rounded-xl p-4 transition-all ${
+        isUserGroup
+          ? "ring-1 ring-amber-300/50 shadow-[0_0_18px_rgba(212,175,55,0.18)]"
+          : ""
+      }`}
+      style={
+        isUserGroup
+          ? { borderColor: "rgba(212,175,55,0.45)", boxShadow: "0 0 0 1px rgba(212,175,55,0.35), 0 0 18px rgba(212,175,55,0.18)" }
+          : undefined
+      }
+      data-testid={isUserGroup ? "user-group-card" : undefined}
+    >
+      <div className={`font-display text-base tracking-widest mb-3 ${isUserGroup ? "text-amber-300" : "text-amber-300"}`}>{title}</div>
       <table className="w-full text-sm">
         <thead className="text-white/45 font-mono text-[11px]">
           <tr><th className="text-left py-1.5">TAKIM</th><th>O</th><th>G</th><th>AV</th><th>P</th></tr>
