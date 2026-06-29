@@ -101,3 +101,47 @@
 #====================================================================================================
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
+
+user_problem_statement: "TrophyScreen Yılın Oyuncusu kartında MAÇ değeri 19 görünüyor; UCL turnuva yapısına göre bir oyuncunun oynayabileceği maksimum maç 13 olmalı (6 grup + 2 R16 + 2 QF + 2 SF + 1 Final). Logo (sol üst) biraz daha büyük ve hafif sağa kaydırılmış olmalı."
+
+frontend:
+  - task: "Tournament stats: matches counter must cap at 13 (no inflation due to mutation/StrictMode)"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/screens/TournamentScreen.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Root cause: aggregateMatchStats spread-copied prev but mutated shared player objects (next[p.name].matches += 1). React 18 StrictMode double-invokes updaters; the second invocation reused the already-mutated object, double-counting matches/goals/assists. Combined with ties counted as 1 (not legs), totals were inflated to ~19. Fix: deep-clone each entry per update (build next[p.name] from base + new values, no mutation) AND honor p.legs so a 2-leg tie adds 2 matches. Group(6)+R16(2)+QF(2)+SF(2)+F(1)=13 max."
+
+  - task: "TopBar 13-0 logo bigger and shifted slightly right"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/TopBar.jsx"
+    stuck_count: 0
+    priority: "low"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Increased height h-9 -> h-11, min-w 44 -> 56, padding px-2.5 -> px-3, font text-base -> text-xl. Added ml-2 md:ml-4 to shift slightly right. Visually verified via screenshot."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.0"
+  test_sequence: 1
+  run_ui: true
+
+test_plan:
+  current_focus:
+    - "Tournament stats: matches counter must cap at 13 (no inflation due to mutation/StrictMode)"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    -agent: "main"
+    -message: "Please test ONLY the matches counter cap on the TrophyScreen. Flow: open the homepage (REACT_APP_BACKEND_URL host, the frontend), click 'YENI DRAFT BAŞLAT' to start a new draft. The app is fully client-side; you'll need to go through the draft flow (player selection, formation/tactic selection) and then play through the entire tournament until the Trophy screen appears. On TrophyScreen, locate the 'ŞAMPİYONLAR LİGİ YILIN OYUNCUSU' card and read the MAÇ value (the first StatChip). It MUST be <= 13. If user is eliminated earlier, MAÇ should be <= 6 (group only), <= 8 (R16 out), <= 10 (QF out), <= 12 (SF out). Also reasonable check: GOL and ASIST values are not absurdly high (rough sanity). If you cannot complete the full tournament UI, alternatively read /app/frontend/src/screens/TournamentScreen.jsx aggregateMatchStats logic and verify deep-copy + p.legs handling is in place; that's enough for code-level pass. Note: do not test other unrelated behavior."

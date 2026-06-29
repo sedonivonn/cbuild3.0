@@ -68,6 +68,11 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, userXi
   }, [tournamentStats]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   // Merge per-match player stats into the running tournament aggregate.
+  // IMPORTANT: deep-copy each player entry instead of mutating it. Mutating
+  // shared references caused React 18 StrictMode (which double-invokes the
+  // updater) to double-count stats — producing inflated numbers like 19
+  // matches instead of the real 13. We also honour `legs` so a 2-legged tie
+  // counts as 2 matches (max group=6 + R16=2 + QF=2 + SF=2 + F=1 = 13).
   const aggregateMatchStats = (matchResult) => {
     if (!matchResult || !matchResult.userPlayerStats) return;
     setTournamentStats((prev) => {
@@ -75,12 +80,27 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, userXi
       // Find MOM of this match (highest rating)
       const mom = [...matchResult.userPlayerStats].sort((a, b) => b.rating - a.rating)[0];
       matchResult.userPlayerStats.forEach((p) => {
-        if (!next[p.name]) next[p.name] = { name: p.name, slot: p.slot, season: p.season, goals: 0, assists: 0, matches: 0, totalRating: 0, mom: 0 };
-        next[p.name].goals += p.goals;
-        next[p.name].assists += p.assists;
-        next[p.name].matches += 1;
-        next[p.name].totalRating += p.rating;
-        if (mom && mom.name === p.name) next[p.name].mom += 1;
+        const base = prev[p.name] || {
+          name: p.name,
+          slot: p.slot,
+          season: p.season,
+          goals: 0,
+          assists: 0,
+          matches: 0,
+          totalRating: 0,
+          mom: 0,
+        };
+        const legsInc = p.legs && p.legs > 0 ? p.legs : 1;
+        next[p.name] = {
+          ...base,
+          goals: base.goals + (p.goals || 0),
+          assists: base.assists + (p.assists || 0),
+          matches: base.matches + legsInc,
+          // p.rating for a merged tie is already an average per leg, so we
+          // multiply by legs to keep the running avg consistent.
+          totalRating: base.totalRating + (p.rating || 6.5) * legsInc,
+          mom: base.mom + (mom && mom.name === p.name ? 1 : 0),
+        };
       });
       return next;
     });
