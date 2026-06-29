@@ -123,7 +123,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
     // Play any unplayed R16 ties (stageBonus 1)
     if (s.r16 && s.r16.some((p) => !p.played)) {
       s.r16 = s.r16.map((p) =>
-        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, true, 0), played: true })
+        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, true, 1), played: true })
       );
     }
     // Build QF bracket from R16 winners if missing
@@ -135,10 +135,10 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
         s.qf.push({ home: w1, away: w2, played: false });
       }
     }
-    // Play any unplayed QF ties (stageBonus 1)
+    // Play any unplayed QF ties (stageBonus 2)
     if (s.qf.some((p) => !p.played)) {
       s.qf = s.qf.map((p) =>
-        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, true, 1), played: true })
+        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, true, 2), played: true })
       );
     }
     // Build SF from QF winners if missing
@@ -150,10 +150,10 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
         s.sf.push({ home: w1, away: w2, played: false });
       }
     }
-    // Play any unplayed SF ties (stageBonus 2)
+    // Play any unplayed SF ties (stageBonus 3)
     if (s.sf.some((p) => !p.played)) {
       s.sf = s.sf.map((p) =>
-        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, true, 2), played: true })
+        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, true, 3), played: true })
       );
     }
     // Build Final from SF winners if missing
@@ -162,10 +162,10 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
       const w2 = s.sf[1].tie.winner === "home" ? s.sf[1].home : s.sf[1].away;
       s.final = [{ home: w1, away: w2, played: false }];
     }
-    // Play Final (single match, stageBonus 3)
+    // Play Final (single match, stageBonus 4)
     if (s.final.some((p) => !p.played)) {
       s.final = s.final.map((p) =>
-        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, false, 3), played: true })
+        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, false, 4), played: true })
       );
     }
     s.champion = s.final[0].tie.winner === "home" ? s.final[0].home : s.final[0].away;
@@ -175,7 +175,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
 
   const playR16 = () => {
     sound.swoosh();
-    const r16 = state.r16.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, true, 0), played: true }));
+    const r16 = state.r16.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, true, 1), played: true }));
     const qf = [];
     for (let i = 0; i < 8; i += 2) {
       const w1 = r16[i].tie.winner === "home" ? r16[i].home : r16[i].away;
@@ -198,7 +198,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
 
   const playQF = () => {
     sound.swoosh();
-    const qf = state.qf.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, true, 1), played: true }));
+    const qf = state.qf.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, true, 2), played: true }));
     const sf = [];
     for (let i = 0; i < 4; i += 2) {
       const w1 = qf[i].tie.winner === "home" ? qf[i].home : qf[i].away;
@@ -221,7 +221,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
 
   const playSF = () => {
     sound.swoosh();
-    const sf = state.sf.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, true, 2), played: true }));
+    const sf = state.sf.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, true, 3), played: true }));
     const w1 = sf[0].tie.winner === "home" ? sf[0].home : sf[0].away;
     const w2 = sf[1].tie.winner === "home" ? sf[1].home : sf[1].away;
     const final = [{ home: w1, away: w2, played: false }];
@@ -241,7 +241,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
 
   const playFinal = () => {
     sound.swoosh();
-    const fin = state.final.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, false, 3), played: true }));
+    const fin = state.final.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, false, 4), played: true }));
     const winnerRef = fin[0].tie.winner === "home" ? fin[0].home : fin[0].away;
     const userTie = fin[0];
     const userWon = (isUserTeam(userTie.home) && userTie.tie.winner === "home") || (isUserTeam(userTie.away) && userTie.tie.winner === "away");
@@ -323,6 +323,27 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
                 <Trophy size={40} className="text-amber-300 mx-auto mb-2" />
                 <div className="font-mono text-xs tracking-widest text-amber-300">ŞAMPİYON</div>
                 <div className="font-display text-3xl tracking-tight mt-1">{state.champion.label}</div>
+              </div>
+              {/* Spectator buttons: let the user watch remaining matches even after elimination */}
+              <div className="mt-5 flex flex-wrap gap-2 justify-center">
+                {state.eliminatedAt === "Son 16" && state.qf && state.qf[0]?.tie && (
+                  <button type="button" className="btn-ghost" data-testid="watch-qf-button"
+                    onClick={() => onMatch({ stage: "Çeyrek Final", knockout: state.qf[0], userWon: false, spectator: true })}>
+                    <Play size={14} className="inline mr-1" /> ÇF MAÇI İZLE
+                  </button>
+                )}
+                {(state.eliminatedAt === "Son 16" || state.eliminatedAt === "Çeyrek Final") && state.sf && state.sf[0]?.tie && (
+                  <button type="button" className="btn-ghost" data-testid="watch-sf-button"
+                    onClick={() => onMatch({ stage: "Yarı Final", knockout: state.sf[0], userWon: false, spectator: true })}>
+                    <Play size={14} className="inline mr-1" /> YF MAÇI İZLE
+                  </button>
+                )}
+                {state.final && state.final[0]?.tie && (
+                  <button type="button" className="btn-primary" data-testid="watch-final-button"
+                    onClick={() => onMatch({ stage: "Final", knockout: state.final[0], userWon: false, spectator: true })}>
+                    <Play size={14} className="inline mr-1" /> FİNALİ İZLE
+                  </button>
+                )}
               </div>
             </motion.div>
           )}

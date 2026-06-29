@@ -1,24 +1,24 @@
 import { simulateMatch, simulateKnockout } from "./matchEngine";
 import { stubChampionStats } from "./overallEngine";
 
-// HARD MODE (C): per-match form modifier applied to the user's XI.
-// Players tend to slightly UNDER-perform on most match-days (range tilted negative).
+// HARD MODE (C, full): per-match form modifier applied to the user's XI.
+// Players tend to UNDER-perform on most match-days (range tilted negative).
 function applyMatchForm(userStats) {
   if (!userStats) return userStats;
   const r = (lo, hi) => lo + Math.random() * (hi - lo);
   return {
     ...userStats,
-    overall:  Math.max(50, Math.round(userStats.overall  + r(-2, 1))),
-    attack:   Math.max(50, Math.round(userStats.attack   + r(-2, 1))),
-    midfield: Math.max(50, Math.round(userStats.midfield + r(-2, 1))),
-    defense:  Math.max(50, Math.round(userStats.defense  + r(-2, 1))),
-    keeper:   Math.max(50, Math.round(userStats.keeper   + r(-2, 1))),
+    overall:  Math.max(50, Math.round(userStats.overall  + r(-3, 1))),
+    attack:   Math.max(50, Math.round(userStats.attack   + r(-3, 1))),
+    midfield: Math.max(50, Math.round(userStats.midfield + r(-3, 1))),
+    defense:  Math.max(50, Math.round(userStats.defense  + r(-3, 1))),
+    keeper:   Math.max(50, Math.round(userStats.keeper   + r(-3, 1))),
   };
 }
 
-// HARD MODE (C): 10% chance of a "knock" in a knockout tie — small line debuff.
+// HARD MODE (C, full): 15% chance of a "knock" in a knockout tie — small line debuff.
 function maybeInjury(userStats) {
-  if (Math.random() >= 0.10) return userStats;
+  if (Math.random() >= 0.15) return userStats;
   return {
     ...userStats,
     overall:  Math.max(50, userStats.overall  - 3),

@@ -71,9 +71,8 @@ export function simulateMatch({ home, away, homeTacticId, awayTacticId, neutral 
   // xG per shot: depends on (Attack - Defense)
   const xgPerShot = (atk, def, tacticXgFor, oppoXgAgainst) => {
     const diff = atk - def;
-    // HARD MODE (C, tuned): slightly widened cap so elite teams can decisively
-    // beat weaker sides without making every mismatch a blowout.
-    let v = 0.10 + Math.max(-0.07, Math.min(0.13, diff * 0.012));
+    // HARD MODE (C, full): widened cap so elite teams decisively beat weaker sides.
+    let v = 0.10 + Math.max(-0.08, Math.min(0.15, diff * 0.013));
     v *= tacticXgFor;
     v *= oppoXgAgainst;
     return Math.max(0.04, v);

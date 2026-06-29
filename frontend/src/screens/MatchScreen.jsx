@@ -355,7 +355,9 @@ export const MatchScreen = ({ match, onClose }) => {
               </div>
             )}
             <div className="font-display text-3xl mt-2 text-white" data-testid="user-result">
-              {match.userWon ? "TUR ATLADIN" : "ELENDİN"}
+              {match.spectator
+                ? `KAZANAN: ${tie?.winner === "home" ? match.knockout.home.label : match.knockout.away.label}`
+                : (match.userWon ? "TUR ATLADIN" : "ELENDİN")}
             </div>
           </div>
         )}
