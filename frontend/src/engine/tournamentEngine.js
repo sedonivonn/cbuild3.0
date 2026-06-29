@@ -1,6 +1,33 @@
 import { simulateMatch, simulateKnockout } from "./matchEngine";
 import { stubChampionStats } from "./overallEngine";
 
+// HARD MODE (C): per-match form modifier applied to the user's XI.
+// Players tend to slightly UNDER-perform on most match-days (range tilted negative).
+function applyMatchForm(userStats) {
+  if (!userStats) return userStats;
+  const r = (lo, hi) => lo + Math.random() * (hi - lo);
+  return {
+    ...userStats,
+    overall:  Math.max(50, Math.round(userStats.overall  + r(-2, 1))),
+    attack:   Math.max(50, Math.round(userStats.attack   + r(-2, 1))),
+    midfield: Math.max(50, Math.round(userStats.midfield + r(-2, 1))),
+    defense:  Math.max(50, Math.round(userStats.defense  + r(-2, 1))),
+    keeper:   Math.max(50, Math.round(userStats.keeper   + r(-2, 1))),
+  };
+}
+
+// HARD MODE (C): 10% chance of a "knock" in a knockout tie — small line debuff.
+function maybeInjury(userStats) {
+  if (Math.random() >= 0.10) return userStats;
+  return {
+    ...userStats,
+    overall:  Math.max(50, userStats.overall  - 3),
+    attack:   Math.max(50, userStats.attack   - 3),
+    midfield: Math.max(50, userStats.midfield - 2),
+    defense:  Math.max(50, userStats.defense  - 2),
+  };
+}
+
 // Compute table from a group of matches
 export function computeStandings(group, matches) {
   const table = group.map((team) => ({ team, P: 0, W: 0, D: 0, L: 0, GF: 0, GA: 0, GD: 0, Pts: 0 }));
@@ -47,9 +74,11 @@ export function aiPickTactic(opponentStats, userStats) {
 }
 
 export function playGroupMatch(homeRef, awayRef, userStats, userTacticId, isUserTeam) {
+  // Apply per-match form to user XI (HARD MODE C).
+  const userForm = applyMatchForm(userStats);
   // Build per-side stats
-  const home = isUserTeam(homeRef) ? { ...userStats, name: homeRef.label } : { ...stubChampionStats(homeRef), name: homeRef.label };
-  const away = isUserTeam(awayRef) ? { ...userStats, name: awayRef.label } : { ...stubChampionStats(awayRef), name: awayRef.label };
+  const home = isUserTeam(homeRef) ? { ...userForm, name: homeRef.label } : { ...stubChampionStats(homeRef), name: homeRef.label };
+  const away = isUserTeam(awayRef) ? { ...userForm, name: awayRef.label } : { ...stubChampionStats(awayRef), name: awayRef.label };
   const homeTactic = isUserTeam(homeRef) ? userTacticId : aiPickTactic(home, away);
   const awayTactic = isUserTeam(awayRef) ? userTacticId : aiPickTactic(away, home);
   const result = simulateMatch({
@@ -59,9 +88,11 @@ export function playGroupMatch(homeRef, awayRef, userStats, userTacticId, isUser
   return { home: homeRef, away: awayRef, result, homeTactic, awayTactic };
 }
 
-export function playKnockout(homeRef, awayRef, userStats, userTacticId, isUserTeam, twoLeg = true) {
-  const home = isUserTeam(homeRef) ? { ...userStats, name: homeRef.label } : { ...stubChampionStats(homeRef), name: homeRef.label };
-  const away = isUserTeam(awayRef) ? { ...userStats, name: awayRef.label } : { ...stubChampionStats(awayRef), name: awayRef.label };
+export function playKnockout(homeRef, awayRef, userStats, userTacticId, isUserTeam, twoLeg = true, stageBonus = 0) {
+  // HARD MODE (C): form + possible injury for user team this tie.
+  const userForm = maybeInjury(applyMatchForm(userStats));
+  const home = isUserTeam(homeRef) ? { ...userForm, name: homeRef.label } : { ...stubChampionStats(homeRef, stageBonus), name: homeRef.label };
+  const away = isUserTeam(awayRef) ? { ...userForm, name: awayRef.label } : { ...stubChampionStats(awayRef, stageBonus), name: awayRef.label };
   const homeTactic = isUserTeam(homeRef) ? userTacticId : aiPickTactic(home, away);
   const awayTactic = isUserTeam(awayRef) ? userTacticId : aiPickTactic(away, home);
   const tie = simulateKnockout({

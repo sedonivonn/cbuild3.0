@@ -46,8 +46,10 @@ export function computeTeamStats(xi) {
 
 // For opponent (champion) teams - we have a precomputed baseOverall.
 // Derive line strengths by sampling around baseOverall.
-export function stubChampionStats(champion) {
-  const o = champion.baseOverall;
+// HARD MODE (C): AI gets a flat +3 "legacy" bonus (real teams that actually
+// played together) plus an escalating stageBonus per knockout round.
+export function stubChampionStats(champion, stageBonus = 0, legacyBonus = 2) {
+  const o = champion.baseOverall + legacyBonus + stageBonus;
   // Slight variance, but tilted toward attack for higher-rated teams
   const rng = (seed) => {
     // deterministic pseudo-random per champion

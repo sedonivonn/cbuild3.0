@@ -21,17 +21,12 @@ function counterBonus(aId, bId) {
   return (a?.counters?.[bId]) || 0;
 }
 
-// User-team chemistry bonus — tuned to keep games competitive but never trivial.
-// Elite eras (2009/2011 Barça, 2014/2017/2024 Real, 2013/2020 Bayern) should
-// still be a stretch — perfect drafts shouldn't auto-win the cup.
-const USER_CHEMISTRY = { attack: 2, midfield: 2, defense: 2, keeper: 2, overall: 2 };
+// HARD MODE (C): user chemistry removed entirely. AI gets legacy bonus elsewhere.
+const USER_CHEMISTRY = { attack: 0, midfield: 0, defense: 0, keeper: 0, overall: 0 };
 
-// Slight underdog clutch: capped smaller so it's a nudge, not a crutch.
-function underdogBoost(userStats, oppStats) {
-  if (!userStats || !oppStats) return 0;
-  const diff = (oppStats.overall ?? 80) - (userStats.overall ?? 80);
-  if (diff <= 0) return 0;
-  return Math.min(0.020, diff * 0.0035);
+// HARD MODE (C): underdog boost removed — no free help when facing stronger sides.
+function underdogBoost() {
+  return 0;
 }
 
 function applyChemistry(stats, isUser) {
@@ -76,8 +71,9 @@ export function simulateMatch({ home, away, homeTacticId, awayTacticId, neutral 
   // xG per shot: depends on (Attack - Defense)
   const xgPerShot = (atk, def, tacticXgFor, oppoXgAgainst) => {
     const diff = atk - def;
-    // base ~0.10 xG per shot, scaled by diff; tightened ceiling for more close games
-    let v = 0.10 + Math.max(-0.06, Math.min(0.11, diff * 0.011));
+    // HARD MODE (C, tuned): slightly widened cap so elite teams can decisively
+    // beat weaker sides without making every mismatch a blowout.
+    let v = 0.10 + Math.max(-0.07, Math.min(0.13, diff * 0.012));
     v *= tacticXgFor;
     v *= oppoXgAgainst;
     return Math.max(0.04, v);
@@ -85,9 +81,9 @@ export function simulateMatch({ home, away, homeTacticId, awayTacticId, neutral 
 
   let aXgPer = xgPerShot(aAtk, bDef, A.tactic.mods.xgFor, B.tactic.mods.xgAgainst);
   let bXgPer = xgPerShot(bAtk, aDef, B.tactic.mods.xgFor, A.tactic.mods.xgAgainst);
-  // Underdog boost — keeps user competitive vs elite historical sides
-  if (homeIsUser) aXgPer += underdogBoost(home, away);
-  if (awayIsUser) bXgPer += underdogBoost(away, home);
+  // Underdog boost neutralised in HARD MODE — calls retained for signature compat.
+  if (homeIsUser) aXgPer += underdogBoost();
+  if (awayIsUser) bXgPer += underdogBoost();
 
   const aXg = +(aShots * aXgPer).toFixed(2);
   const bXg = +(bShots * bXgPer).toFixed(2);
