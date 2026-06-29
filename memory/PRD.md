@@ -10,6 +10,10 @@ A web-based football draft & simulation game inspired by 38-0.online. Players ra
 - Sound: ON by default, with toggle to mute
 - Design: EA FC + Football Manager hybrid (dark theme, FUT cards, FM-style ticker)
 
+## Latest Tweaks — Feb 2026
+- Pitch center line: vertical → horizontal dashed (correct top-down view)
+- Hard Mode difficulty rebalanced: AI legacy+stage bonus × 0.75 (was effectively 70/100, now ~55/100)
+
 ## Implementation Status — Feb 2026
 ### ✅ Done (MVP)
 - Dataset: 31 seasons of UCL semifinalists with squads & overall ratings (1995–2025)
