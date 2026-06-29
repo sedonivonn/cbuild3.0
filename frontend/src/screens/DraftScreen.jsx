@@ -341,8 +341,10 @@ export const DraftScreen = ({
         </div>
         )}
 
-        {/* MIDDLE COLUMN — pitch (col-span varies: 6 in setup, 5 in draft to give right panel room) */}
-        <div className={`glass rounded-2xl p-4 ${phase === "setup" ? "lg:col-span-6" : "lg:col-span-5"}`}>
+        {/* MIDDLE COLUMN — pitch (col-span varies: 6 setup, 5 draft, 3 when 11/11 to give cards room) */}
+        <div className={`glass rounded-2xl p-4 ${
+          phase === "setup" ? "lg:col-span-6" : (isDraftComplete ? "lg:col-span-3" : "lg:col-span-5")
+        }`}>
           <div className="text-xs text-white/55 mb-3 font-mono tracking-widest flex items-center justify-between">
             <span>SAHA · {formation.label} {tactic ? `· ${TACTICS[tactic].name}` : ""}</span>
             {selectedPlayer && (
@@ -431,9 +433,9 @@ export const DraftScreen = ({
         </div>
         )}
 
-        {/* RIGHT COLUMN — draft phase: Spin the Wheel + cards (wider for 3-4 card grid) */}
+        {/* RIGHT COLUMN — draft phase: Spin the Wheel + cards (wider when 11/11 final) */}
         {phase === "draft" && (
-          <div className="lg:col-span-7 glass rounded-2xl p-4 flex flex-col">
+          <div className={`glass rounded-2xl p-4 flex flex-col ${isDraftComplete ? "lg:col-span-9" : "lg:col-span-7"}`}>
             {!pool && !rolling && !isDraftComplete && (
               <SpinTheWheelIdle
                 onSpin={handleRoll}
@@ -511,7 +513,7 @@ export const DraftScreen = ({
                     </div>
                   )}
                 </div>
-                <div className="grid grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2 max-h-[520px] overflow-y-auto pr-1">
+                <div className="grid grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3 max-h-[640px] overflow-y-auto pr-1">
                   {xi.map((player, i) => (
                     player ? (
                       <PlayerCard
@@ -521,7 +523,7 @@ export const DraftScreen = ({
                         club={player._club}
                         crest={player._crest}
                         country={player._country}
-                        size="xs"
+                        size="sm"
                       />
                     ) : null
                   ))}

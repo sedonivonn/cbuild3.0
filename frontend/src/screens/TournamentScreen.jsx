@@ -253,7 +253,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
   };
 
   return (
-    <div className="px-5 md:px-10 py-6 max-w-7xl mx-auto">
+    <div className="px-5 md:px-10 py-6 max-w-[1700px] mx-auto">
       <div className="flex items-end justify-between flex-wrap gap-4 mb-6">
         <div>
           <div className="font-mono text-xs text-amber-300 tracking-widest">ADIM 4 / 4 · TURNUVA</div>
@@ -385,30 +385,30 @@ const StageActions = ({ state, onPlayMd, onPlayR16, onPlayQF, onPlaySF, onPlayFi
 
 const GroupTable = ({ title, table }) => {
   return (
-    <div className="glass rounded-xl p-3">
-      <div className="font-display text-sm tracking-widest text-amber-300 mb-2">{title}</div>
-      <table className="w-full text-xs">
-        <thead className="text-white/40 font-mono">
-          <tr><th className="text-left py-1">TAKIM</th><th>O</th><th>G</th><th>AV</th><th>P</th></tr>
+    <div className="glass rounded-xl p-4">
+      <div className="font-display text-base tracking-widest text-amber-300 mb-3">{title}</div>
+      <table className="w-full text-sm">
+        <thead className="text-white/45 font-mono text-[11px]">
+          <tr><th className="text-left py-1.5">TAKIM</th><th>O</th><th>G</th><th>AV</th><th>P</th></tr>
         </thead>
         <tbody>
           {table.map((row, i) => (
             <tr key={i} className={`${row.team.isUser ? "text-amber-300" : "text-white/85"}`}>
-              <td className="py-1">
-                <div className="flex items-center gap-1.5">
+              <td className="py-1.5">
+                <div className="flex items-center gap-2">
                   <Crest code={row.team.crest} size="sm" />
                   <div className="flex flex-col leading-tight min-w-0">
-                    <span className="truncate max-w-[110px] text-[11px]">{row.team.club}</span>
+                    <span className="truncate max-w-[140px] text-[13px]">{row.team.club}</span>
                     {!row.team.isUser && (
-                      <span className="text-[9px] font-mono text-white/45 tracking-wider">{row.team.season}</span>
+                      <span className="text-[10px] font-mono text-white/45 tracking-wider">{row.team.season}</span>
                     )}
                   </div>
                 </div>
               </td>
-              <td className="text-center">{row.P}</td>
-              <td className="text-center">{row.W}</td>
-              <td className="text-center">{row.GD}</td>
-              <td className="text-center font-bold">{row.Pts}</td>
+              <td className="text-center text-sm">{row.P}</td>
+              <td className="text-center text-sm">{row.W}</td>
+              <td className="text-center text-sm">{row.GD}</td>
+              <td className="text-center text-base font-bold">{row.Pts}</td>
             </tr>
           ))}
         </tbody>
@@ -437,31 +437,31 @@ const KnockoutCard = ({ pair }) => {
   const isUserPair = pair.home?.isUser || pair.away?.isUser;
   return (
     <div
-      className={`glass rounded-xl p-3 text-sm transition-all ${
+      className={`glass rounded-xl p-4 text-sm transition-all ${
         isUserPair ? "ring-2 ring-amber-300/70 shadow-[0_0_20px_rgba(252,211,77,0.25)]" : ""
       }`}
       data-testid={isUserPair ? "user-knockout-card" : undefined}
     >
       <Row team={pair.home} score={aggA} isWin={homeWin} pen={pair.tie?.penalties?.a} />
-      <div className="h-px my-1.5 bg-white/10" />
+      <div className="h-px my-2 bg-white/10" />
       <Row team={pair.away} score={aggB} isWin={awayWin} pen={pair.tie?.penalties?.b} />
       {pair.tie?.decidedBy === "penalties" && (
-        <div className="mt-2 text-[10px] font-mono text-amber-300 tracking-widest">UZATMA + PENALTI</div>
+        <div className="mt-2 text-[11px] font-mono text-amber-300 tracking-widest">UZATMA + PENALTI</div>
       )}
       {pair.tie?.decidedBy === "extra_time" && (
-        <div className="mt-2 text-[10px] font-mono text-amber-300 tracking-widest">UZATMA</div>
+        <div className="mt-2 text-[11px] font-mono text-amber-300 tracking-widest">UZATMA</div>
       )}
     </div>
   );
 };
 
 const Row = ({ team, score, isWin, pen }) => (
-  <div className={`flex items-center gap-2 ${team.isUser ? "text-amber-300 font-semibold" : isWin ? "text-amber-300" : "text-white/80"}`}>
+  <div className={`flex items-center gap-2.5 ${team.isUser ? "text-amber-300 font-semibold" : isWin ? "text-amber-300" : "text-white/80"}`}>
     <Crest code={team.crest} size="sm" />
     <div className="flex flex-col leading-tight flex-1 min-w-0">
-      <span className="truncate text-xs">{team.club || team.label}</span>
+      <span className="truncate text-sm">{team.club || team.label}</span>
       {!team.isUser && team.season && (
-        <span className="text-[9px] font-mono text-white/45 tracking-wider">SEZON · {team.season}</span>
+        <span className="text-[10px] font-mono text-white/45 tracking-wider">SEZON · {team.season}</span>
       )}
       {team.isUser && (
         <span className="text-[9px] font-mono text-amber-200/70 tracking-wider">SENİN TAKIMIN</span>

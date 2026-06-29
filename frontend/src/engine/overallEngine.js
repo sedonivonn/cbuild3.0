@@ -3,18 +3,28 @@ import { effOverall } from "../data/ballonDor";
 
 // Returns team-overall + line strengths given an XI of {slot, player} mapping.
 // xi: array of { slot: {pos}, player: {overall, primary, secondary} }
+//
+// HARD MODE penalty calibration (revize 21):
+//   • Penalty kept MILD for defenders/attackers (-1 to -5 OVR)
+//   • Midfield slots get NO position penalty (CDM/CM/CAM/LM/RM are flexible)
+const PENALTY_MAP = { 0: 0, 1: 1, 2: 3, 3: 5, 6: 8 };
+const MIDFIELD_SLOTS = new Set(["CDM", "CM", "CAM", "LM", "RM"]);
+
 export function computeTeamStats(xi) {
   if (!xi || xi.length === 0) return null;
 
   const adjusted = xi.map(({ slot, player }) => {
     if (!player) return { value: 60, raw: 60, penalty: 6 };
     const baseOverall = effOverall(player, player._season);
-    const penalty = positionPenalty(slot.pos, player.primary, player.secondary);
-    const penaltyValue = { 0: 0, 1: 2, 2: 6, 3: 10, 6: 16 }[penalty] ?? 16;
+    const penaltyTier = positionPenalty(slot.pos, player.primary, player.secondary);
+    // No penalty for midfield slots (per user spec).
+    const penaltyValue = MIDFIELD_SLOTS.has(slot.pos)
+      ? 0
+      : (PENALTY_MAP[penaltyTier] ?? 8);
     return {
       value: Math.max(40, baseOverall - penaltyValue),
       raw: baseOverall,
-      penalty,
+      penalty: penaltyTier,
       slot,
       player,
     };
