@@ -40,6 +40,8 @@ export const DraftScreen = ({
   const [rolling, setRolling] = useState(false);
   const [selectedPlayerIdx, setSelectedPlayerIdx] = useState(-1);
   const [poolOpen, setPoolOpen] = useState(false);
+  // Two-phase flow: 'setup' (configure team) → 'draft' (full pitch, modal-only)
+  const [phase, setPhase] = useState(() => (xi.some(Boolean) ? "draft" : "setup"));
 
   const filledCount = xi.filter(Boolean).length;
   const totalSlots = formation.slots.length;
@@ -73,6 +75,8 @@ export const DraftScreen = ({
 
   const handleRoll = () => {
     if (isDraftComplete) return;
+    if (phase === "setup" && !tactic) { sound.error(); return; }
+    if (phase === "setup") setPhase("draft");
     setPoolOpen(true);
     setRolling(true);
     sound.dice();
@@ -182,10 +186,33 @@ export const DraftScreen = ({
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
         <div>
-          <div className="font-mono text-xs text-amber-300 tracking-widest">KOMUTA MERKEZİ</div>
-          <h2 className="font-display text-2xl md:text-3xl tracking-tight">DRAFT & DİZİLİŞ & TAKTİK</h2>
+          <div className="font-mono text-xs text-amber-300 tracking-widest">
+            {phase === "setup" ? "KOMUTA MERKEZİ" : "DRAFT MODU"}
+          </div>
+          <h2 className="font-display text-2xl md:text-3xl tracking-tight">
+            {phase === "setup" ? (
+              "DRAFT & DİZİLİŞ & TAKTİK"
+            ) : (
+              <span className="flex items-center gap-3 flex-wrap">
+                <span className="truncate max-w-[260px]">{teamName || "DRAFT TAKIMI"}</span>
+                <span className="text-base text-white/55 font-mono tracking-widest">
+                  · {formation.label} {tactic ? `· ${TACTICS[tactic].name}` : ""}
+                </span>
+              </span>
+            )}
+          </h2>
         </div>
         <div className="flex items-center gap-3">
+          {phase === "draft" && filledCount === 0 && (
+            <button
+              type="button"
+              onClick={() => { sound.click(); setPhase("setup"); setPool(null); setPoolOpen(false); setSelectedPlayerIdx(-1); }}
+              data-testid="back-to-setup-button"
+              className="btn-ghost text-xs"
+            >
+              ← AYARLARA DÖN
+            </button>
+          )}
           <div className="text-right">
             <div className="text-[10px] uppercase tracking-widest text-white/60">CHANGE HAKKI</div>
             <div className="font-display text-2xl text-amber-300" data-testid="changes-remaining">{changes.remaining} / 3</div>
@@ -202,10 +229,11 @@ export const DraftScreen = ({
         </div>
       </div>
 
-      {/* 3-column layout */}
+      {/* Layout — 3 columns in setup, single wide pitch in draft */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
 
-        {/* LEFT COLUMN — settings */}
+        {/* LEFT COLUMN — only in SETUP phase */}
+        {phase === "setup" && (
         <div className="lg:col-span-3 space-y-4">
           {/* Team name */}
           <div className="glass rounded-2xl p-4">
@@ -285,14 +313,22 @@ export const DraftScreen = ({
           <div className="glass rounded-2xl p-4">
             <div className="text-[10px] text-white/55 tracking-widest font-mono mb-3">ZAR</div>
             {!pool && !isDraftComplete && (
-              <button
-                type="button"
-                onClick={handleRoll}
-                data-testid="roll-dice-button"
-                className="w-full btn-primary text-base py-3"
-              >
-                🎲 ROLL DICE
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={handleRoll}
+                  disabled={!tactic}
+                  data-testid="roll-dice-button"
+                  className="w-full btn-primary text-base py-3 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  🎲 ROLL DICE
+                </button>
+                {!tactic && (
+                  <div className="text-[10px] text-amber-300/80 mt-2 text-center font-mono tracking-widest">
+                    ÖNCE TAKTİK SEÇ
+                  </div>
+                )}
+              </>
             )}
             {pool && !rolling && (
               <div className="space-y-2">
@@ -333,9 +369,10 @@ export const DraftScreen = ({
             )}
           </div>
         </div>
+        )}
 
-        {/* MIDDLE COLUMN — pitch */}
-        <div className="lg:col-span-6 glass rounded-2xl p-4">
+        {/* MIDDLE COLUMN — pitch (full width in draft phase) */}
+        <div className={`glass rounded-2xl p-4 ${phase === "setup" ? "lg:col-span-6" : "lg:col-span-12"}`}>
           <div className="text-xs text-white/55 mb-3 font-mono tracking-widest flex items-center justify-between">
             <span>SAHA · {formation.label} {tactic ? `· ${TACTICS[tactic].name}` : ""}</span>
             {selectedPlayer && (
@@ -363,7 +400,8 @@ export const DraftScreen = ({
           )}
         </div>
 
-        {/* RIGHT COLUMN — roster list (always visible) */}
+        {/* RIGHT COLUMN — roster list (only in SETUP phase) */}
+        {phase === "setup" && (
         <div className="lg:col-span-3 glass rounded-2xl p-4">
           <div className="flex items-center justify-between mb-3">
             <div className="text-[10px] text-white/55 tracking-widest font-mono">KADRO</div>
@@ -421,7 +459,63 @@ export const DraftScreen = ({
             </div>
           )}
         </div>
+        )}
       </div>
+
+      {/* DRAFT phase action bar — sticky bottom controls for rolling / changing */}
+      {phase === "draft" && !poolOpen && (
+        <div className="mt-4 flex items-center justify-center gap-3 flex-wrap">
+          {!isDraftComplete && (
+            <button
+              type="button"
+              onClick={handleRoll}
+              data-testid="roll-dice-button-draft"
+              className="btn-primary text-base px-6 py-3 flex items-center gap-2"
+            >
+              🎲 ROLL DICE  <span className="text-xs font-mono opacity-70">({filledCount}/{totalSlots})</span>
+            </button>
+          )}
+          {pool && (
+            <button
+              type="button"
+              onClick={() => { setPoolOpen(true); sound.click(); }}
+              data-testid="reopen-pool-button"
+              className="btn-ghost text-sm px-4 py-2 flex items-center gap-2"
+            >
+              <Crest code={pool.team.crest} size="sm" />
+              <span>{pool.season} {pool.team.club}</span>
+            </button>
+          )}
+          {pool && !isDraftComplete && (
+            <>
+              <button
+                type="button"
+                onClick={handleChangeYear}
+                disabled={changes.remaining <= 0}
+                data-testid="change-year-button-draft"
+                className="btn-ghost text-xs py-2 px-3 flex items-center gap-1 disabled:opacity-30"
+                title="Aynı kulübün farklı sezonu"
+              >
+                <RefreshCw size={12} /> YIL
+              </button>
+              <button
+                type="button"
+                onClick={handleChange}
+                disabled={changes.remaining <= 0}
+                data-testid="change-button-draft"
+                className="btn-ghost text-xs py-2 px-3 flex items-center gap-1 disabled:opacity-30"
+              >
+                <RefreshCw size={12} /> CHANGE
+              </button>
+            </>
+          )}
+          {isDraftComplete && (
+            <div className="font-display text-amber-300 text-lg tracking-widest text-center">
+              🏆 KADRON HAZIR — TURNUVAYA BAŞLA →
+            </div>
+          )}
+        </div>
+      )}
 
       {/* FIFA-style full-screen card reveal modal — original "kart açma" UX */}
       <AnimatePresence>

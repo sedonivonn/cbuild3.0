@@ -1,0 +1,32 @@
+{
+  "summary": "Revize 16 two-phase Komuta Merkezi flow tested end-to-end via Playwright. Setup phase (3-column layout), tactic gate on ROLL DICE, phase transition (LEFT+RIGHT removed, pitch col-span-12, pool-modal opens), player selection from FIFA-style modal, slot placement, draft-phase action bar with -draft suffixed testids, back-to-setup-button visibility logic (visible at 0 placed, hidden at 1+), and full-XI 'KADRON HAZIR' → TURNUVAYA BAŞLA → TournamentScreen all verified. 38/38 effective assertions passing across two test runs (3 initial failures were caused by incorrect slot selector in test script — actual app behavior is correct).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "DraftScreen.jsx is 629 lines — borderline of the 700-line rule; consider extracting the FIFA pool modal and the bottom action bar into separate components for maintainability.",
+    "Two roll/change/change-year button instances exist (setup vs draft) with separate testids — slight duplication of handlers' wiring; acceptable for clarity but could be unified.",
+    "phase state is derived from xi.some(Boolean) on mount only; if user clears XI from outside DraftScreen, phase wouldn't sync back to 'setup'. Currently App.handleReset returns to 'home' so this is safe in practice."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a", "frontend": "100%" },
+  "test_credentials": "n/a (no auth flows)",
+  "seed_data_creation": "Injected synthetic 11-player XI into localStorage key 'ucl_draft_save_v1' to verify final view & TURNUVAYA BAŞLA → TournamentScreen navigation. Reset between runs by removing the key.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Pitch slots use data-testid='pitch-slot-N' (not 'slot-N'). DraftScreen has two-phase state: setup vs draft. After picking a player and BEFORE placing, pool still exists so change-button-draft, change-year-button-draft, reopen-pool-button are visible. After placement, pool is cleared (setPool(null)) so only roll-dice-button-draft remains until next roll. back-to-setup-button only appears when phase='draft' AND filledCount===0. SAVE_KEY is 'ucl_draft_save_v1'.",
+  "verified_flows": [
+    "PHASE 1 setup: KOMUTA MERKEZİ header + DRAFT & DİZİLİŞ & TAKTİK h2; LEFT (team-name-input, formation-*, tactic-*, roll-dice-button); MIDDLE pitch; RIGHT (roster-count 0/11, roster-row-N)",
+    "ROLL DICE gate: disabled (disabled attribute present) before tactic; enabled after tactic-GEGENPRESS click",
+    "PHASE transition: header → DRAFT MODU; formation/tactic/roster testids removed from DOM; pitch container gains lg:col-span-12; pool-modal opens with SlotSpinner then card grid",
+    "Player pick → modal closes; place on pitch-slot-N → pool clears, filledCount=1",
+    "Draft-phase action bar: roll-dice-button-draft / change-button-draft / change-year-button-draft / reopen-pool-button all present when pool exists",
+    "back-to-setup-button visible at filledCount=0 in draft phase; clicking returns to setup (header & all 3 columns restored); hidden at filledCount>=1",
+    "Final view (11/11): 'KADRON HAZIR' message shown; start-tournament-button enabled; clicking navigates to TournamentScreen (ŞAMPIYONLAR LİGİ GRUP AŞAMASI with 8 groups including TEST TEAM in Group G)"
+  ]
+}
