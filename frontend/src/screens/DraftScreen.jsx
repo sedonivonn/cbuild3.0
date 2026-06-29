@@ -363,138 +363,136 @@ export const DraftScreen = ({
           )}
         </div>
 
-        {/* RIGHT COLUMN — roster list OR pool reveal (when poolOpen) */}
-        <div className="lg:col-span-3 glass rounded-2xl p-4 relative overflow-hidden">
-          <AnimatePresence mode="wait">
-            {poolOpen ? (
-              <motion.div
-                key="pool"
-                initial={{ x: 30, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: 30, opacity: 0 }}
-                transition={{ duration: 0.25 }}
-                data-testid="pool-panel"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-[10px] text-white/55 tracking-widest font-mono">KART HAVUZU</div>
-                  <button
-                    type="button"
-                    onClick={() => setPoolOpen(false)}
-                    className="text-white/55 hover:text-white"
-                    data-testid="close-pool-button"
-                  ><X size={16} /></button>
-                </div>
-
-                {rolling && <SlotSpinner compact />}
-
-                {pool && !rolling && (
-                  <>
-                    <div className="flex items-center gap-2 mb-3 pb-3 border-b border-white/10">
-                      <Crest code={pool.team.crest} size="md" />
-                      <div className="min-w-0">
-                        <div className="font-display text-base tracking-tight truncate" data-testid="rolled-team-name">{pool.team.club}</div>
-                        <div className="text-[10px] text-white/60 font-mono tracking-widest" data-testid="rolled-season">SEZON · {pool.season}</div>
-                      </div>
-                    </div>
-                    <div className="text-[10px] text-white/55 mb-2 font-mono tracking-widest">
-                      KART SEÇ → SAHAYA YERLEŞTİR
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 max-h-[460px] overflow-y-auto pr-1">
-                      {sortedPool.map((p, idx) => (
-                        <div key={idx} className="relative">
-                          <PlayerCard
-                            player={p}
-                            season={pool.season}
-                            club={pool.team.club}
-                            crest={pool.team.crest}
-                            country={pool.team.country}
-                            size="xs"
-                            selected={selectedPlayerIdx === idx}
-                            disabled={!p._placeable}
-                            testId={`pool-player-${idx}`}
-                            onClick={() => handleSelectPlayer(idx)}
-                          />
-                          {p._alreadyPicked && (
-                            <span className="absolute top-1 right-1 bg-red-500 text-white text-[7px] font-bold tracking-wider px-1 py-0.5 rounded-full z-10">
-                              KADRODA
-                            </span>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </motion.div>
-            ) : (
-              <motion.div
-                key="roster"
-                initial={{ x: -30, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                exit={{ x: -30, opacity: 0 }}
-                transition={{ duration: 0.25 }}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className="text-[10px] text-white/55 tracking-widest font-mono">KADRO</div>
-                  <div className="font-display text-2xl text-amber-300" data-testid="roster-count">{filledCount}/{totalSlots}</div>
-                </div>
-                {/* Progress bar */}
-                <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden mb-3">
-                  <div
-                    className="h-full bg-amber-300 transition-all"
-                    style={{ width: `${(filledCount / totalSlots) * 100}%` }}
-                  />
-                </div>
-                {/* Position list */}
-                <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-1">
-                  {formation.slots.map((slot, idx) => {
-                    const player = xi[idx];
-                    return (
-                      <div
-                        key={idx}
-                        className={`flex items-center justify-between rounded-md px-2 py-1.5 ${
-                          player ? "bg-white/5" : "bg-white/[0.02]"
-                        }`}
-                        data-testid={`roster-row-${idx}`}
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-[10px] tracking-wider text-white/45 w-8 shrink-0">{slot.pos}</span>
-                          {player ? (
-                            <span className="text-xs text-white truncate" title={player.name}>{player.name}</span>
-                          ) : (
-                            <span className="text-xs text-white/30">—</span>
-                          )}
-                        </div>
-                        {player && (
-                          <span className="font-display text-sm text-amber-300 shrink-0">
-                            {effOverall(player, player._season)}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-                {/* Stats */}
-                {liveStats && (
-                  <div className="mt-4 pt-3 border-t border-white/10">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="text-[10px] text-white/55 tracking-widest font-mono">TAKIM OVR</div>
-                      <div className="font-display text-3xl text-amber-300" data-testid="team-overall">{liveStats.overall}</div>
-                    </div>
-                    <div className="grid grid-cols-4 gap-1 text-center">
-                      <Stat label="KLC" v={liveStats.keeper} />
-                      <Stat label="DEF" v={liveStats.defense} />
-                      <Stat label="ORT" v={liveStats.midfield} />
-                      <Stat label="HÜC" v={liveStats.attack} />
-                    </div>
+        {/* RIGHT COLUMN — roster list (always visible) */}
+        <div className="lg:col-span-3 glass rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-[10px] text-white/55 tracking-widest font-mono">KADRO</div>
+            <div className="font-display text-2xl text-amber-300" data-testid="roster-count">{filledCount}/{totalSlots}</div>
+          </div>
+          {/* Progress bar */}
+          <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden mb-3">
+            <div
+              className="h-full bg-amber-300 transition-all"
+              style={{ width: `${(filledCount / totalSlots) * 100}%` }}
+            />
+          </div>
+          {/* Position list */}
+          <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-1">
+            {formation.slots.map((slot, idx) => {
+              const player = xi[idx];
+              return (
+                <div
+                  key={idx}
+                  className={`flex items-center justify-between rounded-md px-2 py-1.5 ${
+                    player ? "bg-white/5" : "bg-white/[0.02]"
+                  }`}
+                  data-testid={`roster-row-${idx}`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono text-[10px] tracking-wider text-white/45 w-8 shrink-0">{slot.pos}</span>
+                    {player ? (
+                      <span className="text-xs text-white truncate" title={player.name}>{player.name}</span>
+                    ) : (
+                      <span className="text-xs text-white/30">—</span>
+                    )}
                   </div>
-                )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+                  {player && (
+                    <span className="font-display text-sm text-amber-300 shrink-0">
+                      {effOverall(player, player._season)}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {/* Stats */}
+          {liveStats && (
+            <div className="mt-4 pt-3 border-t border-white/10">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[10px] text-white/55 tracking-widest font-mono">TAKIM OVR</div>
+                <div className="font-display text-3xl text-amber-300" data-testid="team-overall">{liveStats.overall}</div>
+              </div>
+              <div className="grid grid-cols-4 gap-1 text-center">
+                <Stat label="KLC" v={liveStats.keeper} />
+                <Stat label="DEF" v={liveStats.defense} />
+                <Stat label="ORT" v={liveStats.midfield} />
+                <Stat label="HÜC" v={liveStats.attack} />
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Pool/spinner is rendered inline inside the right column above — no full-screen modal anymore. */}
+      {/* FIFA-style full-screen card reveal modal — original "kart açma" UX */}
+      <AnimatePresence>
+        {poolOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setPoolOpen(false); }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="glass rounded-2xl p-6 max-w-5xl w-full max-h-[90vh] overflow-y-auto relative"
+              data-testid="pool-modal"
+            >
+              <button
+                type="button"
+                onClick={() => setPoolOpen(false)}
+                className="absolute top-3 right-3 text-white/60 hover:text-white"
+                data-testid="close-pool-button"
+              ><X size={20} /></button>
+
+              {rolling && <SlotSpinner />}
+
+              {pool && !rolling && (
+                <>
+                  <div className="flex items-center gap-3 mb-4">
+                    <Crest code={pool.team.crest} size="lg" />
+                    <div>
+                      <div className="font-display text-2xl md:text-3xl tracking-tight" data-testid="rolled-team-name">{pool.team.club}</div>
+                      <div className="text-xs text-white/60 font-mono tracking-widest" data-testid="rolled-season">SEZON · {pool.season} {pool.team.country}</div>
+                    </div>
+                  </div>
+                  <div className="text-[11px] text-white/55 mb-3 font-mono tracking-widest">
+                    KARTA TIKLA → SAHADA YEŞİL SLOTA YERLEŞTİR
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                    {sortedPool.map((p, idx) => (
+                      <div key={idx} className="relative">
+                        <PlayerCard
+                          player={p}
+                          season={pool.season}
+                          club={pool.team.club}
+                          crest={pool.team.crest}
+                          country={pool.team.country}
+                          size="sm"
+                          selected={selectedPlayerIdx === idx}
+                          disabled={!p._placeable}
+                          testId={`pool-player-${idx}`}
+                          onClick={() => handleSelectPlayer(idx)}
+                        />
+                        {p._alreadyPicked && (
+                          <span className="absolute top-1 right-1 bg-red-500 text-white text-[8px] font-bold tracking-wider px-1.5 py-0.5 rounded-full z-10">
+                            KADRODA
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 text-[10px] text-white/40 font-mono">
+                    TIP: Kanat oyuncuları (LW↔RW, LM↔RM) iki taraflı oynayabilir. Yerleşen oyuncu sahada kalıcıdır.
+                  </div>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
