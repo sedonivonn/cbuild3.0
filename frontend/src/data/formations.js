@@ -151,3 +151,30 @@ export function hasAvailableSlot(formation, xi, player) {
   if (!formation) return false;
   return formation.slots.some((slot, idx) => !xi[idx] && canPlace(slot.pos, player));
 }
+
+
+// Tactic-based positional shift. Returns a new slot with adjusted `top` (Y%).
+// GEGENPRESS  → high block, attackers pinned higher up the pitch
+// TIKI_TAKA   → compact, mid and attack pulled toward center
+// PARK_THE_BUS → deep block, mid and attack drop back to defend
+const TACTIC_SHIFTS = {
+  GEGENPRESS: { GK: 0, DEF: -3, MID: -5, ATT: -4 },
+  TIKI_TAKA:  { GK: 0, DEF: -2, MID:  0, ATT:  4 },
+  PARK_THE_BUS:{GK: 0, DEF:  2, MID:  6, ATT:  8 },
+};
+
+const POS_GROUP = {
+  GK: "GK",
+  LB: "DEF", RB: "DEF", CB: "DEF", LWB: "DEF", RWB: "DEF", SW: "DEF",
+  CDM: "MID", CM: "MID", CAM: "MID", LM: "MID", RM: "MID",
+  LW: "ATT", RW: "ATT", ST: "ATT", CF: "ATT",
+};
+
+export function applyTacticShift(slot, tacticId) {
+  if (!tacticId || !TACTIC_SHIFTS[tacticId]) return slot;
+  const group = POS_GROUP[slot.pos] || "MID";
+  const dy = TACTIC_SHIFTS[tacticId][group] || 0;
+  // clamp top between 6 and 92 to keep within pitch bounds
+  const newTop = Math.max(6, Math.min(92, slot.top + dy));
+  return { ...slot, top: newTop };
+}

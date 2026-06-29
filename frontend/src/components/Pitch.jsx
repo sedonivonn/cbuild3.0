@@ -1,5 +1,5 @@
 import React from "react";
-import { FORMATIONS } from "../data/formations";
+import { FORMATIONS, applyTacticShift } from "../data/formations";
 import { effOverall } from "../data/ballonDor";
 
 function initials(name) {
@@ -15,6 +15,7 @@ export const Pitch = ({
   readOnly = false,
   slotHints = null, // array of "fit"|"blocked"|"filled"|null
   interactive = true,
+  tactic = null, // shifts slot positions on the pitch based on tactical style
 }) => {
   const formation = FORMATIONS[formationId];
   if (!formation) return null;
@@ -29,7 +30,8 @@ export const Pitch = ({
 
   return (
     <div className={`pitch w-full ${compact ? "aspect-[3/4]" : "aspect-[3/4]"} max-w-[480px] mx-auto`} data-testid="pitch-container">
-      {formation.slots.map((slot, idx) => {
+      {formation.slots.map((rawSlot, idx) => {
+        const slot = applyTacticShift(rawSlot, tactic);
         const player = xi[idx];
         const active = idx === activeSlotIndex;
         const hint = slotHints ? slotHints[idx] : null;
@@ -62,7 +64,7 @@ export const Pitch = ({
         return (
           <div
             key={slot.id + idx}
-            className="absolute -translate-x-1/2 -translate-y-1/2"
+            className="absolute -translate-x-1/2 -translate-y-1/2 transition-[top,left] duration-500 ease-out"
             style={{ top: `${slot.top}%`, left: `${slot.left}%` }}
           >
             <Tag

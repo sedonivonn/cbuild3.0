@@ -1,0 +1,25 @@
+{
+  "summary": "Iteration 15 — Frontend-only test of revize 15 (A) right-panel pool drawer replacing full-screen modal AND (B) tactic-based positional shifts on the pitch. ALL TASKS PASS. The pool panel slides into the right column with the compact slot-machine spinner while the left column (formation/tactic/dice) and middle column (saha/pitch) remain fully visible — verified zero `fixed inset-0` overlays in the DOM during the roll. Tactic clicks correctly shift the ST slot (slot-9) top%: base 14% → GEGENPRESS 10% (-4) → PARK_THE_BUS 22% (+8) → TIKI_TAKA 18% (+4), and GK stays anchored at 88% across all tactics. CSS transition is `top 0.5s cubic-bezier(0,0,0.2,1)` as required.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "applyTacticShift logic in /app/frontend/src/data/formations.js is clean and well-bounded (clamp 6..92). POS_GROUP covers all positions used by current FORMATIONS. Values match the spec: GEGENPRESS MID -5 / ATT -4, TIKI_TAKA ATT +4, PARK_THE_BUS MID +6 / ATT +8.",
+    "Pitch.jsx wrapper div uses inline style top% + tailwind transition-[top,left] duration-500 ease-out which compiles correctly (verified via window.getComputedStyle: transition-duration: 0.5s).",
+    "DraftScreen.jsx is now 537 lines — under the 700 threshold but creeping. Pool-panel JSX inside the right-column AnimatePresence is ~60 lines and could be extracted into a `PoolPanel` component for clarity (non-blocking).",
+    "Minor: when poolOpen=true but pool=null AND rolling=false (theoretical edge case, e.g., handleRoll fails to set pool), the right column would show only the header with no body. Current flow always sets pool inside setTimeout so this is not reachable, but defensive UI would help."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (frontend-only)", "frontend": "100%" },
+  "test_credentials": "N/A",
+  "seed_data_creation": "localStorage.clear() + reload + clicked NEW DRAFT to land on KOMUTA MERKEZİ with empty xi. No injected state.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Right column toggles between two AnimatePresence keys: 'roster' (default, shows roster-count, roster-row-N, team-overall) and 'pool' (data-testid='pool-panel', shown when poolOpen=true). The panel uses framer-motion `initial={x:30,opacity:0} animate={x:0,opacity:1}` so for the first ~250ms after clicking roll-dice the pool-panel will report is_visible=false even though it is in the DOM — wait 300-400ms or query by selector count, not is_visible, for that initial window. The compact slot-spinner shows 'ZAR DÖNÜYOR…' for ~900ms then 13 pool-player-N cards appear. close-pool-button (X) and open-pool-button still work as expected. For tactic verification: read window.getComputedStyle on the slot's parent wrapper (which carries inline style.top in %). Expected shifts for ST (slot-9, base 14%): GEGENPRESS=10, PARK_THE_BUS=22, TIKI_TAKA=18. GK at slot-0 stays at 88% regardless (TACTIC_SHIFTS.GK=0).",
+  "rca_of_the_issue": "No bugs found. Implementation matches spec exactly: (A) full-screen modal removed, replaced by right-column drawer with compact spinner; left/middle columns remain unobstructed. (B) applyTacticShift correctly modifies slot.top by group (GK/DEF/MID/ATT) and Pitch wrapper has CSS transition for smooth 500ms animation."
+}
