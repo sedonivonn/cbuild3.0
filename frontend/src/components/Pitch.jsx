@@ -1,4 +1,5 @@
 import React from "react";
+import { motion } from "framer-motion";
 import { FORMATIONS, applyTacticShift } from "../data/formations";
 import { effOverall, isBallonDorSeason } from "../data/ballonDor";
 
@@ -84,10 +85,17 @@ export const Pitch = ({
               "data-testid": `pitch-slot-${idx}`,
             };
         return (
-          <div
-            key={slot.id + idx}
-            className="absolute -translate-x-1/2 -translate-y-1/2 transition-[top,left] duration-500 ease-out"
+          <motion.div
+            // STABLE KEY: use only idx so React re-uses the same DOM node when
+            // formation changes. That lets `top`/`left` transition smoothly.
+            // Previously `slot.id + idx` caused unmount/remount when slot id
+            // changed (e.g. LM → LW), killing the animation for those slots.
+            key={idx}
+            layout
+            transition={{ type: "spring", stiffness: 280, damping: 30, mass: 0.6 }}
+            className="absolute -translate-x-1/2 -translate-y-1/2"
             style={{ top: `${slot.top}%`, left: `${slot.left}%` }}
+            animate={{ top: `${slot.top}%`, left: `${slot.left}%` }}
           >
             <Tag
               {...interactiveProps}
@@ -119,7 +127,7 @@ export const Pitch = ({
                 {player ? <span className={tierTextColor(player, player._season)}>{slot.pos}</span> : slot.pos}
               </div>
             </Tag>
-          </div>
+          </motion.div>
         );
       })}
     </div>

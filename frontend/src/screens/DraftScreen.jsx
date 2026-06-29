@@ -456,35 +456,88 @@ export const DraftScreen = ({
                 hint={`KADRO: ${filledCount}/${totalSlots}`}
               />
             )}
-            {rolling && <ClubSeasonSpinner cycling={true} />}
-            {pool && !rolling && (
+
+            {/* Rolling OR has-pool — keep spinner pinned to top so card grid
+                fades in cleanly below it without the snap/jump effect. */}
+            {(rolling || (pool && !isDraftComplete)) && (
               <>
-                <ClubSeasonSpinner cycling={false} season={pool.season} team={pool.team} />
-                <div className="grid grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2 max-h-[520px] overflow-y-auto pr-1 mt-3">
-                  {sortedPool.map((p, idx) => (
-                    <div key={idx} className="relative">
-                      <PlayerCard
-                        player={p}
-                        season={pool.season}
-                        club={pool.team.club}
-                        crest={pool.team.crest}
-                        country={pool.team.country}
-                        size="xs"
-                        selected={selectedPlayerIdx === idx}
-                        disabled={!p._placeable}
-                        testId={`pool-player-${idx}`}
-                        onClick={() => handleSelectPlayer(idx)}
-                      />
-                      {p._alreadyPicked && (
-                        <span className="absolute top-1 right-1 bg-red-500 text-white text-[7px] font-bold tracking-wider px-1 py-0.5 rounded-full z-10">
-                          KADRODA
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                {!isDraftComplete && (
-                  <div className="mt-3 pt-3 border-t border-white/10 flex items-center gap-2">
+                <motion.div
+                  layout
+                  className="shrink-0"
+                  transition={{ type: "spring", stiffness: 280, damping: 28 }}
+                >
+                  <ClubSeasonSpinner cycling={rolling} season={pool?.season} team={pool?.team} />
+                </motion.div>
+
+                <AnimatePresence mode="wait">
+                  {rolling && (
+                    <motion.div
+                      key="rolling-placeholder"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.25 }}
+                      className="flex-1 flex flex-col items-center justify-center py-12"
+                      data-testid="rolling-placeholder"
+                    >
+                      <div className="flex items-center gap-2 text-amber-300/80 font-mono text-xs tracking-[0.3em]">
+                        <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0 }}>●</motion.span>
+                        <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0.18 }}>●</motion.span>
+                        <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0.36 }}>●</motion.span>
+                        <span className="ml-2">ZAR DÖNÜYOR</span>
+                      </div>
+                      <div className="text-white/30 text-[10px] font-mono tracking-widest mt-3">
+                        OYUNCULAR YÜKLENİYOR…
+                      </div>
+                    </motion.div>
+                  )}
+                  {!rolling && pool && (
+                    <motion.div
+                      key={`pool-${pool.season}-${pool.team.club}`}
+                      initial={{ opacity: 0, y: 24 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -12 }}
+                      transition={{ duration: 0.45, ease: [0.2, 0.8, 0.2, 1] }}
+                      className="grid grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2 max-h-[520px] overflow-y-auto pr-1 mt-3"
+                    >
+                      {sortedPool.map((p, idx) => (
+                        <motion.div
+                          key={`${p.name}-${idx}`}
+                          initial={{ opacity: 0, y: 18, scale: 0.95 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          transition={{ duration: 0.32, delay: idx * 0.025, ease: "easeOut" }}
+                          className="relative"
+                        >
+                          <PlayerCard
+                            player={p}
+                            season={pool.season}
+                            club={pool.team.club}
+                            crest={pool.team.crest}
+                            country={pool.team.country}
+                            size="xs"
+                            selected={selectedPlayerIdx === idx}
+                            disabled={!p._placeable}
+                            testId={`pool-player-${idx}`}
+                            onClick={() => handleSelectPlayer(idx)}
+                          />
+                          {p._alreadyPicked && (
+                            <span className="absolute top-1 right-1 bg-red-500 text-white text-[7px] font-bold tracking-wider px-1 py-0.5 rounded-full z-10">
+                              KADRODA
+                            </span>
+                          )}
+                        </motion.div>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {!rolling && pool && !isDraftComplete && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.25 }}
+                    className="mt-3 pt-3 border-t border-white/10 flex items-center gap-2"
+                  >
                     <button
                       type="button"
                       onClick={handleChangeYear}
@@ -511,10 +564,11 @@ export const DraftScreen = ({
                       <div className="text-[9px] uppercase tracking-widest text-white/55 font-mono">DEĞİŞTİRME HAKKIN</div>
                       <div className="font-display text-xl text-amber-300 leading-tight">{changes.remaining} / 3</div>
                     </div>
-                  </div>
+                  </motion.div>
                 )}
               </>
             )}
+
             {isDraftComplete && (
               <div className="flex flex-col h-full" data-testid="final-roster-cards">
                 <div className="text-center mb-3">
