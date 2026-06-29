@@ -341,8 +341,8 @@ export const DraftScreen = ({
         </div>
         )}
 
-        {/* MIDDLE COLUMN — pitch (col-span varies: 6 in setup, 8 in draft) */}
-        <div className={`glass rounded-2xl p-4 ${phase === "setup" ? "lg:col-span-6" : "lg:col-span-8"}`}>
+        {/* MIDDLE COLUMN — pitch (col-span varies: 6 in setup, 5 in draft to give right panel room) */}
+        <div className={`glass rounded-2xl p-4 ${phase === "setup" ? "lg:col-span-6" : "lg:col-span-5"}`}>
           <div className="text-xs text-white/55 mb-3 font-mono tracking-widest flex items-center justify-between">
             <span>SAHA · {formation.label} {tactic ? `· ${TACTICS[tactic].name}` : ""}</span>
             {selectedPlayer && (
@@ -431,9 +431,9 @@ export const DraftScreen = ({
         </div>
         )}
 
-        {/* RIGHT COLUMN — draft phase: Spin the Wheel + cards */}
+        {/* RIGHT COLUMN — draft phase: Spin the Wheel + cards (wider for 3-4 card grid) */}
         {phase === "draft" && (
-          <div className="lg:col-span-4 glass rounded-2xl p-4 flex flex-col">
+          <div className="lg:col-span-7 glass rounded-2xl p-4 flex flex-col">
             {!pool && !rolling && !isDraftComplete && (
               <SpinTheWheelIdle
                 onSpin={handleRoll}
@@ -444,7 +444,7 @@ export const DraftScreen = ({
             {pool && !rolling && (
               <>
                 <ClubSeasonSpinner cycling={false} season={pool.season} team={pool.team} />
-                <div className="grid grid-cols-2 gap-2 max-h-[420px] overflow-y-auto pr-1 mt-3">
+                <div className="grid grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2 max-h-[520px] overflow-y-auto pr-1 mt-3">
                   {sortedPool.map((p, idx) => (
                     <div key={idx} className="relative">
                       <PlayerCard
