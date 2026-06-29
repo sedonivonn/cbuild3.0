@@ -341,38 +341,19 @@ export const MatchScreen = ({ match, onClose }) => {
           </div>
         )}
 
-        {/* Player of the Match — for the user side. Show only on the last leg. */}
-        {phase === "done" && isLastLeg && (() => {
-          const allLegsPlayerStats = legs.flatMap((l) => l?.userPlayerStats || []);
-          if (allLegsPlayerStats.length === 0) return null;
-          // Merge per-player across legs (sum goals/assists, avg rating).
-          // BUG FIX: do NOT spread `...p` here — it would copy goals/assists
-          // and then we'd accumulate on top, double-counting them.
-          const merged = {};
-          allLegsPlayerStats.forEach((p) => {
-            if (!merged[p.name]) {
-              merged[p.name] = {
-                name: p.name,
-                slot: p.slot,
-                season: p.season,
-                teamName: p.teamName || "",
-                goals: 0,
-                assists: 0,
-                rating: 0,
-                legs: 0,
-              };
-            }
-            merged[p.name].goals += p.goals || 0;
-            merged[p.name].assists += p.assists || 0;
-            merged[p.name].rating += p.rating || 6.5;
-            merged[p.name].legs += 1;
-          });
-          const arr = Object.values(merged).map((p) => ({
-            ...p,
-            rating: p.rating / Math.max(1, p.legs),
-          }));
-          const potm = [...arr].sort((a, b) => b.rating - a.rating)[0];
+        {/* Player of the Match — for the user side, computed from THIS leg only.
+            Goalkeeper POTM shows save count instead of goals/assists.
+            BUG FIX: previously this merged stats across legs which caused inflated
+            numbers (5 goals when only 3 happened in the visible leg). */}
+        {phase === "done" && currentLeg?.userPlayerStats && currentLeg.userPlayerStats.length > 0 && (() => {
+          const players = currentLeg.userPlayerStats;
+          const potm = [...players].sort((a, b) => b.rating - a.rating)[0];
           if (!potm) return null;
+          const userSideKey = currentLeg.home?.name === potm.teamName ? "home" : "away";
+          const saves = (currentLeg.events || []).filter(
+            (e) => e.type === "SAVE" && e.side === userSideKey
+          ).length;
+          const isGK = potm.slot === "GK";
           return (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
@@ -386,12 +367,14 @@ export const MatchScreen = ({ match, onClose }) => {
                   <div className="font-mono text-[10px] tracking-widest text-amber-300">PLAYER OF THE MATCH</div>
                   <div className="font-display text-2xl tracking-tight mt-0.5 truncate">{potm.name}</div>
                   {potm.teamName && (
-                    <div className="text-[10px] font-mono text-amber-300/70 tracking-wider truncate">
+                    <div className="text-[10px] font-mono text-amber-300/70 tracking-wider truncate uppercase">
                       {potm.teamName}
                     </div>
                   )}
                   <div className="text-[11px] font-mono text-white/50 tracking-wider mt-0.5">
-                    {potm.slot} · {potm.season} · {potm.goals} GOL · {potm.assists} ASİST
+                    {potm.slot} · {potm.season} · {isGK
+                      ? `${saves} KURTARIŞ`
+                      : `${potm.goals} GOL · ${potm.assists} ASİST`}
                   </div>
                 </div>
                 <div className="text-right shrink-0">

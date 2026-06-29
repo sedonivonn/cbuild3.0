@@ -73,6 +73,13 @@ export function aiPickTactic(opponentStats, userStats) {
   return opts[Math.floor(Math.random() * opts.length)];
 }
 
+// Resolve a side's player list — user XI for the user, real squad for opponents.
+function playersForSide(ref, userPlayers) {
+  if (!ref) return null;
+  if (ref.isUser) return userPlayers;
+  return ref.players || null;
+}
+
 export function playGroupMatch(homeRef, awayRef, userStats, userTacticId, isUserTeam, userPlayers = null) {
   // Apply per-match form to user XI (HARD MODE C).
   const userForm = applyMatchForm(userStats);
@@ -84,8 +91,8 @@ export function playGroupMatch(homeRef, awayRef, userStats, userTacticId, isUser
   const result = simulateMatch({
     home, away, homeTacticId: homeTactic, awayTacticId: awayTactic,
     homeIsUser: isUserTeam(homeRef), awayIsUser: isUserTeam(awayRef),
-    homePlayers: isUserTeam(homeRef) ? userPlayers : null,
-    awayPlayers: isUserTeam(awayRef) ? userPlayers : null,
+    homePlayers: playersForSide(homeRef, userPlayers),
+    awayPlayers: playersForSide(awayRef, userPlayers),
   });
   return { home: homeRef, away: awayRef, result, homeTactic, awayTactic };
 }
@@ -100,8 +107,8 @@ export function playKnockout(homeRef, awayRef, userStats, userTacticId, isUserTe
   const tie = simulateKnockout({
     home, away, homeTacticId: homeTactic, awayTacticId: awayTactic, twoLeg,
     homeIsUser: isUserTeam(homeRef), awayIsUser: isUserTeam(awayRef),
-    homePlayers: isUserTeam(homeRef) ? userPlayers : null,
-    awayPlayers: isUserTeam(awayRef) ? userPlayers : null,
+    homePlayers: playersForSide(homeRef, userPlayers),
+    awayPlayers: playersForSide(awayRef, userPlayers),
   });
   return { home: homeRef, away: awayRef, tie, homeTactic, awayTactic };
 }

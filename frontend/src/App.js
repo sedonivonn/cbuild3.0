@@ -191,7 +191,14 @@ function App() {
           setTrophyTeam(m.championRef);
         }
       }} />}
-      {trophyTeam && <TrophyScreen teamLabel={trophyTeam.label} onRestart={() => { setTrophyTeam(null); handleReset(); }} onHallOfFame={() => { setTrophyTeam(null); handleReset(); setScreen("hall_of_fame"); }} />}
+      {trophyTeam && <TrophyScreen
+        teamLabel={trophyTeam.label}
+        teamName={displayedTeamName}
+        userXi={xi}
+        tournamentStats={tournament?.tournamentStats || {}}
+        onRestart={() => { setTrophyTeam(null); resetState(); setScreen("home"); }}
+        onHallOfFame={() => { setTrophyTeam(null); resetState(); setScreen("hall_of_fame"); }}
+      />}
       {screen === "hall_of_fame" && <HallOfFameScreen onBack={() => setScreen("home")} />}
     </div>
   );

@@ -9,6 +9,7 @@ import { Play, Trophy } from "lucide-react";
 import { TournamentAwards } from "./TournamentAwards";
 
 // Pick 1 random semi-finalist per season and compute its baseOverall from top-11 players.
+// Now also stores the actual squad so opponent goals can be attributed to real players.
 function pickOpponentsFromSemifinalists() {
   const out = [];
   Object.keys(SEASONS).forEach((sk) => {
@@ -20,7 +21,9 @@ function pickOpponentsFromSemifinalists() {
     const baseOverall = sorted.length
       ? Math.round(sorted.reduce((s, p) => s + p.overall, 0) / sorted.length)
       : 80;
-    out.push({ season, club: team.club, country: team.country, crest: team.crest, baseOverall });
+    // Tag each player with the season so OVR lookups work the same as user players.
+    const players = sorted.map((p) => ({ ...p, _season: season, _slot: p.primary }));
+    out.push({ season, club: team.club, country: team.country, crest: team.crest, baseOverall, players });
   });
   return out;
 }
@@ -35,6 +38,7 @@ function buildTeamRefs(userTeam) {
     crest: c.crest,
     country: c.country,
     baseOverall: c.baseOverall,
+    players: c.players,
     isUser: false,
   }));
   const user = {
