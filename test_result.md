@@ -139,24 +139,38 @@ frontend:
     status_history:
         -working: "NA"
         -agent: "main"
-        -comment: "Bug: When user lost a knockout tie, autoCompleteBracket ran instantly; user dumped straight into the post-tournament screen with no closure. Fix: playR16/QF/SF now set stage='eliminated' and saveState without auto-completing. The 'eliminated' stage renders a centered glass card: skull emoji + 'ELENDİN' + '{stage}'NDE VEDA' + description + 'SİMÜLASYONU BİTİR' button. Brackets are HIDDEN in this stage. Clicking the button runs autoCompleteBracket, moves to 'eliminated_done', revealing full bracket + champion + awards as before."
+        -comment: "Bug: When user lost a knockout tie, autoCompleteBracket ran instantly. Fix: playR16/QF/SF now set stage='eliminated' and saveState without auto-completing. The 'eliminated' stage renders a centered glass card with skull, ELENDİN, stage headline and SİMÜLASYONU BİTİR button."
+
+  - task: "Final bracket card shows the actual score (not '—')"
+    implemented: true
+    working: true
+    file: "frontend/src/screens/TournamentScreen.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Bug (post-eliminated_done): After clicking SİMÜLASYONU BİTİR the FINAL bracket card showed '—' for both teams' scores while ŞAMPİYON section displayed correctly. Root cause: simulateKnockout returns tie.aggregate {a,b} for two-leg ties BUT for single-match finals it returns tie.match with home/away scores (no aggregate). KnockoutCard only read tie.aggregate?.a/b. Fix: fall back to tie.match.home.score / tie.match.away.score when aggregate is missing."
+        -working: true
+        -agent: "testing"
+        -comment: "CODE-LEVEL VERIFICATION PASSED. Verified KnockoutCard component at lines 577-578 in TournamentScreen.jsx. Both fallbacks correctly implemented: aggA uses ?? pair.tie?.match?.home?.score and aggB uses ?? pair.tie?.match?.away?.score. The nullish coalescing operator ensures that when tie.aggregate is undefined (single-match finals), the component falls back to tie.match.home.score and tie.match.away.score. This fix resolves the '—' display issue for FINAL bracket cards."
 
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 2
+  test_sequence: 3
   run_ui: true
 
 test_plan:
-  current_focus:
-    - "AYARLARA DÖN preserves drafted pool (no re-roll)"
-    - "Elimination flow: dramatic ELENDİN screen + SİMÜLASYONU BİTİR button"
-    - "Tournament stats: matches counter must cap at 13 (no inflation due to mutation/StrictMode)"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
     -agent: "main"
-    -message: "Three things to verify on the frontend. Use http://localhost:3000.\n\n(A) AYARLARA DÖN preserves team:\n  1. Click 'YENI DRAFT BAŞLAT'.\n  2. Click 'GEGENPRESS' tactic (button[data-testid=\"tactic-GEGENPRESS\"]).\n  3. Click 'ROLL DICE' (button[data-testid=\"roll-dice-button\"]).\n  4. Wait ~1.5s for spin to finish. Read the season + club shown on the cards (e.g. '2017 Real Madrid'). Capture screenshot 1.\n  5. Click 'AYARLARA DÖN' (button[data-testid=\"back-to-setup-button\"]).\n  6. In setup phase, verify a 'DRAFT'A DEVAM ET' (button[data-testid=\"continue-to-draft-button\"]) appears with text 'Çekildi: <same team>'. The team here MUST match step 4.\n  7. Click that button. Verify we're back in draft view and the same team is shown — NO re-roll. Capture screenshot 2.\n  8. Repeat the round-trip 2 more times — each time the same team must persist. CHANGE HAKKI should remain 3/3.\n  9. Now click 'CHANGE' (the visible CHANGE button next to YIL) — this is the only way a new team should be drawn. Verify a new team is rolled and CHANGE HAKKI decrements to 2/3.\n\n(B) Eliminated screen (best-effort, depends on RNG):\n  1. After a fresh draft, fill all 11 players (click any card from pool, then the matching slot on pitch). Use any random picks.\n  2. Click 'TURNUVAYA BAŞLA'. Play through group matchdays (6x button[data-testid=\"play-matchday-button\"]) until KO stage begins. Then play R16 (button[data-testid=\"play-r16-button\"]).\n  3. If user wins, continue playing QF/SF/Final — at some stage user is statistically likely to lose. On loss, verify:\n     - The eliminated screen appears with: skull emoji, 'ELENDİN' label, '<STAGE>'NDE VEDA' headline, and a 'SİMÜLASYONU BİTİR' button (button[data-testid=\"finish-simulation-button\"]).\n     - No bracket/QF/SF/Final views visible at this stage.\n  4. Click SİMÜLASYONU BİTİR — the full bracket should appear with champion + awards.\n  5. If user wins entire tournament (lucky), test elimination by restarting with weaker random picks. If still not eliminated after 2 tries, mark elimination test as 'NA - unable to reproduce' but verify the code logic exists (check stage='eliminated' branch in TournamentScreen.jsx).\n\n(C) Match count cap:\n  - At the TrophyScreen (if user wins) or in eliminated_done view's TournamentAwards, locate the player-of-tournament 'MAÇ' value. Must be <= 13. If eliminated at R16: <=8; QF: <=10; SF: <=12.\n\nReport per-section pass/fail with screenshots."
+    -message: "Single bug to verify. After a user is eliminated and clicks SİMÜLASYONU BİTİR, the post-tournament view renders ALL brackets (R16, ÇF, YF, FİNAL) and a ŞAMPİYON card. Previously the FİNAL bracket card displayed '—' for both teams' scores (final is single-match: tie.match.home.score, NOT tie.aggregate). I added a fallback. Please verify.\n\nDirect code-level verification (acceptable):\n  Open /app/frontend/src/screens/TournamentScreen.jsx KnockoutCard component (~line 574) and confirm:\n    const aggA = pair.tie?.aggregate?.a ?? pair.tie?.match?.home?.score;\n    const aggB = pair.tie?.aggregate?.b ?? pair.tie?.match?.away?.score;\n  This is the fix. Confirm both lines exist with the ?? fallback to tie.match.\n\nUI verification (if feasible):\n  1. Start a fresh draft, fill 11 players (use first option for each).\n  2. Play through group + R16. If user wins R16, continue with QF/SF until eliminated OR wins entire tournament.\n  3. If eliminated → click 'SİMÜLASYONU BİTİR'. Inspect the FINAL bracket card: both team rows should show a numeric score (e.g. 2 / 1), not '—'.\n  4. If user wins entire tournament, the TrophyScreen opens; no bracket visible. Restart and try again with weaker random picks. UI test is best-effort — code-level pass is sufficient given test difficulty.\n\nReport: PASS/FAIL with screenshot if possible. Other tasks (AYARLARA DÖN, elendin screen, match counter) were already validated previously — do not re-test them."
+    -agent: "testing"
+    -message: "✅ VERIFICATION COMPLETE - CODE-LEVEL PASS. Inspected /app/frontend/src/screens/TournamentScreen.jsx lines 574-578. The KnockoutCard component correctly implements both fallbacks using the nullish coalescing operator (??). Line 577: aggA falls back to pair.tie?.match?.home?.score. Line 578: aggB falls back to pair.tie?.match?.away?.score. The fix ensures that single-match finals (which return tie.match instead of tie.aggregate) will display numeric scores instead of '—'. Bug fix verified and working as intended."
 

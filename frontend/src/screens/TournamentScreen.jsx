@@ -573,8 +573,9 @@ const Bracket = ({ title, pairs, final = false }) => {
 
 const KnockoutCard = ({ pair }) => {
   const winner = pair.tie?.winner;
-  const aggA = pair.tie?.aggregate?.a;
-  const aggB = pair.tie?.aggregate?.b;
+  // Two-leg ties expose `aggregate`; single-match finals expose `match` with home/away scores.
+  const aggA = pair.tie?.aggregate?.a ?? pair.tie?.match?.home?.score;
+  const aggB = pair.tie?.aggregate?.b ?? pair.tie?.match?.away?.score;
   const homeWin = winner === "home";
   const awayWin = winner === "away";
   const isUserPair = pair.home?.isUser || pair.away?.isUser;
