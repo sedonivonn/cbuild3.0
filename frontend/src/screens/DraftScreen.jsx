@@ -5,12 +5,16 @@ import { PlayerCard } from "../components/PlayerCard";
 import { Pitch } from "../components/Pitch";
 import { Crest } from "../components/Crest";
 import { FORMATIONS, canPlace, hasAvailableSlot } from "../data/formations";
+import { TACTICS } from "../data/tactics";
 import { effOverall } from "../data/ballonDor";
 import { rollRandom, rollLucky } from "../engine/draftEngine";
 import { sound } from "../engine/sounds";
 import { SEASONS } from "../data/seasons";
 import { QUARTERFINALISTS } from "../data/quarterfinalists";
-import { RefreshCw } from "lucide-react";
+import { computeTeamStats } from "../engine/overallEngine";
+import { RefreshCw, X, Flame, Network, Shield, Play } from "lucide-react";
+
+const TACTIC_ICONS = { Flame, Network, Shield };
 
 // Merged pool used by both the slot-machine spinner AND the "Change Year" logic.
 const MERGED_POOL = {};
@@ -18,33 +22,58 @@ for (const k of Object.keys(SEASONS)) MERGED_POOL[k] = [...SEASONS[k]];
 for (const k of Object.keys(QUARTERFINALISTS)) {
   MERGED_POOL[k] = [...(MERGED_POOL[k] || []), ...QUARTERFINALISTS[k]];
 }
-
-// All "season club" labels used by the slot machine spinner
 const ALL_TEAM_LABELS = Object.entries(MERGED_POOL).flatMap(([season, teams]) =>
   teams.map((t) => ({ label: `${season} ${t.club}`, crest: t.crest }))
 );
 
-// Free placement draft with strict primary/secondary (wing-mirror flex) rules,
-// duplicate-name lockout across all teams, click-filled-slot-to-remove, and pool
-// player lockout when no compatible empty slot exists for them.
-export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onComplete }) => {
-  const formation = FORMATIONS[formationId];
-  const [pool, setPool] = useState(null); // { season, team }
+// Unified Komuta Merkezi (Command Center) — formation + tactic + draft on a single screen.
+export const DraftScreen = ({
+  formationId, setFormationId,
+  teamName, setTeamName,
+  xi, setXi,
+  tactic, setTactic,
+  changes, onUseChange,
+  onComplete,
+}) => {
+  const formation = FORMATIONS[formationId] || FORMATIONS["4-3-3"];
+  const [pool, setPool] = useState(null);
   const [rolling, setRolling] = useState(false);
   const [selectedPlayerIdx, setSelectedPlayerIdx] = useState(-1);
+  const [poolOpen, setPoolOpen] = useState(false);
 
   const filledCount = xi.filter(Boolean).length;
   const totalSlots = formation.slots.length;
-  const isComplete = filledCount >= totalSlots;
+  const isDraftComplete = filledCount >= totalSlots;
+  const readyToStart = isDraftComplete && tactic;
 
-  // Names already in the XI (so the same player in different seasons can't be added twice)
-  const pickedNames = useMemo(
-    () => new Set(xi.filter(Boolean).map((p) => p.name)),
-    [xi]
-  );
+  const pickedNames = useMemo(() => new Set(xi.filter(Boolean).map((p) => p.name)), [xi]);
+
+  // Live team stats (overall + lines) — only when XI is full
+  const liveStats = useMemo(() => {
+    if (!isDraftComplete) return null;
+    const mapped = formation.slots.map((slot, idx) => ({ slot, player: xi[idx] }));
+    return computeTeamStats(mapped);
+  }, [isDraftComplete, formation, xi]);
+
+  const handleFormationChange = (newId) => {
+    if (newId === formationId) return;
+    if (filledCount > 0) {
+      const ok = window.confirm(
+        `Dizilişi değiştirirsen mevcut ${filledCount} oyuncu silinir. Devam?`
+      );
+      if (!ok) return;
+    }
+    sound.click();
+    setFormationId(newId);
+    setXi(new Array(FORMATIONS[newId].slots.length).fill(null));
+    setPool(null);
+    setSelectedPlayerIdx(-1);
+    setPoolOpen(false);
+  };
 
   const handleRoll = () => {
-    if (isComplete) return;
+    if (isDraftComplete) return;
+    setPoolOpen(true);
     setRolling(true);
     sound.dice();
     setTimeout(() => {
@@ -70,12 +99,10 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
     }, 900);
   };
 
-  // CHANGE YEAR — keep the same club but pick a different season of that club.
   const handleChangeYear = () => {
     if (!pool || changes.remaining <= 0) { sound.error(); return; }
     const currentClub = pool.team.club;
     const currentSeason = pool.season;
-    // find every (season, team) in MERGED_POOL where team.club === currentClub and season != currentSeason
     const candidates = [];
     for (const [seasonKey, teams] of Object.entries(MERGED_POOL)) {
       const seasonNum = Number(seasonKey);
@@ -83,23 +110,19 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
       const match = teams.find((t) => t.club === currentClub);
       if (match) candidates.push({ season: seasonNum, team: match });
     }
-    if (candidates.length === 0) {
-      sound.error();
-      return;
-    }
+    if (candidates.length === 0) { sound.error(); return; }
     setRolling(true);
     sound.dice();
     setTimeout(() => {
       const pick = candidates[Math.floor(Math.random() * candidates.length)];
       setPool(pick);
       setSelectedPlayerIdx(-1);
-      onUseChange(false); // not lucky-tagged
+      onUseChange(false);
       setRolling(false);
       sound.cardReveal();
     }, 900);
   };
 
-  // Sort by overall desc; mark _placeable (compatible slot exists AND name not picked)
   const sortedPool = useMemo(() => {
     if (!pool) return [];
     const seasonNum = pool.season;
@@ -115,28 +138,16 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
 
   const handleSelectPlayer = (idx) => {
     const p = sortedPool[idx];
-    if (!p || !p._placeable) {
-      sound.error();
-      return;
-    }
+    if (!p || !p._placeable) { sound.error(); return; }
     sound.click();
     setSelectedPlayerIdx(idx);
+    setPoolOpen(false); // close modal so user can place on pitch
   };
 
   const handlePlaceOnSlot = (slotIdx, slot) => {
-    // Filled slots are permanent — cannot be replaced.
-    if (xi[slotIdx]) {
-      sound.error();
-      return;
-    }
-    if (!selectedPlayer) {
-      if (pool) sound.error();
-      return;
-    }
-    if (!canPlace(slot.pos, selectedPlayer)) {
-      sound.error();
-      return;
-    }
+    if (xi[slotIdx]) { sound.error(); return; }
+    if (!selectedPlayer) { if (pool) sound.error(); return; }
+    if (!canPlace(slot.pos, selectedPlayer)) { sound.error(); return; }
     sound.click();
     const newXi = [...xi];
     newXi[slotIdx] = {
@@ -149,12 +160,8 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
     setXi(newXi);
     setPool(null);
     setSelectedPlayerIdx(-1);
-    if (newXi.filter(Boolean).length >= totalSlots) {
-      setTimeout(() => onComplete(newXi), 400);
-    }
   };
 
-  // For pitch: when player is selected, mark slots as "fit" or "blocked"
   const slotHints = useMemo(() => {
     if (!selectedPlayer) return null;
     return formation.slots.map((slot, idx) => {
@@ -164,165 +171,339 @@ export const DraftScreen = ({ formationId, xi, setXi, changes, onUseChange, onCo
     });
   }, [selectedPlayer, formation, xi]);
 
-  const progress = (filledCount / totalSlots) * 100;
+  const handleStart = () => {
+    if (!readyToStart) return;
+    sound.click();
+    onComplete(xi);
+  };
 
   return (
-    <div className="px-5 md:px-10 py-6 max-w-7xl mx-auto">
-      {/* Top bar */}
-      <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
+    <div className="px-4 md:px-8 py-6 max-w-[1600px] mx-auto">
+      {/* Header */}
+      <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
         <div>
-          <div className="font-mono text-xs text-amber-300 tracking-widest">ADIM 2 / 4 · DRAFT</div>
-          <h2 className="font-display text-3xl md:text-4xl tracking-tight">{filledCount} / {totalSlots} OYUNCU YERLEŞTİ</h2>
-          <div className="text-xs text-white/55 mt-1">
-            Oyuncu seç → uygun boş slota yerleştir. Yerleşen oyuncu kalıcıdır.
+          <div className="font-mono text-xs text-amber-300 tracking-widest">KOMUTA MERKEZİ</div>
+          <h2 className="font-display text-2xl md:text-3xl tracking-tight">DRAFT & DİZİLİŞ & TAKTİK</h2>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="text-right">
+            <div className="text-[10px] uppercase tracking-widest text-white/60">CHANGE HAKKI</div>
+            <div className="font-display text-2xl text-amber-300" data-testid="changes-remaining">{changes.remaining} / 3</div>
+          </div>
+          <button
+            type="button"
+            onClick={handleStart}
+            disabled={!readyToStart}
+            data-testid="start-tournament-button"
+            className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            <Play size={16} /> TURNUVAYA BAŞLA
+          </button>
+        </div>
+      </div>
+
+      {/* 3-column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+        {/* LEFT COLUMN — settings */}
+        <div className="lg:col-span-3 space-y-4">
+          {/* Team name */}
+          <div className="glass rounded-2xl p-4">
+            <label className="text-[10px] text-white/55 tracking-widest font-mono block mb-2">TAKIM ADI</label>
+            <input
+              type="text"
+              value={teamName || ""}
+              onChange={(e) => setTeamName(e.target.value.slice(0, 24))}
+              maxLength={24}
+              placeholder="DRAFT TAKIMI"
+              data-testid="team-name-input"
+              className="w-full bg-black/40 border border-white/15 focus:border-amber-300 outline-none rounded-md px-3 py-2 font-display text-lg tracking-tight text-white placeholder:text-white/30"
+            />
+          </div>
+
+          {/* Formation */}
+          <div className="glass rounded-2xl p-4">
+            <div className="text-[10px] text-white/55 tracking-widest font-mono mb-3">DİZİLİŞ</div>
+            <div className="grid grid-cols-3 gap-2">
+              {Object.values(FORMATIONS).map((f) => {
+                const active = formationId === f.id;
+                return (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => handleFormationChange(f.id)}
+                    data-testid={`formation-${f.id}`}
+                    className={`rounded-lg py-2 px-1 text-sm font-display tracking-tight transition-all ${
+                      active
+                        ? "bg-amber-300 text-black ring-2 ring-amber-300/80"
+                        : "bg-white/5 text-white/80 hover:bg-white/10 ring-1 ring-white/10"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Tactic */}
+          <div className="glass rounded-2xl p-4">
+            <div className="text-[10px] text-white/55 tracking-widest font-mono mb-3">TAKTİK</div>
+            <div className="space-y-2">
+              {Object.values(TACTICS).map((t) => {
+                const Icon = TACTIC_ICONS[t.icon] || Flame;
+                const active = tactic === t.id;
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => { sound.click(); setTactic(t.id); }}
+                    data-testid={`tactic-${t.id}`}
+                    className={`w-full text-left rounded-lg p-3 flex items-center gap-3 transition-all ${
+                      active
+                        ? "ring-2 ring-amber-300/80 bg-white/10"
+                        : "ring-1 ring-white/10 bg-white/5 hover:bg-white/10"
+                    }`}
+                  >
+                    <div
+                      className="w-9 h-9 rounded-md flex items-center justify-center shrink-0"
+                      style={{ background: t.color + "22", color: t.color }}
+                    >
+                      <Icon size={16} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-display text-base tracking-tight leading-tight">{t.name}</div>
+                      <div className="text-[10px] text-white/55 truncate">{t.tagline}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Roll dice */}
+          <div className="glass rounded-2xl p-4">
+            <div className="text-[10px] text-white/55 tracking-widest font-mono mb-3">ZAR</div>
+            {!pool && !isDraftComplete && (
+              <button
+                type="button"
+                onClick={handleRoll}
+                data-testid="roll-dice-button"
+                className="w-full btn-primary text-base py-3"
+              >
+                🎲 ROLL DICE
+              </button>
+            )}
+            {pool && !rolling && (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => { setPoolOpen(true); sound.click(); }}
+                  data-testid="open-pool-button"
+                  className="w-full btn-primary text-sm py-2 flex items-center justify-center gap-2"
+                >
+                  <Crest code={pool.team.crest} size="sm" />
+                  <span className="truncate">{pool.season} {pool.team.club}</span>
+                </button>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={handleChangeYear}
+                    disabled={changes.remaining <= 0}
+                    data-testid="change-year-button"
+                    className="btn-ghost text-xs py-2 flex items-center justify-center gap-1 disabled:opacity-30"
+                    title="Aynı kulübün farklı sezonu"
+                  >
+                    <RefreshCw size={12} /> YIL
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleChange}
+                    disabled={changes.remaining <= 0}
+                    data-testid="change-button"
+                    className="btn-ghost text-xs py-2 flex items-center justify-center gap-1 disabled:opacity-30"
+                  >
+                    <RefreshCw size={12} /> CHANGE
+                  </button>
+                </div>
+              </div>
+            )}
+            {isDraftComplete && (
+              <div className="text-center py-3 font-display text-amber-300 text-base">KADRO TAMAM</div>
+            )}
           </div>
         </div>
-        <div className="text-right">
-          <div className="text-[10px] uppercase tracking-widest text-white/60">CHANGE HAKKI</div>
-          <div className="font-display text-2xl text-amber-300" data-testid="changes-remaining">{changes.remaining} / 3</div>
-        </div>
-      </div>
 
-      {/* Progress */}
-      <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden mb-5">
-        <div className="h-full bg-amber-300 transition-all" style={{ width: `${progress}%` }} />
-      </div>
-
-      <div className="grid lg:grid-cols-12 gap-6">
-        {/* Left: Pitch */}
-        <div className="lg:col-span-5 glass rounded-2xl p-5">
-          <div className="text-xs text-white/60 mb-3 font-mono tracking-widest flex items-center justify-between">
-            <span>KADRO · {formation.label}</span>
-            {selectedPlayer ? (
-              <span className="text-amber-300">UYUMLU YEŞİL SLOTA TIKLA</span>
-            ) : null}
+        {/* MIDDLE COLUMN — pitch */}
+        <div className="lg:col-span-6 glass rounded-2xl p-4">
+          <div className="text-xs text-white/55 mb-3 font-mono tracking-widest flex items-center justify-between">
+            <span>SAHA · {formation.label}</span>
+            {selectedPlayer && (
+              <span className="text-amber-300">YEŞİL SLOTA TIKLA</span>
+            )}
           </div>
           <Pitch
-            formationId={formationId}
+            formationId={formationId || "4-3-3"}
             xi={xi}
             onSlotClick={handlePlaceOnSlot}
             slotHints={slotHints}
             interactive={true}
-            compact
           />
+          {selectedPlayer && (
+            <div className="mt-3 p-2 rounded-lg bg-amber-300/10 border border-amber-300/30 text-xs text-amber-200 flex items-center justify-between">
+              <span>SEÇİLİ: <strong>{selectedPlayer.name}</strong> ({selectedPlayer.primary})</span>
+              <button
+                type="button"
+                onClick={() => { setSelectedPlayerIdx(-1); sound.click(); }}
+                className="text-amber-300 hover:text-white"
+                data-testid="cancel-selection-button"
+              ><X size={14} /></button>
+            </div>
+          )}
         </div>
 
-        {/* Right: dice + selection */}
-        <div className="lg:col-span-7 glass rounded-2xl p-5 min-h-[420px]">
-          <AnimatePresence mode="wait">
-            {!pool && !rolling && (
-              <motion.div
-                key="roll"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="h-full flex flex-col items-center justify-center text-center min-h-[420px]"
-              >
-                {isComplete ? (
-                  <>
-                    <div className="font-display text-3xl text-amber-300 tracking-tight mb-3">KADRO TAMAM!</div>
-                    <p className="text-white/60">Devam etmek için sayfa yönlendirecek...</p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-white/60 max-w-md text-sm mb-6">
-                      Zarı çevir — rastgele bir sezon ve takım kadrosu açılsın. Oyuncuyu kendi mevkisine uygun bir boş slota yerleştir.
-                    </p>
-                    <DiceButton onRoll={handleRoll} testId="roll-dice-button" />
-                  </>
-                )}
-              </motion.div>
-            )}
+        {/* RIGHT COLUMN — roster list */}
+        <div className="lg:col-span-3 glass rounded-2xl p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-[10px] text-white/55 tracking-widest font-mono">KADRO</div>
+            <div className="font-display text-2xl text-amber-300" data-testid="roster-count">{filledCount}/{totalSlots}</div>
+          </div>
+          {/* Progress bar */}
+          <div className="h-1 w-full bg-white/10 rounded-full overflow-hidden mb-3">
+            <div
+              className="h-full bg-amber-300 transition-all"
+              style={{ width: `${(filledCount / totalSlots) * 100}%` }}
+            />
+          </div>
+          {/* Position list */}
+          <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-1">
+            {formation.slots.map((slot, idx) => {
+              const player = xi[idx];
+              return (
+                <div
+                  key={idx}
+                  className={`flex items-center justify-between rounded-md px-2 py-1.5 ${
+                    player ? "bg-white/5" : "bg-white/[0.02]"
+                  }`}
+                  data-testid={`roster-row-${idx}`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="font-mono text-[10px] tracking-wider text-white/45 w-8 shrink-0">{slot.pos}</span>
+                    {player ? (
+                      <span className="text-xs text-white truncate" title={player.name}>{player.name}</span>
+                    ) : (
+                      <span className="text-xs text-white/30">—</span>
+                    )}
+                  </div>
+                  {player && (
+                    <span className="font-display text-sm text-amber-300 shrink-0">
+                      {effOverall(player, player._season)}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {/* Stats */}
+          {liveStats && (
+            <div className="mt-4 pt-3 border-t border-white/10">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-[10px] text-white/55 tracking-widest font-mono">TAKIM OVR</div>
+                <div className="font-display text-3xl text-amber-300" data-testid="team-overall">{liveStats.overall}</div>
+              </div>
+              <div className="grid grid-cols-4 gap-1 text-center">
+                <Stat label="KLC" v={liveStats.keeper} />
+                <Stat label="DEF" v={liveStats.defense} />
+                <Stat label="ORT" v={liveStats.midfield} />
+                <Stat label="HÜC" v={liveStats.attack} />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
-            {rolling && (
-              <motion.div
-                key="rolling"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                className="h-full flex items-center justify-center min-h-[420px]"
-              >
-                <SlotSpinner />
-              </motion.div>
-            )}
+      {/* FIFA-style card reveal modal — when rolling or showing the pool */}
+      <AnimatePresence>
+        {poolOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) setPoolOpen(false); }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="glass rounded-2xl p-6 max-w-5xl w-full max-h-[90vh] overflow-y-auto relative"
+              data-testid="pool-modal"
+            >
+              <button
+                type="button"
+                onClick={() => setPoolOpen(false)}
+                className="absolute top-3 right-3 text-white/60 hover:text-white"
+                data-testid="close-pool-button"
+              ><X size={20} /></button>
 
-            {pool && !rolling && (
-              <motion.div
-                key="reveal"
-                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-              >
-                <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
-                  <div className="flex items-center gap-3">
+              {rolling && <SlotSpinner />}
+
+              {pool && !rolling && (
+                <>
+                  <div className="flex items-center gap-3 mb-4">
                     <Crest code={pool.team.crest} size="lg" />
                     <div>
                       <div className="font-display text-2xl md:text-3xl tracking-tight" data-testid="rolled-team-name">{pool.team.club}</div>
                       <div className="text-xs text-white/60 font-mono tracking-widest" data-testid="rolled-season">SEZON · {pool.season} {pool.team.country}</div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleChangeYear}
-                      disabled={changes.remaining <= 0}
-                      data-testid="change-year-button"
-                      className="btn-ghost flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
-                      title="Aynı kulübün farklı sezonu"
-                    >
-                      <RefreshCw size={14} /> CHANGE YEAR
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleChange}
-                      disabled={changes.remaining <= 0}
-                      data-testid="change-button"
-                      className="btn-ghost flex items-center gap-2 disabled:opacity-30 disabled:cursor-not-allowed"
-                    >
-                      <RefreshCw size={14} /> CHANGE ({changes.remaining})
-                    </button>
+                  <div className="text-[11px] text-white/55 mb-3 font-mono tracking-widest">
+                    KARTA TIKLA → SAHADA YEŞİL SLOTA YERLEŞTİR
                   </div>
-                </div>
-
-                <div className="text-[11px] text-white/55 mb-3 font-mono tracking-widest">
-                  {selectedPlayer ? (
-                    <span className="text-amber-300">SAHADA YEŞİL SLOTA TIKLAYARAK YERLEŞTİR</span>
-                  ) : (
-                    "KAPALI KARTLAR: ya kadronda var ya da pozisyonu uymuyor"
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 max-h-[460px] overflow-y-auto pr-1">
-                  {sortedPool.map((p, idx) => (
-                    <div key={idx} className="relative">
-                      <PlayerCard
-                        player={p}
-                        season={pool.season}
-                        club={pool.team.club}
-                        crest={pool.team.crest}
-                        country={pool.team.country}
-                        size="sm"
-                        selected={selectedPlayerIdx === idx}
-                        disabled={!p._placeable}
-                        testId={`pool-player-${idx}`}
-                        onClick={() => handleSelectPlayer(idx)}
-                      />
-                      {p._alreadyPicked && (
-                        <span className="absolute top-1 right-1 bg-red-500 text-white text-[8px] font-bold tracking-wider px-1.5 py-0.5 rounded-full z-10">
-                          KADRODA
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-3 text-[10px] text-white/40 font-mono">
-                  TIP: Kanat oyuncuları (LW↔RW, LM↔RM) iki taraflı oynayabilir. Yerleşen oyuncu sahada kalıcıdır — dikkatli seç!
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                    {sortedPool.map((p, idx) => (
+                      <div key={idx} className="relative">
+                        <PlayerCard
+                          player={p}
+                          season={pool.season}
+                          club={pool.team.club}
+                          crest={pool.team.crest}
+                          country={pool.team.country}
+                          size="sm"
+                          selected={selectedPlayerIdx === idx}
+                          disabled={!p._placeable}
+                          testId={`pool-player-${idx}`}
+                          onClick={() => handleSelectPlayer(idx)}
+                        />
+                        {p._alreadyPicked && (
+                          <span className="absolute top-1 right-1 bg-red-500 text-white text-[8px] font-bold tracking-wider px-1.5 py-0.5 rounded-full z-10">
+                            KADRODA
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-4 text-[10px] text-white/40 font-mono">
+                    TIP: Kanat oyuncuları (LW↔RW, LM↔RM) iki taraflı oynayabilir. Yerleşen oyuncu sahada kalıcıdır.
+                  </div>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
-// Slot-machine style spinner: cycles team labels rapidly during the roll.
+const Stat = ({ label, v }) => (
+  <div className="rounded-md py-1 bg-white/5">
+    <div className="text-[8px] text-white/50 tracking-widest">{label}</div>
+    <div className="font-display text-base text-white">{v || 0}</div>
+  </div>
+);
+
+// Slot-machine style spinner — kept for the FIFA card opening feel.
 const SlotSpinner = () => {
   const [idx, setIdx] = useState(() => Math.floor(Math.random() * ALL_TEAM_LABELS.length));
   useEffect(() => {
@@ -331,7 +512,7 @@ const SlotSpinner = () => {
   }, []);
   const cur = ALL_TEAM_LABELS[idx];
   return (
-    <div className="text-center w-full">
+    <div className="text-center w-full py-10">
       <div className="font-mono text-xs text-amber-300 tracking-widest mb-3">ZAR DÖNÜYOR…</div>
       <motion.div
         key={idx}
@@ -347,3 +528,6 @@ const SlotSpinner = () => {
     </div>
   );
 };
+
+// DiceButton import kept for tree-shaking compatibility, unused inline now.
+const _unusedDice = DiceButton; void _unusedDice;

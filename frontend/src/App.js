@@ -51,7 +51,7 @@ function App() {
         setChanges({ remaining: 0, luckyRemaining: 0 });
         setTactic(null);
         setTournament(null);
-        setScreen("confirm");
+        setScreen("draft");
       }
       clearDraftFromUrl();
     }
@@ -74,42 +74,18 @@ function App() {
   const handleStart = () => {
     sound.click();
     setTeamName("");
-    setFormationId(null);
-    setXi([]);
+    setFormationId("4-3-3");
+    setXi(new Array(FORMATIONS["4-3-3"].slots.length).fill(null));
     setChanges({ remaining: 3, luckyRemaining: 1 });
     setTactic(null);
     setTournament(null);
-    setScreen("formation");
+    setScreen("draft");
   };
 
   const handleContinue = () => { setScreen(initial?.screen || "home"); };
 
-  const handleFormationContinue = () => {
-    if (!formationId) return;
-    const formation = FORMATIONS[formationId];
-    setXi(new Array(formation.slots.length).fill(null));
-    setScreen("draft");
-    sound.click();
-  };
-
   const handleDraftComplete = (newXi) => {
     setXi(newXi);
-    setScreen("confirm");
-    sound.click();
-  };
-
-  const handleConfirmBack = () => {
-    setScreen("draft");
-    sound.click();
-  };
-
-  const handleConfirmContinue = () => {
-    setScreen("tactics");
-    sound.click();
-  };
-
-  const handleTacticsContinue = () => {
-    if (!tactic) return;
     setScreen("tournament");
     sound.click();
   };
@@ -152,24 +128,30 @@ function App() {
     <div className="min-h-screen text-white">
       <TopBar onSoundToggle={handleSoundToggle} soundOn={soundOn} onReset={handleReset} />
       {screen === "home" && <HomeScreen onStart={handleStart} hasSave={hasSave} onContinue={handleContinue} />}
-      {screen === "formation" && (
-        <FormationScreen selected={formationId} onSelect={setFormationId} onContinue={handleFormationContinue} teamName={teamName} setTeamName={setTeamName} />
-      )}
       {screen === "draft" && formationId && (
         <DraftScreen
           formationId={formationId}
+          setFormationId={setFormationId}
+          teamName={teamName}
+          setTeamName={setTeamName}
           xi={xi}
           setXi={setXi}
+          tactic={tactic}
+          setTactic={setTactic}
           changes={changes}
           onUseChange={handleUseChange}
           onComplete={handleDraftComplete}
         />
       )}
+      {/* Legacy routes — kept reachable from shared URLs / saves only */}
+      {screen === "formation" && (
+        <FormationScreen selected={formationId} onSelect={setFormationId} onContinue={() => { setXi(new Array(FORMATIONS[formationId].slots.length).fill(null)); setScreen("draft"); }} teamName={teamName} setTeamName={setTeamName} />
+      )}
       {screen === "confirm" && formationId && (
-        <ConfirmScreen formationId={formationId} xi={xi} teamStats={teamStats} teamName={displayedTeamName} onBack={handleConfirmBack} onContinue={handleConfirmContinue} />
+        <ConfirmScreen formationId={formationId} xi={xi} teamStats={teamStats} teamName={displayedTeamName} onBack={() => setScreen("draft")} onContinue={() => setScreen("draft")} />
       )}
       {screen === "tactics" && formationId && (
-        <TacticsScreen formationId={formationId} xi={xi} teamStats={teamStats} tactic={tactic} setTactic={setTactic} onContinue={handleTacticsContinue} />
+        <TacticsScreen formationId={formationId} xi={xi} teamStats={teamStats} tactic={tactic} setTactic={setTactic} onContinue={() => setScreen("tournament")} />
       )}
       {screen === "tournament" && userTournamentStats && tactic && (
         <TournamentScreen

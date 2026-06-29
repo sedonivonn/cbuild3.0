@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 13 frontend testing of unified Komuta Merkezi (Command Center) DraftScreen. Core flow verified end-to-end: HomeScreen YENİ DRAFT → unified DraftScreen (no FormationScreen detour); 3-column layout fully present with all required data-testids; formation-4-3-3 active by default; formation switching works (4-4-2 confirmed); roll-dice opens FIFA-style pool-modal with slot-machine spinner (ZAR DÖNÜYOR) + rolled-team-name/rolled-season reveal + 13 player cards; selecting a pool card closes modal and shows SEÇİLİ banner with green slot hints; placement clicks place the player (roster-row updates with name + OVR, roster-count increments to 1/11); tactic-GEGENPRESS highlights with amber ring; start-tournament-button gating works (disabled until 11/11 + tactic, enabled after); clicking start-tournament-button navigates DIRECTLY to TournamentScreen (group stage MD 1) — confirming Confirm & Tactics screens are skipped. The visual UX matches the Turkish user's premium FIFA-card-opening expectation.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "DraftScreen — CHANGE button",
+        "issue": "Clicking data-testid='change-button' replaces the pool (verified visually: 'Real Madrid' became '1995 Real Madrid') BUT does NOT decrement data-testid='changes-remaining' (stayed at 3/3). The data-testid='change-year-button' (YIL) correctly decremented to 2/3 in the same session. Suggests onUseChange(lucky) call inside handleChange's setTimeout in DraftScreen.jsx is not reaching App.js handleUseChange, or is being lost. Worth a closer look at the setTimeout closure / lucky path. NOTE: could not 100% reproduce in two separate test sessions but observed in the primary run — flag for investigation.",
+        "selector": "[data-testid='change-button']",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "DraftScreen",
+        "issues": ["Layout is clean, glass cards work, amber active states crisp, pitch slot hints (green/blocked) are visually clear, modal blur looks premium — no design issues noted"]
+      }
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Investigate CHANGE button (data-testid='change-button') failing to decrement changes-remaining. Hypothesis: handleChange's setTimeout callback in /app/frontend/src/screens/DraftScreen.jsx is calling onUseChange(lucky) but the lucky-path may have a stale-closure issue or React 18 batching artifact. Compare against handleChangeYear which works correctly — only difference is the lucky=true branch. Possibly setChanges in App.js needs to also be revisited.",
+    "Synthetic test of team-overall with placeholder players produced 'NaN' (data-testid='team-overall'). This is because computeTeamStats expects player.ratings to be a numeric structure that synthetic players lack — NOT a real bug, only a synthetic-test artifact. Real placed players (Mbappé etc.) showed correct OVR. Confirmed safe."
+  ],
+  "critical_code_review_comments": [
+    "DraftScreen.jsx is 533 lines — still under the 700-line threshold but approaching the limit. Consider extracting SlotSpinner + the pool-modal AnimatePresence block into a separate PoolRevealModal component for future maintainability.",
+    "MERGED_POOL is computed at module load time (top of DraftScreen.jsx). That is fine for current static data, but if SEASONS/QUARTERFINALISTS ever become dynamic this would need to move into useMemo.",
+    "Line 533: `const _unusedDice = DiceButton; void _unusedDice;` — dead-code retention for tree-shaking. Cleaner to remove the import entirely if DiceButton is no longer used inline.",
+    "handleFormationChange uses window.confirm — works but inconsistent with the rest of the app's styled modals. Low priority."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (frontend-only request)", "frontend": "95%" },
+  "test_credentials": "N/A",
+  "seed_data_creation": "Used localStorage injection of ucl_draft_save_v1 with a synthetic 11-player XI for 4-4-2 to fast-forward to the ready-to-start gate and verify start-tournament-button → TournamentScreen navigation. State cleared between runs.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 12 requested checks PASSED except a single behavioral inconsistency around the CHANGE button credit decrement. Note: pitch slots use data-testid='pitch-slot-N' (not 'slot-N'). FIFA card-opening UX is fully intact: spinner + reveal + card grid. ALL_TEAM_LABELS spinner cycles real team data. The new-game flow correctly skips FormationScreen, ConfirmScreen, and TacticsScreen — they remain in App.js only as legacy reachable routes for shared-URL/save backward compatibility, which is by design.",
+  "rca of the issue": "CHANGE button bug — Suspected RCA: In DraftScreen.jsx handleChange (lines 87-100), the lucky-path captures `const lucky = changes.luckyRemaining > 0;` at click time, then calls onUseChange(lucky) inside a 900ms setTimeout. App.js handleUseChange uses a functional setState updater so it should be safe. Difference vs. handleChangeYear (which works) is only the lucky=true branch and the candidates filter. Reproduction: 1) Click YENİ DRAFT, 2) Click roll-dice-button, 3) Close pool modal, 4) Click change-button. Expected: changes-remaining = 2/3. Actual: changes-remaining stays at 3/3 (although pool team did change, confirming handleChange ran). Mitigation: add a console.log inside onUseChange in App.js handleUseChange to verify whether the call ever arrives; if it does, inspect React render order; if not, inspect closure capture inside setTimeout."
+}
