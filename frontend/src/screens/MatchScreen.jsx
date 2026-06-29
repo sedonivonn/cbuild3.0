@@ -56,10 +56,29 @@ export const MatchScreen = ({ match, onClose }) => {
   const isLastLeg = legIdx === legs.length - 1;
   const tie = isKnockout ? match.knockout.tie : null;
   const hasPenalties = isKnockout && tie?.penalties;
-  // Has ET on THIS specific leg. We gate on tie.et presence (and decidedBy)
-  // rather than event count, because ET may legitimately produce 0 events
-  // (e.g., scoreless extra time that goes to penalties).
   const hasExtraTime = isKnockout && isLastLeg && (!!tie?.et || tie?.decidedBy === "extra_time" || tie?.decidedBy === "penalties");
+
+  // Which side is the user on for THIS leg? Used to colour goal events:
+  // user goals stay amber/yellow, opponent goals become a neutral white.
+  const userSide = useMemo(() => {
+    if (homeRef?.isUser) return "home";
+    if (awayRef?.isUser) return "away";
+    return null;
+  }, [homeRef, awayRef]);
+
+  // Classify a single event for ticker styling.
+  // GOAL → user team = amber + pulse, opponent = white (no pulse, easier on eyes).
+  // SAVE → emerald. Everything else → muted white.
+  const eventClass = (e) => {
+    if (e.type === "GOAL") {
+      const isUserGoal = userSide && e.side === userSide;
+      return isUserGoal
+        ? "text-amber-300 goal-pulse rounded"
+        : "text-white font-semibold";
+    }
+    if (e.type === "SAVE") return "text-emerald-300";
+    return "text-white/60";
+  };
 
   useEffect(() => {
     sound.whistleStart();
@@ -262,7 +281,7 @@ export const MatchScreen = ({ match, onClose }) => {
                   key={`reg-${i}`}
                   initial={{ opacity: 0, x: -8 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className={`flex items-center gap-3 py-1 text-sm ${e.type === "GOAL" ? "text-amber-300 goal-pulse rounded" : e.type === "SAVE" ? "text-emerald-300" : "text-white/60"}`}
+                  className={`flex items-center gap-3 py-1 text-sm ${eventClass(e)}`}
                   data-testid={`match-event-${i}`}
                 >
                   <span className="font-mono text-xs w-10">{e.minute}'</span>
@@ -274,7 +293,7 @@ export const MatchScreen = ({ match, onClose }) => {
                   key={`et-${i}`}
                   initial={{ opacity: 0, x: -8 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className={`flex items-center gap-3 py-1 text-sm ${e.type === "GOAL" ? "text-amber-300 goal-pulse rounded" : e.type === "SAVE" ? "text-emerald-300" : "text-white/60"}`}
+                  className={`flex items-center gap-3 py-1 text-sm ${eventClass(e)}`}
                   data-testid={`match-event-et-${i}`}
                 >
                   <span className="font-mono text-xs w-10">{e.minute}'</span>
@@ -341,33 +360,47 @@ export const MatchScreen = ({ match, onClose }) => {
           </div>
         )}
 
-        {/* Player of the Match — for the user side, computed from THIS leg only.
-            Goalkeeper POTM shows save count instead of goals/assists.
-            BUG FIX: previously this merged stats across legs which caused inflated
-            numbers (5 goals when only 3 happened in the visible leg). */}
-        {phase === "done" && currentLeg?.userPlayerStats && currentLeg.userPlayerStats.length > 0 && (() => {
-          const players = currentLeg.userPlayerStats;
-          const potm = [...players].sort((a, b) => b.rating - a.rating)[0];
+        {/* Player of the Match — chooses the highest-rated player across BOTH
+            sides. If the opponent dominates, their player wins the trophy.
+            Goalkeeper POTM shows save count instead of goals/assists. */}
+        {phase === "done" && currentLeg && (() => {
+          const homeStats = currentLeg.homePlayerStats || [];
+          const awayStats = currentLeg.awayPlayerStats || [];
+          const all = [
+            ...homeStats.map((p) => ({ ...p, _side: "home" })),
+            ...awayStats.map((p) => ({ ...p, _side: "away" })),
+          ];
+          if (all.length === 0) return null;
+          const potm = [...all].sort((a, b) => b.rating - a.rating)[0];
           if (!potm) return null;
-          const userSideKey = currentLeg.home?.name === potm.teamName ? "home" : "away";
+          const isUserPotm = userSide && potm._side === userSide;
           const saves = (currentLeg.events || []).filter(
-            (e) => e.type === "SAVE" && e.side === userSideKey
+            (e) => e.type === "SAVE" && e.side === potm._side
           ).length;
           const isGK = potm.slot === "GK";
+          // Different visual treatment for opponent POTM — keep the gold
+          // accents but use a neutral white frame instead of full amber.
+          const containerClass = isUserPotm
+            ? "border-amber-300/40 bg-gradient-to-br from-amber-300/10 to-amber-300/0"
+            : "border-white/30 bg-gradient-to-br from-white/10 to-white/0";
+          const labelColor = isUserPotm ? "text-amber-300" : "text-white";
+          const ratingColor = isUserPotm ? "text-amber-300" : "text-white";
           return (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
-              className="mt-4 p-4 rounded-xl border border-amber-300/40 bg-gradient-to-br from-amber-300/10 to-amber-300/0"
+              className={`mt-4 p-4 rounded-xl border ${containerClass}`}
               data-testid="potm-card"
             >
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1 pr-3">
-                  <div className="font-mono text-[10px] tracking-widest text-amber-300">PLAYER OF THE MATCH</div>
+                  <div className={`font-mono text-[10px] tracking-widest ${labelColor}`}>
+                    PLAYER OF THE MATCH{!isUserPotm && " · RAKİP"}
+                  </div>
                   <div className="font-display text-2xl tracking-tight mt-0.5 truncate">{potm.name}</div>
                   {potm.teamName && (
-                    <div className="text-[10px] font-mono text-amber-300/70 tracking-wider truncate uppercase">
+                    <div className={`text-[10px] font-mono tracking-wider truncate uppercase ${isUserPotm ? "text-amber-300/70" : "text-white/65"}`}>
                       {potm.teamName}
                     </div>
                   )}
@@ -378,7 +411,7 @@ export const MatchScreen = ({ match, onClose }) => {
                   </div>
                 </div>
                 <div className="text-right shrink-0">
-                  <div className="font-display text-4xl text-amber-300">{potm.rating.toFixed(1)}</div>
+                  <div className={`font-display text-4xl ${ratingColor}`}>{potm.rating.toFixed(1)}</div>
                   <div className="text-[10px] font-mono text-white/50">REYTING</div>
                 </div>
               </div>

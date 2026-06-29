@@ -1,21 +1,38 @@
 import { TACTICS } from "../data/tactics";
 import { pickScorerAndAssist, computePlayerRatings } from "./playerStats";
 
-// After ET events are appended to a leg, recompute the leg's userPlayerStats
-// so that goals/assists scored in extra time are credited correctly.
-// `userPlayers` must be the array of user XI objects. `side` is "home" or "away".
+// After ET events are appended to a leg, recompute the leg's per-side player
+// stats so that goals/assists scored in extra time are credited correctly.
+// Generic: re-derives both home & away player stats from the current events.
 function recomputeUserStatsFromEvents(leg, userPlayers, side) {
-  if (!leg || !userPlayers || userPlayers.length === 0) return;
-  const userEvents = (leg.events || []).filter((e) => e.side === side && e.type === "GOAL");
-  const goalsFor = side === "home" ? leg.home.score : leg.away.score;
-  const goalsAgainst = side === "home" ? leg.away.score : leg.home.score;
-  const userTeamName = side === "home" ? leg.home.name : leg.away.name;
-  const { ratings, goalsMap, assistsMap } = computePlayerRatings(userPlayers, userEvents, goalsFor, goalsAgainst);
-  leg.userPlayerStats = userPlayers.map((p) => ({
+  if (!leg) return;
+  // Re-derive homePlayerStats / awayPlayerStats based on whatever players we
+  // were originally given for each side (stored on the leg by simulateMatch).
+  if (leg._homePlayers) {
+    leg.homePlayerStats = buildSidePlayerStats(
+      leg._homePlayers, leg.events, "home", leg.home.score, leg.away.score, leg.home.name
+    );
+  }
+  if (leg._awayPlayers) {
+    leg.awayPlayerStats = buildSidePlayerStats(
+      leg._awayPlayers, leg.events, "away", leg.away.score, leg.home.score, leg.away.name
+    );
+  }
+  // Keep the legacy `userPlayerStats` alias pointing at whichever side is the user.
+  if (side === "home") leg.userPlayerStats = leg.homePlayerStats || null;
+  else if (side === "away") leg.userPlayerStats = leg.awayPlayerStats || null;
+}
+
+// Build per-player stats for a single side of a single leg.
+function buildSidePlayerStats(players, allEvents, side, goalsFor, goalsAgainst, teamName) {
+  if (!players || players.length === 0) return null;
+  const sideGoalEvents = (allEvents || []).filter((e) => e.side === side && e.type === "GOAL");
+  const { ratings, goalsMap, assistsMap } = computePlayerRatings(players, sideGoalEvents, goalsFor, goalsAgainst);
+  return players.map((p) => ({
     name: p.name,
     slot: p._slot || p.primary,
     season: p._season,
-    teamName: userTeamName,
+    teamName,
     goals: goalsMap[p.name] || 0,
     assists: assistsMap[p.name] || 0,
     rating: ratings[p.name] || 6.5,
@@ -43,8 +60,8 @@ function counterBonus(aId, bId) {
   return (a?.counters?.[bId]) || 0;
 }
 
-// HARD MODE (C): user chemistry — small cohesion bonus to balance AI legacy.
-const USER_CHEMISTRY = { attack: 2, midfield: 2, defense: 2, keeper: 1, overall: 2 };
+// HARD MODE (C, tuned 62/100): user chemistry +1 per line (was +2).
+const USER_CHEMISTRY = { attack: 1, midfield: 1, defense: 1, keeper: 1, overall: 1 };
 
 // HARD MODE (C): underdog boost removed — no free help when facing stronger sides.
 function underdogBoost() {
@@ -164,35 +181,26 @@ export function simulateMatch({ home, away, homeTacticId, awayTacticId, neutral 
 
   events.sort((a, b) => a.minute - b.minute);
 
-  // Per-player ratings for the USER side (if XI provided).
+  // Per-player ratings for BOTH sides (when their XI is provided).
+  // The user side keeps its legacy `userPlayerStats` alias for back-compat.
+  const homePlayerStats = buildSidePlayerStats(homePlayers, events, "home", aScore, bScore, home.name);
+  const awayPlayerStats = buildSidePlayerStats(awayPlayers, events, "away", bScore, aScore, away.name);
   let userPlayerStats = null;
-  let userSide = null;
-  let userPlayers = null;
-  if (homeIsUser && homePlayers) { userSide = "home"; userPlayers = homePlayers; }
-  else if (awayIsUser && awayPlayers) { userSide = "away"; userPlayers = awayPlayers; }
-  if (userPlayers) {
-    const userEvents = events.filter((e) => e.side === userSide && e.type === "GOAL");
-    const goalsFor = userSide === "home" ? aScore : bScore;
-    const goalsAgainst = userSide === "home" ? bScore : aScore;
-    const { ratings, goalsMap, assistsMap } = computePlayerRatings(userPlayers, userEvents, goalsFor, goalsAgainst);
-    const userTeamName = userSide === "home" ? home.name : away.name;
-    userPlayerStats = userPlayers.map((p) => ({
-      name: p.name,
-      slot: p._slot || p.primary,
-      season: p._season,
-      teamName: userTeamName,
-      goals: goalsMap[p.name] || 0,
-      assists: assistsMap[p.name] || 0,
-      rating: ratings[p.name] || 6.5,
-    }));
-  }
+  if (homeIsUser && homePlayerStats) userPlayerStats = homePlayerStats;
+  else if (awayIsUser && awayPlayerStats) userPlayerStats = awayPlayerStats;
 
   return {
     home: { name: home.name, score: aScore, shots: aShots, onTarget: aOnTarget, xg: aXg, possession: Math.round(possessionHome) },
     away: { name: away.name, score: bScore, shots: bShots, onTarget: bOnTarget, xg: bXg, possession: 100 - Math.round(possessionHome) },
     events,
     full: { aScore, bScore },
+    // Per-side player stats — used for POTM (best of either side).
+    homePlayerStats,
+    awayPlayerStats,
     userPlayerStats,
+    // Stash the player arrays on the leg so ET recompute can rebuild stats.
+    _homePlayers: homePlayers,
+    _awayPlayers: awayPlayers,
   };
 }
 

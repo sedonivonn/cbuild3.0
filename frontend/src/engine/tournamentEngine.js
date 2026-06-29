@@ -1,18 +1,18 @@
 import { simulateMatch, simulateKnockout } from "./matchEngine";
 import { stubChampionStats } from "./overallEngine";
 
-// HARD MODE (C, tuned 55/100): user form is now neutral-ish (slight variance both ways).
-// Previously this was a guaranteed debuff (-3..+1) on every match, which was unfair.
+// HARD MODE (C, tuned 62/100): user form is roughly neutral with mild variance.
+// Slight slant toward -0.25 (was +0.5) so individual matches feel less guaranteed.
 function applyMatchForm(userStats) {
   if (!userStats) return userStats;
   const r = (lo, hi) => lo + Math.random() * (hi - lo);
   return {
     ...userStats,
-    overall:  Math.max(50, Math.round(userStats.overall  + r(-1, 2))),
-    attack:   Math.max(50, Math.round(userStats.attack   + r(-1, 2))),
-    midfield: Math.max(50, Math.round(userStats.midfield + r(-1, 2))),
-    defense:  Math.max(50, Math.round(userStats.defense  + r(-1, 2))),
-    keeper:   Math.max(50, Math.round(userStats.keeper   + r(-1, 2))),
+    overall:  Math.max(50, Math.round(userStats.overall  + r(-1.5, 1))),
+    attack:   Math.max(50, Math.round(userStats.attack   + r(-1.5, 1))),
+    midfield: Math.max(50, Math.round(userStats.midfield + r(-1.5, 1))),
+    defense:  Math.max(50, Math.round(userStats.defense  + r(-1.5, 1))),
+    keeper:   Math.max(50, Math.round(userStats.keeper   + r(-1.5, 1))),
   };
 }
 

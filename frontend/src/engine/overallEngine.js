@@ -56,9 +56,11 @@ export function computeTeamStats(xi) {
 
 // For opponent (champion) teams - we have a precomputed baseOverall.
 // Derive line strengths by sampling around baseOverall.
-// HARD MODE (C, tuned 55/100): AI legacy reduced from +3 → +1, stage bonus halved.
-// User chemistry restored to balance.
-const HARD_MODE_FACTOR = 0.5;
+// HARD MODE (C, tuned 62/100): AI legacy reduced from +3 → +1, stage bonus
+// scaled by 0.62. Combined with the lighter user form (avg 0) and reduced
+// chemistry (+1 per line), this gives a moderately challenging tournament
+// where strong drafts still reach the final but easy stomp wins are rare.
+const HARD_MODE_FACTOR = 0.62;
 export function stubChampionStats(champion, stageBonus = 0, legacyBonus = 1) {
   const o = champion.baseOverall + legacyBonus + stageBonus * HARD_MODE_FACTOR;
   // Slight variance, but tilted toward attack for higher-rated teams

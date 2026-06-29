@@ -11,6 +11,10 @@ A web-based football draft & simulation game inspired by 38-0.online. Players ra
 - Design: EA FC + Football Manager hybrid (dark theme, FUT cards, FM-style ticker)
 
 ## Latest Tweaks — Feb 2026
+- Difficulty re-tuned 55 → 62: `HARD_MODE_FACTOR` 0.5 → 0.62, `legacyBonus` default 1, user form `r(-1.5, 1)` (was -1..+2), user chemistry +1 per line (was +2)
+- POTM now considers BOTH sides: opponent's best player can win if they outperform user XI. Opponent POTM card uses white frame (vs gold for user) to distinguish
+- Event ticker color coding: user goals stay amber/yellow, opponent goals now white (less eye-straining)
+- `homePlayerStats` & `awayPlayerStats` now both computed in `simulateMatch`; ET recompute generalized via `buildSidePlayerStats`
 - Hall of Fame & Trophy Cabinet (localStorage) — UCL kazanınca otomatik kaydedilir, ana ekranda en iyi 3 draft önizlemesi, detaylı kabin ekranı
 - Match Stats Hub — gol/asist atribüsyonu (OVR + pozisyon ağırlıklı), Player of the Match kartı (takım adıyla), maç sonu istatistikler
 - Tournament Awards — Altın Krampon, Altın Top, Oyun Kurucu + Turnuva En İyi 11 (gol/asist/MOM/reyting tablo)
