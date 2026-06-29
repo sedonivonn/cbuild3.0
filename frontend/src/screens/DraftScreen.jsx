@@ -502,10 +502,43 @@ export const DraftScreen = ({
               </>
             )}
             {isDraftComplete && (
-              <div className="text-center py-12">
-                <div className="font-mono text-xs tracking-widest text-amber-300 mb-2">🏆</div>
-                <div className="font-display text-2xl text-amber-300 leading-tight">KADRON HAZIR</div>
-                <div className="text-xs text-white/55 mt-2">Sağ üstten TURNUVAYA BAŞLA</div>
+              <div className="flex flex-col h-full" data-testid="final-roster-cards">
+                <div className="text-center mb-3">
+                  <div className="font-mono text-xs tracking-widest text-amber-300 mb-1">🏆 KADRON HAZIR</div>
+                  <div className="font-display text-2xl text-amber-300 leading-tight">{teamName || "DRAFT TAKIMI"}</div>
+                  {liveStats && (
+                    <div className="mt-2 inline-flex items-center gap-3 px-3 py-1 rounded-full bg-black/40 border border-amber-300/30">
+                      <span className="text-[10px] font-mono text-white/55 tracking-widest">TAKIM OVR</span>
+                      <span className="font-display text-2xl text-amber-300 leading-none">{liveStats.overall}</span>
+                    </div>
+                  )}
+                </div>
+                <div className="grid grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2 max-h-[520px] overflow-y-auto pr-1">
+                  {xi.map((player, i) => (
+                    player ? (
+                      <PlayerCard
+                        key={i}
+                        player={player}
+                        season={player._season}
+                        club={player._club}
+                        crest={player._crest}
+                        country={player._country}
+                        size="xs"
+                      />
+                    ) : null
+                  ))}
+                </div>
+                {liveStats && (
+                  <div className="mt-3 grid grid-cols-4 gap-2">
+                    <Stat label="KLC" v={liveStats.keeper} />
+                    <Stat label="DEF" v={liveStats.defense} />
+                    <Stat label="ORT" v={liveStats.midfield} />
+                    <Stat label="HÜC" v={liveStats.attack} />
+                  </div>
+                )}
+                <div className="mt-3 text-center text-xs text-white/55">
+                  Sağ üstten <span className="text-amber-300 font-display">TURNUVAYA BAŞLA</span>
+                </div>
               </div>
             )}
           </div>

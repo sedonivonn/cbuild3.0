@@ -18,7 +18,7 @@ export const PlayerCard = ({ player, season, club, crest, country, size = "md", 
   const showBallon = isBallonDorSeason(player.name, season);
   // Slightly larger cards so full name fits
   const sizes = {
-    xs: "w-28",
+    xs: "w-32",
     sm: "w-36",
     md: "w-44",
     lg: "w-56",
