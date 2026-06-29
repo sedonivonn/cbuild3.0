@@ -79,6 +79,14 @@ export const DraftScreen = ({
   const handleRoll = () => {
     if (isDraftComplete) return;
     if (phase === "setup" && !tactic) { sound.error(); return; }
+    // If there's already a rolled pool (e.g. user went "AYARLARA DÖN" then came
+    // back), don't re-roll — just continue into the draft phase with the same
+    // team. A new roll only happens via the CHANGE button (handleChange).
+    if (pool) {
+      sound.click();
+      setPhase("draft");
+      return;
+    }
     if (phase === "setup") setPhase("draft");
     setRolling(true);
     sound.dice();
@@ -208,7 +216,7 @@ export const DraftScreen = ({
           {phase === "draft" && filledCount === 0 && (
             <button
               type="button"
-              onClick={() => { sound.click(); setPhase("setup"); setPool(null); setPoolOpen(false); setSelectedPlayerIdx(-1); }}
+              onClick={() => { sound.click(); setPhase("setup"); setPoolOpen(false); setSelectedPlayerIdx(-1); }}
               data-testid="back-to-setup-button"
               className="btn-ghost text-xs"
             >
@@ -340,10 +348,27 @@ export const DraftScreen = ({
                 )}
               </>
             )}
-            {pool && !rolling && (
+            {pool && !rolling && !isDraftComplete && (
+              <>
+                <div className="text-center mb-3 text-[11px] text-white/70 font-mono tracking-widest">
+                  Çekildi: <span className="text-amber-300">{pool.season} {pool.team.club}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRoll}
+                  data-testid="continue-to-draft-button"
+                  className="w-full btn-primary text-base py-3"
+                >
+                  DRAFT&apos;A DEVAM ET →
+                </button>
+                <div className="text-[10px] text-white/45 mt-2 text-center font-mono tracking-widest">
+                  Aynı takım korunur · yeni zar için CHANGE kullan
+                </div>
+              </>
+            )}
+            {pool && !rolling && isDraftComplete && (
               <div className="text-center py-2 text-[10px] text-white/55 font-mono tracking-widest">
                 Çekildi: {pool.season} {pool.team.club}
-                <div className="mt-1 text-amber-300/80">DRAFT MODUNA GEÇİLDİ</div>
               </div>
             )}
             {isDraftComplete && (

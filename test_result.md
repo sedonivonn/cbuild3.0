@@ -111,32 +111,46 @@ frontend:
     file: "frontend/src/screens/TournamentScreen.jsx"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
-    status_history:
-        -working: "NA"
-        -agent: "main"
-        -comment: "Root cause: aggregateMatchStats spread-copied prev but mutated shared player objects (next[p.name].matches += 1). React 18 StrictMode double-invokes updaters; the second invocation reused the already-mutated object, double-counting matches/goals/assists. Combined with ties counted as 1 (not legs), totals were inflated to ~19. Fix: deep-clone each entry per update (build next[p.name] from base + new values, no mutation) AND honor p.legs so a 2-leg tie adds 2 matches. Group(6)+R16(2)+QF(2)+SF(2)+F(1)=13 max."
-
-  - task: "TopBar 13-0 logo bigger and shifted slightly right"
-    implemented: true
-    working: "NA"
-    file: "frontend/src/components/TopBar.jsx"
-    stuck_count: 0
-    priority: "low"
     needs_retesting: false
     status_history:
         -working: "NA"
         -agent: "main"
-        -comment: "Increased height h-9 -> h-11, min-w 44 -> 56, padding px-2.5 -> px-3, font text-base -> text-xl. Added ml-2 md:ml-4 to shift slightly right. Visually verified via screenshot."
+        -comment: "Root cause: aggregateMatchStats spread-copied prev but mutated shared player objects. React 18 StrictMode double-invokes updaters; the second invocation reused the already-mutated object, double-counting matches/goals/assists. Combined with ties counted as 1 (not legs), totals were inflated to ~19. Fix: deep-clone each entry per update AND honor p.legs so a 2-leg tie adds 2 matches. Group(6)+R16(2)+QF(2)+SF(2)+F(1)=13 max."
+
+  - task: "AYARLARA DÖN preserves drafted pool (no re-roll)"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/screens/DraftScreen.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Bug: Clicking 'AYARLARA DÖN' button then coming back re-rolled a new random team every time (unlimited free re-rolls bypassing CHANGE HAKKI). Fix: 1) Back button no longer setPool(null); pool persists. 2) handleRoll: if pool already exists, just transition phase setup->draft without re-rolling. 3) Setup phase shows a new 'DRAFT'A DEVAM ET' button when pool exists, with text 'Aynı takım korunur · yeni zar için CHANGE kullan'. New random team only via CHANGE button (limited 3/3) or initial ROLL DICE."
+
+  - task: "Elimination flow: dramatic ELENDİN screen + SİMÜLASYONU BİTİR button"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/screens/TournamentScreen.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Bug: When user lost a knockout tie, autoCompleteBracket ran instantly; user dumped straight into the post-tournament screen with no closure. Fix: playR16/QF/SF now set stage='eliminated' and saveState without auto-completing. The 'eliminated' stage renders a centered glass card: skull emoji + 'ELENDİN' + '{stage}'NDE VEDA' + description + 'SİMÜLASYONU BİTİR' button. Brackets are HIDDEN in this stage. Clicking the button runs autoCompleteBracket, moves to 'eliminated_done', revealing full bracket + champion + awards as before."
 
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 1
+  test_sequence: 2
   run_ui: true
 
 test_plan:
   current_focus:
+    - "AYARLARA DÖN preserves drafted pool (no re-roll)"
+    - "Elimination flow: dramatic ELENDİN screen + SİMÜLASYONU BİTİR button"
     - "Tournament stats: matches counter must cap at 13 (no inflation due to mutation/StrictMode)"
   stuck_tasks: []
   test_all: false
@@ -144,4 +158,5 @@ test_plan:
 
 agent_communication:
     -agent: "main"
-    -message: "Please test ONLY the matches counter cap on the TrophyScreen. Flow: open the homepage (REACT_APP_BACKEND_URL host, the frontend), click 'YENI DRAFT BAŞLAT' to start a new draft. The app is fully client-side; you'll need to go through the draft flow (player selection, formation/tactic selection) and then play through the entire tournament until the Trophy screen appears. On TrophyScreen, locate the 'ŞAMPİYONLAR LİGİ YILIN OYUNCUSU' card and read the MAÇ value (the first StatChip). It MUST be <= 13. If user is eliminated earlier, MAÇ should be <= 6 (group only), <= 8 (R16 out), <= 10 (QF out), <= 12 (SF out). Also reasonable check: GOL and ASIST values are not absurdly high (rough sanity). If you cannot complete the full tournament UI, alternatively read /app/frontend/src/screens/TournamentScreen.jsx aggregateMatchStats logic and verify deep-copy + p.legs handling is in place; that's enough for code-level pass. Note: do not test other unrelated behavior."
+    -message: "Three things to verify on the frontend. Use http://localhost:3000.\n\n(A) AYARLARA DÖN preserves team:\n  1. Click 'YENI DRAFT BAŞLAT'.\n  2. Click 'GEGENPRESS' tactic (button[data-testid=\"tactic-GEGENPRESS\"]).\n  3. Click 'ROLL DICE' (button[data-testid=\"roll-dice-button\"]).\n  4. Wait ~1.5s for spin to finish. Read the season + club shown on the cards (e.g. '2017 Real Madrid'). Capture screenshot 1.\n  5. Click 'AYARLARA DÖN' (button[data-testid=\"back-to-setup-button\"]).\n  6. In setup phase, verify a 'DRAFT'A DEVAM ET' (button[data-testid=\"continue-to-draft-button\"]) appears with text 'Çekildi: <same team>'. The team here MUST match step 4.\n  7. Click that button. Verify we're back in draft view and the same team is shown — NO re-roll. Capture screenshot 2.\n  8. Repeat the round-trip 2 more times — each time the same team must persist. CHANGE HAKKI should remain 3/3.\n  9. Now click 'CHANGE' (the visible CHANGE button next to YIL) — this is the only way a new team should be drawn. Verify a new team is rolled and CHANGE HAKKI decrements to 2/3.\n\n(B) Eliminated screen (best-effort, depends on RNG):\n  1. After a fresh draft, fill all 11 players (click any card from pool, then the matching slot on pitch). Use any random picks.\n  2. Click 'TURNUVAYA BAŞLA'. Play through group matchdays (6x button[data-testid=\"play-matchday-button\"]) until KO stage begins. Then play R16 (button[data-testid=\"play-r16-button\"]).\n  3. If user wins, continue playing QF/SF/Final — at some stage user is statistically likely to lose. On loss, verify:\n     - The eliminated screen appears with: skull emoji, 'ELENDİN' label, '<STAGE>'NDE VEDA' headline, and a 'SİMÜLASYONU BİTİR' button (button[data-testid=\"finish-simulation-button\"]).\n     - No bracket/QF/SF/Final views visible at this stage.\n  4. Click SİMÜLASYONU BİTİR — the full bracket should appear with champion + awards.\n  5. If user wins entire tournament (lucky), test elimination by restarting with weaker random picks. If still not eliminated after 2 tries, mark elimination test as 'NA - unable to reproduce' but verify the code logic exists (check stage='eliminated' branch in TournamentScreen.jsx).\n\n(C) Match count cap:\n  - At the TrophyScreen (if user wins) or in eliminated_done view's TournamentAwards, locate the player-of-tournament 'MAÇ' value. Must be <= 13. If eliminated at R16: <=8; QF: <=10; SF: <=12.\n\nReport per-section pass/fail with screenshots."
+

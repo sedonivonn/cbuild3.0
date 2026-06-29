@@ -282,7 +282,9 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, userXi
       const userWon = (isUserTeam(userTie.home) && userTie.tie.winner === "home") || (isUserTeam(userTie.away) && userTie.tie.winner === "away");
       onMatch({ stage: "Son 16", knockout: userTie, userWon });
       if (!userWon) {
-        const next = autoCompleteBracket({ ...state, r16, qf, eliminatedAt: "Son 16" });
+        // Show the "ELENDİN" screen first; user will press "SİMÜLASYONU BİTİR"
+        // to auto-complete the rest of the bracket.
+        const next = { ...state, r16, qf, stage: "eliminated", eliminatedAt: "Son 16" };
         setState(next); onSaveState && onSaveState(next);
         return;
       }
@@ -307,7 +309,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, userXi
       const userWon = (isUserTeam(userTie.home) && userTie.tie.winner === "home") || (isUserTeam(userTie.away) && userTie.tie.winner === "away");
       onMatch({ stage: "Çeyrek Final", knockout: userTie, userWon });
       if (!userWon) {
-        const next = autoCompleteBracket({ ...state, qf, sf, eliminatedAt: "Çeyrek Final" });
+        const next = { ...state, qf, sf, stage: "eliminated", eliminatedAt: "Çeyrek Final" };
         setState(next); onSaveState && onSaveState(next);
         return;
       }
@@ -329,7 +331,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, userXi
       const userWon = (isUserTeam(userTie.home) && userTie.tie.winner === "home") || (isUserTeam(userTie.away) && userTie.tie.winner === "away");
       onMatch({ stage: "Yarı Final", knockout: userTie, userWon });
       if (!userWon) {
-        const next = autoCompleteBracket({ ...state, sf, final, eliminatedAt: "Yarı Final" });
+        const next = { ...state, sf, final, stage: "eliminated", eliminatedAt: "Yarı Final" };
         setState(next); onSaveState && onSaveState(next);
         return;
       }
@@ -402,7 +404,37 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, userXi
         </div>
       )}
 
-      {(state.stage === "r16" || state.stage === "qf" || state.stage === "sf" || state.stage === "final" || state.stage === "done" || state.stage === "eliminated" || state.stage === "eliminated_done") && (
+      {state.stage === "eliminated" && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.92 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="glass rounded-2xl p-8 md:p-10 text-center max-w-2xl mx-auto"
+          data-testid="eliminated-screen"
+        >
+          <div className="text-6xl md:text-7xl mb-3" aria-hidden>💀</div>
+          <div className="font-mono text-xs tracking-[0.3em] text-red-400">ELENDİN</div>
+          <div className="font-display text-3xl md:text-5xl tracking-tight mt-2">{state.eliminatedAt}&apos;NDE VEDA</div>
+          <p className="text-white/60 mt-3 text-sm max-w-md mx-auto">
+            Senin yolculuğun burada bitti. Turnuvanın geri kalanını otomatik
+            simüle ederek kupanın kime gittiğini gör.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              sound.swoosh();
+              const finished = autoCompleteBracket({ ...state });
+              setState(finished);
+              onSaveState && onSaveState(finished);
+            }}
+            data-testid="finish-simulation-button"
+            className="btn-primary mt-6 inline-flex items-center gap-2 text-base"
+          >
+            <Play size={16} /> SİMÜLASYONU BİTİR
+          </button>
+        </motion.div>
+      )}
+
+      {(state.stage === "r16" || state.stage === "qf" || state.stage === "sf" || state.stage === "final" || state.stage === "done" || state.stage === "eliminated_done") && (
         <div className="space-y-8">
           <Bracket title="SON 16" pairs={state.r16} />
           {state.qf && <Bracket title="ÇEYREK FİNAL" pairs={state.qf} />}
@@ -463,12 +495,6 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, userXi
                 isChampion={false}
               />
             </>
-          )}
-          {state.stage === "eliminated" && (
-            <div className="glass rounded-2xl p-6 text-center text-white/70">
-              <div className="font-mono text-xs tracking-widest text-red-400">ELENDIN</div>
-              <div className="font-display text-2xl mt-1">Aşama: {state.eliminatedAt}</div>
-            </div>
           )}
         </div>
       )}
