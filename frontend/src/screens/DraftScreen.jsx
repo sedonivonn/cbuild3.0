@@ -77,7 +77,6 @@ export const DraftScreen = ({
     if (isDraftComplete) return;
     if (phase === "setup" && !tactic) { sound.error(); return; }
     if (phase === "setup") setPhase("draft");
-    setPoolOpen(true);
     setRolling(true);
     sound.dice();
     setTimeout(() => {
@@ -145,7 +144,6 @@ export const DraftScreen = ({
     if (!p || !p._placeable) { sound.error(); return; }
     sound.click();
     setSelectedPlayerIdx(idx);
-    setPoolOpen(false); // close modal so user can place on pitch
   };
 
   const handlePlaceOnSlot = (slotIdx, slot) => {
@@ -331,37 +329,9 @@ export const DraftScreen = ({
               </>
             )}
             {pool && !rolling && (
-              <div className="space-y-2">
-                <button
-                  type="button"
-                  onClick={() => { setPoolOpen(true); sound.click(); }}
-                  data-testid="open-pool-button"
-                  className="w-full btn-primary text-sm py-2 flex items-center justify-center gap-2"
-                >
-                  <Crest code={pool.team.crest} size="sm" />
-                  <span className="truncate">{pool.season} {pool.team.club}</span>
-                </button>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={handleChangeYear}
-                    disabled={changes.remaining <= 0}
-                    data-testid="change-year-button"
-                    className="btn-ghost text-xs py-2 flex items-center justify-center gap-1 disabled:opacity-30"
-                    title="Aynı kulübün farklı sezonu"
-                  >
-                    <RefreshCw size={12} /> YIL
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleChange}
-                    disabled={changes.remaining <= 0}
-                    data-testid="change-button"
-                    className="btn-ghost text-xs py-2 flex items-center justify-center gap-1 disabled:opacity-30"
-                  >
-                    <RefreshCw size={12} /> CHANGE
-                  </button>
-                </div>
+              <div className="text-center py-2 text-[10px] text-white/55 font-mono tracking-widest">
+                Çekildi: {pool.season} {pool.team.club}
+                <div className="mt-1 text-amber-300/80">DRAFT MODUNA GEÇİLDİ</div>
               </div>
             )}
             {isDraftComplete && (
@@ -371,8 +341,8 @@ export const DraftScreen = ({
         </div>
         )}
 
-        {/* MIDDLE COLUMN — pitch (full width in draft phase) */}
-        <div className={`glass rounded-2xl p-4 ${phase === "setup" ? "lg:col-span-6" : "lg:col-span-12"}`}>
+        {/* MIDDLE COLUMN — pitch (col-span varies: 6 in setup, 8 in draft) */}
+        <div className={`glass rounded-2xl p-4 ${phase === "setup" ? "lg:col-span-6" : "lg:col-span-8"}`}>
           <div className="text-xs text-white/55 mb-3 font-mono tracking-widest flex items-center justify-between">
             <span>SAHA · {formation.label} {tactic ? `· ${TACTICS[tactic].name}` : ""}</span>
             {selectedPlayer && (
@@ -460,133 +430,87 @@ export const DraftScreen = ({
           )}
         </div>
         )}
-      </div>
 
-      {/* DRAFT phase action bar — sticky bottom controls for rolling / changing */}
-      {phase === "draft" && !poolOpen && (
-        <div className="mt-4 flex items-center justify-center gap-3 flex-wrap">
-          {!isDraftComplete && (
-            <button
-              type="button"
-              onClick={handleRoll}
-              data-testid="roll-dice-button-draft"
-              className="btn-primary text-base px-6 py-3 flex items-center gap-2"
-            >
-              🎲 ROLL DICE  <span className="text-xs font-mono opacity-70">({filledCount}/{totalSlots})</span>
-            </button>
-          )}
-          {pool && (
-            <button
-              type="button"
-              onClick={() => { setPoolOpen(true); sound.click(); }}
-              data-testid="reopen-pool-button"
-              className="btn-ghost text-sm px-4 py-2 flex items-center gap-2"
-            >
-              <Crest code={pool.team.crest} size="sm" />
-              <span>{pool.season} {pool.team.club}</span>
-            </button>
-          )}
-          {pool && !isDraftComplete && (
-            <>
-              <button
-                type="button"
-                onClick={handleChangeYear}
-                disabled={changes.remaining <= 0}
-                data-testid="change-year-button-draft"
-                className="btn-ghost text-xs py-2 px-3 flex items-center gap-1 disabled:opacity-30"
-                title="Aynı kulübün farklı sezonu"
-              >
-                <RefreshCw size={12} /> YIL
-              </button>
-              <button
-                type="button"
-                onClick={handleChange}
-                disabled={changes.remaining <= 0}
-                data-testid="change-button-draft"
-                className="btn-ghost text-xs py-2 px-3 flex items-center gap-1 disabled:opacity-30"
-              >
-                <RefreshCw size={12} /> CHANGE
-              </button>
-            </>
-          )}
-          {isDraftComplete && (
-            <div className="font-display text-amber-300 text-lg tracking-widest text-center">
-              🏆 KADRON HAZIR — TURNUVAYA BAŞLA →
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* FIFA-style full-screen card reveal modal — original "kart açma" UX */}
-      <AnimatePresence>
-        {poolOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={(e) => { if (e.target === e.currentTarget) setPoolOpen(false); }}
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 10 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              className="glass rounded-2xl p-6 max-w-5xl w-full max-h-[90vh] overflow-y-auto relative"
-              data-testid="pool-modal"
-            >
-              <button
-                type="button"
-                onClick={() => setPoolOpen(false)}
-                className="absolute top-3 right-3 text-white/60 hover:text-white"
-                data-testid="close-pool-button"
-              ><X size={20} /></button>
-
-              {rolling && <SlotSpinner />}
-
-              {pool && !rolling && (
-                <>
-                  <div className="flex items-center gap-3 mb-4">
-                    <Crest code={pool.team.crest} size="lg" />
-                    <div>
-                      <div className="font-display text-2xl md:text-3xl tracking-tight" data-testid="rolled-team-name">{pool.team.club}</div>
-                      <div className="text-xs text-white/60 font-mono tracking-widest" data-testid="rolled-season">SEZON · {pool.season} {pool.team.country}</div>
+        {/* RIGHT COLUMN — draft phase: Spin the Wheel + cards */}
+        {phase === "draft" && (
+          <div className="lg:col-span-4 glass rounded-2xl p-4 flex flex-col">
+            {!pool && !rolling && !isDraftComplete && (
+              <SpinTheWheelIdle
+                onSpin={handleRoll}
+                hint={`KADRO: ${filledCount}/${totalSlots}`}
+              />
+            )}
+            {rolling && <ClubSeasonSpinner cycling={true} />}
+            {pool && !rolling && (
+              <>
+                <ClubSeasonSpinner cycling={false} season={pool.season} team={pool.team} />
+                <div className="grid grid-cols-2 gap-2 max-h-[420px] overflow-y-auto pr-1 mt-3">
+                  {sortedPool.map((p, idx) => (
+                    <div key={idx} className="relative">
+                      <PlayerCard
+                        player={p}
+                        season={pool.season}
+                        club={pool.team.club}
+                        crest={pool.team.crest}
+                        country={pool.team.country}
+                        size="xs"
+                        selected={selectedPlayerIdx === idx}
+                        disabled={!p._placeable}
+                        testId={`pool-player-${idx}`}
+                        onClick={() => handleSelectPlayer(idx)}
+                      />
+                      {p._alreadyPicked && (
+                        <span className="absolute top-1 right-1 bg-red-500 text-white text-[7px] font-bold tracking-wider px-1 py-0.5 rounded-full z-10">
+                          KADRODA
+                        </span>
+                      )}
                     </div>
+                  ))}
+                </div>
+                {!isDraftComplete && (
+                  <div className="mt-3 pt-3 border-t border-white/10 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleChangeYear}
+                      disabled={changes.remaining <= 0}
+                      data-testid="change-year-button-draft"
+                      className="flex-1 btn-ghost text-xs py-2 flex items-center justify-center gap-1 disabled:opacity-30"
+                      title="Aynı kulübün farklı sezonu"
+                    >
+                      <RefreshCw size={12} /> YIL
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleChange}
+                      disabled={changes.remaining <= 0}
+                      data-testid="change-button-draft"
+                      className="flex-1 btn-ghost text-xs py-2 flex items-center justify-center gap-1 disabled:opacity-30"
+                    >
+                      <RefreshCw size={12} /> CHANGE
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRoll}
+                      data-testid="reroll-button-draft"
+                      className="flex-1 btn-primary text-xs py-2"
+                      title="Yeni takım çek"
+                    >
+                      YENİ ZAR
+                    </button>
                   </div>
-                  <div className="text-[11px] text-white/55 mb-3 font-mono tracking-widest">
-                    KARTA TIKLA → SAHADA YEŞİL SLOTA YERLEŞTİR
-                  </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-                    {sortedPool.map((p, idx) => (
-                      <div key={idx} className="relative">
-                        <PlayerCard
-                          player={p}
-                          season={pool.season}
-                          club={pool.team.club}
-                          crest={pool.team.crest}
-                          country={pool.team.country}
-                          size="sm"
-                          selected={selectedPlayerIdx === idx}
-                          disabled={!p._placeable}
-                          testId={`pool-player-${idx}`}
-                          onClick={() => handleSelectPlayer(idx)}
-                        />
-                        {p._alreadyPicked && (
-                          <span className="absolute top-1 right-1 bg-red-500 text-white text-[8px] font-bold tracking-wider px-1.5 py-0.5 rounded-full z-10">
-                            KADRODA
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-4 text-[10px] text-white/40 font-mono">
-                    TIP: Kanat oyuncuları (LW↔RW, LM↔RM) iki taraflı oynayabilir. Yerleşen oyuncu sahada kalıcıdır.
-                  </div>
-                </>
-              )}
-            </motion.div>
-          </motion.div>
+                )}
+              </>
+            )}
+            {isDraftComplete && (
+              <div className="text-center py-12">
+                <div className="font-mono text-xs tracking-widest text-amber-300 mb-2">🏆</div>
+                <div className="font-display text-2xl text-amber-300 leading-tight">KADRON HAZIR</div>
+                <div className="text-xs text-white/55 mt-2">Sağ üstten TURNUVAYA BAŞLA</div>
+              </div>
+            )}
+          </div>
         )}
-      </AnimatePresence>
+      </div>
     </div>
   );
 };
@@ -598,7 +522,92 @@ const Stat = ({ label, v }) => (
   </div>
 );
 
-// Slot-machine style spinner — kept for the FIFA card opening feel.
+// Idle state for the right-side Spin panel — empty CLUB/SEASON boxes + Spin button.
+const SpinTheWheelIdle = ({ onSpin, hint }) => {
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.code === "Space" && !e.target.matches("input, textarea")) {
+        e.preventDefault();
+        onSpin();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onSpin]);
+
+  return (
+    <div
+      className="flex flex-col items-center justify-center flex-1 py-8 cursor-pointer select-none"
+      onClick={onSpin}
+      data-testid="spin-the-wheel-idle"
+    >
+      <div className="text-[10px] text-white/40 tracking-widest font-mono mb-1">{hint}</div>
+      <div className="flex items-center gap-3 mb-5 mt-2">
+        <SlotBox label="CLUB" empty />
+        <span className="text-white/30 font-display text-xl">×</span>
+        <SlotBox label="SEASON" empty narrow />
+      </div>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); onSpin(); }}
+        data-testid="roll-dice-button-draft"
+        className="px-6 py-3 rounded-full bg-emerald-500 hover:bg-emerald-400 text-white font-display text-lg tracking-tight shadow-lg shadow-emerald-500/30 transition-transform hover:scale-[1.03] flex items-center gap-2"
+      >
+        🎰 Spin the Wheel
+      </button>
+      <div className="text-[10px] text-white/35 mt-3 italic">veya boş alana tıkla / Boşluk tuşu</div>
+    </div>
+  );
+};
+
+// Spinner during/after roll — two boxes (CLUB & SEASON) animate independently.
+const ClubSeasonSpinner = ({ cycling, season, team }) => {
+  const [clubIdx, setClubIdx] = useState(() => Math.floor(Math.random() * ALL_TEAM_LABELS.length));
+  const [seasonIdx, setSeasonIdx] = useState(() => Math.floor(Math.random() * ALL_TEAM_LABELS.length));
+  useEffect(() => {
+    if (!cycling) return;
+    const idA = setInterval(() => setClubIdx((i) => (i + 1 + Math.floor(Math.random() * 7)) % ALL_TEAM_LABELS.length), 70);
+    const idB = setInterval(() => setSeasonIdx((i) => (i + 1 + Math.floor(Math.random() * 5)) % ALL_TEAM_LABELS.length), 95);
+    return () => { clearInterval(idA); clearInterval(idB); };
+  }, [cycling]);
+
+  const clubLabel = cycling
+    ? ALL_TEAM_LABELS[clubIdx].label.replace(/^\d+\s+/, "")
+    : (team?.club || "—");
+  const clubCrest = cycling ? ALL_TEAM_LABELS[clubIdx].crest : (team?.crest || "");
+  const seasonLabel = cycling
+    ? ALL_TEAM_LABELS[seasonIdx].label.split(" ")[0]
+    : (season || "—");
+
+  return (
+    <div className="flex flex-col items-center py-2" data-testid="club-season-spinner">
+      <div className="flex items-center gap-3 mb-2">
+        <SlotBox label="CLUB" crest={clubCrest} value={clubLabel} testId="rolled-team-name" />
+        <span className="text-white/30 font-display text-xl">×</span>
+        <SlotBox label="SEASON" value={seasonLabel} narrow testId="rolled-season" />
+      </div>
+      {cycling && (
+        <div className="font-mono text-[10px] text-amber-300 tracking-widest mt-1">ÇEKİLİYOR…</div>
+      )}
+    </div>
+  );
+};
+
+const SlotBox = ({ label, value, crest, empty, narrow, testId }) => (
+  <div className={`${narrow ? "w-20" : "w-28"} h-[72px] rounded-lg bg-black/45 border border-white/10 flex flex-col items-center justify-center p-1 relative`}>
+    <div className="absolute -top-2 left-2 text-[8px] text-white/45 tracking-widest font-mono bg-[#0a0a0a] px-1">{label}</div>
+    {empty ? (
+      <div className="text-white/15 text-2xl">·</div>
+    ) : (
+      <>
+        {crest && <Crest code={crest} size="sm" />}
+        <div className="font-display text-xs text-white text-center leading-tight mt-0.5 truncate w-full px-1" data-testid={testId}>{value}</div>
+      </>
+    )}
+  </div>
+);
+
+// Legacy slot-machine spinner — kept around (used by the obsolete modal path) but no longer rendered.
 const SlotSpinner = ({ compact = false }) => {
   const [idx, setIdx] = useState(() => Math.floor(Math.random() * ALL_TEAM_LABELS.length));
   useEffect(() => {

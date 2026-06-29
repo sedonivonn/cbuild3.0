@@ -1,0 +1,39 @@
+{
+  "summary": "Revize 17 Spin-the-Wheel inline right panel verified end-to-end via Playwright. All 9 test sections passing: (1) Setup phase 3-column layout intact, ROLL DICE disabled until tactic chosen, enabled after; (2) Transition removes setup left/right columns and shows draft right panel; (3) club-season-spinner appears with 'ÇEKİLİYOR…' during 900ms roll, then locks to rolled-team-name + rolled-season and shows 13 pool-player-N cards; (4) Card click highlights (cancel-selection-button appears) and green pitch slots become clickable — placement succeeds; (5) After placement, panel returns to spin-the-wheel-idle with hint 'KADRO: 1/11' and roll-dice-button-draft visible; (6) SPACE bar in idle triggers the spin; (7) reroll-button-draft / change-button-draft / change-year-button-draft all present and change-button-draft decrements changes-remaining (3/3 → 2/3); (8) localStorage-injected full XI yields '🏆 KADRON HAZIR' view and enabled start-tournament-button which navigates to ŞAMPIYONLAR LİGİ GRUP AŞAMASI (TEST team in Group E); (9) NEGATIVE — neither data-testid='pool-modal' nor 'close-pool-button' present anywhere across the flow.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "DraftScreen.jsx is 638 lines — still close to the 700-line limit. The legacy SlotSpinner (lines 611-634) and the unused DiceButton/_unusedDice shim (line 637) are dead code from the modal era and should be removed.",
+    "ClubSeasonSpinner instantiates two setInterval timers but the cycling=false path still mounts the component with empty interval setup; minor — no real cost since the early return guards it.",
+    "SpinTheWheelIdle attaches a global window keydown listener inside useEffect — when transitioning between idle and rolling states this listener is correctly cleaned up, but ensure no other screens listen for Space (verified none in scope).",
+    "Roll/Change/Change-Year handlers are duplicated between phases; could be extracted to a small hook (useDraftActions) to slim DraftScreen.",
+    "The 'YENİ ZAR' label vs. testid 'reroll-button-draft' is fine, but consider renaming the testid to 'new-roll-button-draft' for consistency with Turkish UI text; not blocking."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (frontend-only)", "frontend": "100%" },
+  "test_credentials": "n/a",
+  "seed_data_creation": "Injected synthetic 11-player XI into localStorage key 'ucl_draft_save_v1' to test 11/11 KADRON HAZIR view and start-tournament-button → TournamentScreen navigation. Cleared after test.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "DraftScreen has two phases: 'setup' (col-3 / col-6 / col-3) and 'draft' (col-8 pitch + col-4 right panel). Right panel states: SpinTheWheelIdle (no pool, not rolling) → ClubSeasonSpinner cycling=true (during 900ms roll) → ClubSeasonSpinner cycling=false + card grid (after lock) → idle again after placement → '🏆 KADRON HAZIR' when 11/11. Testids: spin-the-wheel-idle, club-season-spinner, rolled-team-name, rolled-season, pool-player-N, roll-dice-button-draft, reroll-button-draft, change-button-draft, change-year-button-draft. SPACE bar triggers spin only in idle state. Modal removed: pool-modal and close-pool-button are gone. SAVE_KEY remains 'ucl_draft_save_v1'.",
+  "verified_flows": [
+    "Setup intact: team-name-input, formation-4-3-3, tactic-GEGENPRESS, roll-dice-button, roster-count all visible",
+    "ROLL DICE disabled before tactic; enabled after",
+    "Transition to draft: setup roster-count / roll-dice-button / formation panel removed from DOM",
+    "club-season-spinner appears with 'ÇEKİLİYOR…' during the 900ms roll",
+    "After lock, rolled-team-name='Juventus', rolled-season='2003', 13 pool-player-N cards rendered",
+    "Bottom action bar (draft phase, pool exists): change-year-button-draft, change-button-draft, reroll-button-draft all visible",
+    "Card click selects (cancel-selection-button appears), placement on pitch slot succeeds",
+    "After placement: spin-the-wheel-idle returns with 'KADRO: 1/11' hint and roll-dice-button-draft",
+    "SPACE bar in idle triggers a new spin (club-season-spinner appears, lock completes)",
+    "change-button-draft decrements changes-remaining 3/3 → 2/3",
+    "11/11 via localStorage injection: 'KADRON HAZIR' shown, start-tournament-button enabled, click → TournamentScreen with TEST team in Group E",
+    "NEGATIVE: pool-modal and close-pool-button do NOT exist anywhere in the DOM across all phases"
+  ]
+}
