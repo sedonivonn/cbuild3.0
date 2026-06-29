@@ -27,11 +27,25 @@ export const HomeScreen = ({ onStart, hasSave, onContinue, onHallOfFame }) => {
         <div className="inline-flex items-center gap-2 mb-7 px-3 py-1 rounded-full border border-white/15 text-xs font-mono tracking-widest text-white/70">
           <Sparkles size={14} className="text-amber-300" /> 1995 — 2025 · 31 SEZON · 124 YARI FİNALİST
         </div>
-        <h1 className="font-display text-5xl md:text-7xl leading-[0.95] tracking-tight">
-          ŞAMPIYONLAR LİGİ
-          <br />
-          <span style={{ background: "linear-gradient(135deg,#FFD700 0%,#ff3b30 100%)", WebkitBackgroundClip: "text", color: "transparent" }}>
-            DRAFT BUILDER
+        <h1 className="font-display leading-[0.9] tracking-tight flex items-baseline justify-center gap-1 md:gap-2 text-[7rem] md:text-[12rem]">
+          <span
+            style={{
+              color: "#d4af37",
+              backgroundImage: "linear-gradient(180deg,#f4d77a 0%,#d4af37 45%,#a87f24 100%)",
+              WebkitBackgroundClip: "text",
+              backgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              textShadow: "0 0 28px rgba(212,175,55,0.28)",
+              filter: "drop-shadow(0 2px 0 rgba(0,0,0,0.4))",
+            }}
+          >
+            13
+          </span>
+          <span
+            className="text-white"
+            style={{ textShadow: "0 0 22px rgba(255,255,255,0.22)" }}
+          >
+            -0
           </span>
         </h1>
         <p className="mt-6 text-white/70 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">

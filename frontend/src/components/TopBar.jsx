@@ -2,15 +2,23 @@ import React from "react";
 import { Volume2, VolumeX, RotateCcw } from "lucide-react";
 import { sound } from "../engine/sounds";
 
-export const TopBar = ({ onSoundToggle, soundOn, onReset, title = "ULTIMATE CHAMPIONS LEAGUE DRAFT" }) => {
+export const TopBar = ({ onSoundToggle, soundOn, onReset, title }) => {
   return (
     <div className="w-full px-5 md:px-10 py-4 flex items-center justify-between border-b border-white/5 sticky top-0 z-30 glass">
       <div className="flex items-center gap-3">
-        <div className="w-9 h-9 rounded-md flex items-center justify-center"
-             style={{ background: "linear-gradient(135deg,#ff3b30 0%,#ff6347 100%)" }}>
-          <span className="font-display text-white text-lg">UCL</span>
+        <div
+          className="px-2.5 h-9 min-w-[44px] rounded-md flex items-center justify-center border border-white/10 bg-black/70"
+          style={{ boxShadow: "0 0 12px rgba(212,175,55,0.18), inset 0 0 6px rgba(212,175,55,0.06)" }}
+          title="13-0"
+        >
+          <span className="font-display text-base leading-none tracking-tight flex items-baseline">
+            <span style={{ color: "#d4af37", textShadow: "0 0 6px rgba(212,175,55,0.35)" }}>13</span>
+            <span className="text-white">-0</span>
+          </span>
         </div>
-        <div className="font-display text-sm md:text-lg tracking-widest text-white/90">{title}</div>
+        {title ? (
+          <div className="font-display text-sm md:text-lg tracking-widest text-white/90">{title}</div>
+        ) : null}
       </div>
       <div className="flex items-center gap-2">
         <button
