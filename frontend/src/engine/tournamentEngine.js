@@ -1,30 +1,30 @@
 import { simulateMatch, simulateKnockout } from "./matchEngine";
 import { stubChampionStats } from "./overallEngine";
 
-// HARD MODE (C, full): per-match form modifier applied to the user's XI.
-// Players tend to UNDER-perform on most match-days (range tilted negative).
+// HARD MODE (C, tuned 55/100): user form is now neutral-ish (slight variance both ways).
+// Previously this was a guaranteed debuff (-3..+1) on every match, which was unfair.
 function applyMatchForm(userStats) {
   if (!userStats) return userStats;
   const r = (lo, hi) => lo + Math.random() * (hi - lo);
   return {
     ...userStats,
-    overall:  Math.max(50, Math.round(userStats.overall  + r(-3, 1))),
-    attack:   Math.max(50, Math.round(userStats.attack   + r(-3, 1))),
-    midfield: Math.max(50, Math.round(userStats.midfield + r(-3, 1))),
-    defense:  Math.max(50, Math.round(userStats.defense  + r(-3, 1))),
-    keeper:   Math.max(50, Math.round(userStats.keeper   + r(-3, 1))),
+    overall:  Math.max(50, Math.round(userStats.overall  + r(-1, 2))),
+    attack:   Math.max(50, Math.round(userStats.attack   + r(-1, 2))),
+    midfield: Math.max(50, Math.round(userStats.midfield + r(-1, 2))),
+    defense:  Math.max(50, Math.round(userStats.defense  + r(-1, 2))),
+    keeper:   Math.max(50, Math.round(userStats.keeper   + r(-1, 2))),
   };
 }
 
-// HARD MODE (C, full): 15% chance of a "knock" in a knockout tie — small line debuff.
+// HARD MODE (C, tuned 55/100): injuries rare and mild. 5% chance, -1 OVR.
 function maybeInjury(userStats) {
-  if (Math.random() >= 0.15) return userStats;
+  if (Math.random() >= 0.05) return userStats;
   return {
     ...userStats,
-    overall:  Math.max(50, userStats.overall  - 3),
-    attack:   Math.max(50, userStats.attack   - 3),
-    midfield: Math.max(50, userStats.midfield - 2),
-    defense:  Math.max(50, userStats.defense  - 2),
+    overall:  Math.max(50, userStats.overall  - 1),
+    attack:   Math.max(50, userStats.attack   - 1),
+    midfield: Math.max(50, userStats.midfield - 1),
+    defense:  Math.max(50, userStats.defense  - 1),
   };
 }
 

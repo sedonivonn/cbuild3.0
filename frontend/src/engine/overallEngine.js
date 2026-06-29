@@ -56,11 +56,11 @@ export function computeTeamStats(xi) {
 
 // For opponent (champion) teams - we have a precomputed baseOverall.
 // Derive line strengths by sampling around baseOverall.
-// HARD MODE (C, tuned 55/100): AI legacy + stage bonuses scaled down ~25%
-// so users with strong drafts can realistically reach SF/Final.
-const HARD_MODE_FACTOR = 0.75;
-export function stubChampionStats(champion, stageBonus = 0, legacyBonus = 3) {
-  const o = champion.baseOverall + (legacyBonus + stageBonus) * HARD_MODE_FACTOR;
+// HARD MODE (C, tuned 55/100): AI legacy reduced from +3 → +1, stage bonus halved.
+// User chemistry restored to balance.
+const HARD_MODE_FACTOR = 0.5;
+export function stubChampionStats(champion, stageBonus = 0, legacyBonus = 1) {
+  const o = champion.baseOverall + legacyBonus + stageBonus * HARD_MODE_FACTOR;
   // Slight variance, but tilted toward attack for higher-rated teams
   const rng = (seed) => {
     // deterministic pseudo-random per champion

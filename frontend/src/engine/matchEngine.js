@@ -21,8 +21,8 @@ function counterBonus(aId, bId) {
   return (a?.counters?.[bId]) || 0;
 }
 
-// HARD MODE (C): user chemistry removed entirely. AI gets legacy bonus elsewhere.
-const USER_CHEMISTRY = { attack: 0, midfield: 0, defense: 0, keeper: 0, overall: 0 };
+// HARD MODE (C): user chemistry — small cohesion bonus to balance AI legacy.
+const USER_CHEMISTRY = { attack: 2, midfield: 2, defense: 2, keeper: 1, overall: 2 };
 
 // HARD MODE (C): underdog boost removed — no free help when facing stronger sides.
 function underdogBoost() {
