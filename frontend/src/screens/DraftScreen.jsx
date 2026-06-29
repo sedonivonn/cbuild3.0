@@ -457,40 +457,38 @@ export const DraftScreen = ({
               />
             )}
 
-            {/* Rolling OR has-pool — keep spinner pinned to top so card grid
-                fades in cleanly below it without the snap/jump effect. */}
+            {/* Rolling OR has-pool — spinner stays vertically CENTERED during
+                rolling (matches the idle state), then animates UP to the top
+                via Framer Motion `layout` once the pool arrives. */}
             {(rolling || (pool && !isDraftComplete)) && (
               <>
                 <motion.div
                   layout
-                  className="shrink-0"
-                  transition={{ type: "spring", stiffness: 280, damping: 28 }}
+                  transition={{ type: "spring", stiffness: 220, damping: 26 }}
+                  className={
+                    rolling
+                      ? "flex-1 flex flex-col items-center justify-center py-6"
+                      : "shrink-0"
+                  }
                 >
                   <ClubSeasonSpinner cycling={rolling} season={pool?.season} team={pool?.team} />
-                </motion.div>
-
-                <AnimatePresence mode="wait">
                   {rolling && (
                     <motion.div
-                      key="rolling-placeholder"
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.25 }}
-                      className="flex-1 flex flex-col items-center justify-center py-12"
+                      transition={{ delay: 0.25 }}
+                      className="mt-6 flex items-center gap-2 text-amber-300/80 font-mono text-xs tracking-[0.3em]"
                       data-testid="rolling-placeholder"
                     >
-                      <div className="flex items-center gap-2 text-amber-300/80 font-mono text-xs tracking-[0.3em]">
-                        <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0 }}>●</motion.span>
-                        <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0.18 }}>●</motion.span>
-                        <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0.36 }}>●</motion.span>
-                        <span className="ml-2">ZAR DÖNÜYOR</span>
-                      </div>
-                      <div className="text-white/30 text-[10px] font-mono tracking-widest mt-3">
-                        OYUNCULAR YÜKLENİYOR…
-                      </div>
+                      <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0 }}>●</motion.span>
+                      <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0.18 }}>●</motion.span>
+                      <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0.36 }}>●</motion.span>
+                      <span className="ml-2">ZAR DÖNÜYOR</span>
                     </motion.div>
                   )}
+                </motion.div>
+
+                <AnimatePresence>
                   {!rolling && pool && (
                     <motion.div
                       key={`pool-${pool.season}-${pool.team.club}`}

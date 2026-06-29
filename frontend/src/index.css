@@ -133,7 +133,7 @@ html, body, #root {
 .pitch::before {
     top: 50%; left: 0; right: 0;
     border-left: 0; border-right: 0; border-bottom: 0;
-    border-top: 2px dashed rgba(255,255,255,0.22);
+    border-top: 2px solid rgba(255,255,255,0.32);
 }
 .pitch::after {
     left: 50%; top: 50%;

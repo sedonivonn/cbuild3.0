@@ -88,14 +88,15 @@ export const Pitch = ({
           <motion.div
             // STABLE KEY: use only idx so React re-uses the same DOM node when
             // formation changes. That lets `top`/`left` transition smoothly.
-            // Previously `slot.id + idx` caused unmount/remount when slot id
-            // changed (e.g. LM → LW), killing the animation for those slots.
+            // initial={false} → render at destination on mount, no jump.
+            // We animate top/left only (no transform-based props) so the
+            // Tailwind `-translate-x-1/2 -translate-y-1/2` keeps each slot
+            // visually centered on its anchor point.
             key={idx}
-            layout
+            initial={false}
+            animate={{ top: `${slot.top}%`, left: `${slot.left}%` }}
             transition={{ type: "spring", stiffness: 280, damping: 30, mass: 0.6 }}
             className="absolute -translate-x-1/2 -translate-y-1/2"
-            style={{ top: `${slot.top}%`, left: `${slot.left}%` }}
-            animate={{ top: `${slot.top}%`, left: `${slot.left}%` }}
           >
             <Tag
               {...interactiveProps}
