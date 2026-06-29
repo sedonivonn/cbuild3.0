@@ -32,6 +32,7 @@ export function encodeDraft({ formationId, teamName, xi }) {
           cl: p._club || "",
           cr: p._crest || "",
           co: p._country || "",
+          sl: p._slot || "",
         }
       : null
   );
@@ -58,6 +59,7 @@ export function decodeDraft(code) {
             _club: p.cl,
             _crest: p.cr,
             _country: p.co,
+            _slot: p.sl || "",
           }
         : null
     );

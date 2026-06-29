@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { DiceButton } from "../components/DiceButton";
 import { PlayerCard } from "../components/PlayerCard";
@@ -12,6 +12,7 @@ import { sound } from "../engine/sounds";
 import { SEASONS } from "../data/seasons";
 import { QUARTERFINALISTS } from "../data/quarterfinalists";
 import { computeTeamStats } from "../engine/overallEngine";
+import { ShareMenu } from "../components/ShareMenu";
 import { RefreshCw, X, Flame, Network, Shield, Play } from "lucide-react";
 
 const TACTIC_ICONS = { Flame, Network, Shield };
@@ -47,6 +48,8 @@ export const DraftScreen = ({
   const totalSlots = formation.slots.length;
   const isDraftComplete = filledCount >= totalSlots;
   const readyToStart = isDraftComplete && tactic;
+  // Ref pointing to the pitch area, used for "share as image" export.
+  const pitchRef = useRef(null);
 
   const pickedNames = useMemo(() => new Set(xi.filter(Boolean).map((p) => p.name)), [xi]);
 
@@ -158,6 +161,7 @@ export const DraftScreen = ({
       _club: pool.team.club,
       _crest: pool.team.crest,
       _country: pool.team.country,
+      _slot: slot.pos,
     };
     setXi(newXi);
     setPool(null);
@@ -224,6 +228,14 @@ export const DraftScreen = ({
           >
             <Play size={16} /> TURNUVAYA BAŞLA
           </button>
+          {isDraftComplete && (
+            <ShareMenu
+              targetRef={pitchRef}
+              draft={{ formationId, teamName: teamName || "DRAFT TAKIMI", xi }}
+              shareText={`${teamName || "DRAFT TAKIMI"} kadrosunu kurdum. Sen bunu yenebilir misin?`}
+              filename={`${(teamName || "draft").replace(/\s+/g, "-").toLowerCase()}.png`}
+            />
+          )}
         </div>
       </div>
 
@@ -351,14 +363,16 @@ export const DraftScreen = ({
               <span className="text-amber-300">YEŞİL SLOTA TIKLA</span>
             )}
           </div>
-          <Pitch
-            formationId={formationId || "4-3-3"}
-            xi={xi}
-            onSlotClick={handlePlaceOnSlot}
-            slotHints={slotHints}
-            interactive={true}
-            tactic={tactic}
-          />
+          <div ref={pitchRef} className="rounded-xl overflow-hidden">
+            <Pitch
+              formationId={formationId || "4-3-3"}
+              xi={xi}
+              onSlotClick={handlePlaceOnSlot}
+              slotHints={slotHints}
+              interactive={true}
+              tactic={tactic}
+            />
+          </div>
           {selectedPlayer && (
             <div className="mt-3 p-2 rounded-lg bg-amber-300/10 border border-amber-300/30 text-xs text-amber-200 flex items-center justify-between">
               <span>SEÇİLİ: <strong>{selectedPlayer.name}</strong> ({selectedPlayer.primary})</span>

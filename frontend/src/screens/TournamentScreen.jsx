@@ -6,6 +6,7 @@ import { drawGroups, generateGroupFixtures } from "../engine/draftEngine";
 import { SEASONS } from "../data/seasons";
 import { sound } from "../engine/sounds";
 import { Play, Trophy } from "lucide-react";
+import { TournamentAwards } from "./TournamentAwards";
 
 // Pick 1 random semi-finalist per season and compute its baseOverall from top-11 players.
 function pickOpponentsFromSemifinalists() {
@@ -49,8 +50,73 @@ function buildTeamRefs(userTeam) {
   return [user, ...opponents];
 }
 
-export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatch, onTrophy, savedState, onSaveState }) => {
+export const TournamentScreen = ({ userStats, userTacticId, userTeamName, userXi, onMatch, onTrophy, savedState, onSaveState }) => {
   const [state, setState] = useState(savedState || null);
+
+  // Aggregated per-player tournament stats (goals/assists/MOM/rating).
+  const [tournamentStats, setTournamentStats] = useState(() => savedState?.tournamentStats || {});
+
+  // Sync tournamentStats into the persisted tournament state whenever they change.
+  useEffect(() => {
+    if (!state) return;
+    if (!tournamentStats || Object.keys(tournamentStats).length === 0) return;
+    onSaveState && onSaveState({ ...state, tournamentStats });
+  }, [tournamentStats]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Merge per-match player stats into the running tournament aggregate.
+  const aggregateMatchStats = (matchResult) => {
+    if (!matchResult || !matchResult.userPlayerStats) return;
+    setTournamentStats((prev) => {
+      const next = { ...prev };
+      // Find MOM of this match (highest rating)
+      const mom = [...matchResult.userPlayerStats].sort((a, b) => b.rating - a.rating)[0];
+      matchResult.userPlayerStats.forEach((p) => {
+        if (!next[p.name]) next[p.name] = { name: p.name, slot: p.slot, season: p.season, goals: 0, assists: 0, matches: 0, totalRating: 0, mom: 0 };
+        next[p.name].goals += p.goals;
+        next[p.name].assists += p.assists;
+        next[p.name].matches += 1;
+        next[p.name].totalRating += p.rating;
+        if (mom && mom.name === p.name) next[p.name].mom += 1;
+      });
+      return next;
+    });
+  };
+
+  // Helper: extract user-side player stats from a knockout tie (sum across legs/ET).
+  // BUG FIX: explicitly init goals/assists/rating to 0 so the spread doesn't
+  // pre-fill them and cause double-counting on the very first leg.
+  const tieToMergedPlayerStats = (tie) => {
+    if (!tie) return null;
+    const sources = [];
+    if (tie.legs) sources.push(...tie.legs);
+    if (tie.match) sources.push(tie.match);
+    const merged = {};
+    sources.forEach((leg) => {
+      (leg.userPlayerStats || []).forEach((p) => {
+        if (!merged[p.name]) {
+          merged[p.name] = {
+            name: p.name,
+            slot: p.slot,
+            season: p.season,
+            teamName: p.teamName || "",
+            goals: 0,
+            assists: 0,
+            rating: 0,
+            legs: 0,
+          };
+        }
+        merged[p.name].goals += p.goals || 0;
+        merged[p.name].assists += p.assists || 0;
+        merged[p.name].rating += p.rating || 6.5;
+        merged[p.name].legs += 1;
+      });
+    });
+    // Average rating across legs
+    return Object.values(merged).map((p) => ({
+      ...p,
+      rating: p.legs > 0 ? p.rating / p.legs : 6.5,
+    }));
+  };
 
   // Init on mount if no saved state
   useEffect(() => {
@@ -96,11 +162,14 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
     state.fixtures.forEach((groupFixtures, gi) => {
       const matches = groupFixtures[md];
       matches.forEach(({ home, away }) => {
-        const m = playGroupMatch(home, away, userStats, userTacticId, isUserTeam);
+        const m = playGroupMatch(home, away, userStats, userTacticId, isUserTeam, userXi);
         newResults[gi].push(m);
         if (isUserTeam(home) || isUserTeam(away)) userMatch = { ...m, group: gi };
       });
     });
+    if (userMatch?.result?.userPlayerStats) {
+      aggregateMatchStats(userMatch.result);
+    }
     const nextMd = md + 1;
     const next = { ...state, results: newResults, matchdayIndex: nextMd };
     if (nextMd >= 6) {
@@ -123,7 +192,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
     // Play any unplayed R16 ties (stageBonus 1)
     if (s.r16 && s.r16.some((p) => !p.played)) {
       s.r16 = s.r16.map((p) =>
-        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, true, 1), played: true })
+        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, true, 1, userXi), played: true })
       );
     }
     // Build QF bracket from R16 winners if missing
@@ -138,7 +207,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
     // Play any unplayed QF ties (stageBonus 2)
     if (s.qf.some((p) => !p.played)) {
       s.qf = s.qf.map((p) =>
-        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, true, 2), played: true })
+        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, true, 2, userXi), played: true })
       );
     }
     // Build SF from QF winners if missing
@@ -153,7 +222,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
     // Play any unplayed SF ties (stageBonus 3)
     if (s.sf.some((p) => !p.played)) {
       s.sf = s.sf.map((p) =>
-        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, true, 3), played: true })
+        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, true, 3, userXi), played: true })
       );
     }
     // Build Final from SF winners if missing
@@ -165,7 +234,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
     // Play Final (single match, stageBonus 4)
     if (s.final.some((p) => !p.played)) {
       s.final = s.final.map((p) =>
-        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, false, 4), played: true })
+        p.played ? p : ({ ...p, ...playKnockout(p.home, p.away, userStats, userTacticId, isUserTeam, false, 4, userXi), played: true })
       );
     }
     s.champion = s.final[0].tie.winner === "home" ? s.final[0].home : s.final[0].away;
@@ -175,7 +244,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
 
   const playR16 = () => {
     sound.swoosh();
-    const r16 = state.r16.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, true, 1), played: true }));
+    const r16 = state.r16.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, true, 1, userXi), played: true }));
     const qf = [];
     for (let i = 0; i < 8; i += 2) {
       const w1 = r16[i].tie.winner === "home" ? r16[i].home : r16[i].away;
@@ -184,6 +253,8 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
     }
     const userTie = r16.find((m) => isUserTeam(m.home) || isUserTeam(m.away));
     if (userTie) {
+      const merged = tieToMergedPlayerStats(userTie.tie);
+      if (merged && merged.length > 0) aggregateMatchStats({ userPlayerStats: merged });
       const userWon = (isUserTeam(userTie.home) && userTie.tie.winner === "home") || (isUserTeam(userTie.away) && userTie.tie.winner === "away");
       onMatch({ stage: "Son 16", knockout: userTie, userWon });
       if (!userWon) {
@@ -198,7 +269,7 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
 
   const playQF = () => {
     sound.swoosh();
-    const qf = state.qf.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, true, 2), played: true }));
+    const qf = state.qf.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, true, 2, userXi), played: true }));
     const sf = [];
     for (let i = 0; i < 4; i += 2) {
       const w1 = qf[i].tie.winner === "home" ? qf[i].home : qf[i].away;
@@ -207,6 +278,8 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
     }
     const userTie = qf.find((m) => isUserTeam(m.home) || isUserTeam(m.away));
     if (userTie) {
+      const merged = tieToMergedPlayerStats(userTie.tie);
+      if (merged && merged.length > 0) aggregateMatchStats({ userPlayerStats: merged });
       const userWon = (isUserTeam(userTie.home) && userTie.tie.winner === "home") || (isUserTeam(userTie.away) && userTie.tie.winner === "away");
       onMatch({ stage: "Çeyrek Final", knockout: userTie, userWon });
       if (!userWon) {
@@ -221,12 +294,14 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
 
   const playSF = () => {
     sound.swoosh();
-    const sf = state.sf.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, true, 3), played: true }));
+    const sf = state.sf.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, true, 3, userXi), played: true }));
     const w1 = sf[0].tie.winner === "home" ? sf[0].home : sf[0].away;
     const w2 = sf[1].tie.winner === "home" ? sf[1].home : sf[1].away;
     const final = [{ home: w1, away: w2, played: false }];
     const userTie = sf.find((m) => isUserTeam(m.home) || isUserTeam(m.away));
     if (userTie) {
+      const merged = tieToMergedPlayerStats(userTie.tie);
+      if (merged && merged.length > 0) aggregateMatchStats({ userPlayerStats: merged });
       const userWon = (isUserTeam(userTie.home) && userTie.tie.winner === "home") || (isUserTeam(userTie.away) && userTie.tie.winner === "away");
       onMatch({ stage: "Yarı Final", knockout: userTie, userWon });
       if (!userWon) {
@@ -241,9 +316,11 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
 
   const playFinal = () => {
     sound.swoosh();
-    const fin = state.final.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, false, 4), played: true }));
+    const fin = state.final.map((pair) => ({ ...pair, ...playKnockout(pair.home, pair.away, userStats, userTacticId, isUserTeam, false, 4, userXi), played: true }));
     const winnerRef = fin[0].tie.winner === "home" ? fin[0].home : fin[0].away;
     const userTie = fin[0];
+    const merged = tieToMergedPlayerStats(userTie.tie);
+    if (merged && merged.length > 0) aggregateMatchStats({ userPlayerStats: merged });
     const userWon = (isUserTeam(userTie.home) && userTie.tie.winner === "home") || (isUserTeam(userTie.away) && userTie.tie.winner === "away");
     // Pass trophy candidate via the match payload — App.js will trigger trophy after modal closes
     onMatch({ stage: "Final", knockout: userTie, userWon, championRef: winnerRef });
@@ -309,43 +386,59 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, onMatc
           {state.final && <Bracket title="FİNAL" pairs={state.final} final />}
 
           {state.stage === "done" && state.champion && (
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="glass rounded-2xl p-8 text-center">
-              <Trophy size={48} className="text-amber-300 mx-auto mb-3" />
-              <div className="font-mono text-xs tracking-widest text-amber-300">KUPA SAHİBİ</div>
-              <div className="font-display text-4xl tracking-tight mt-2">{state.champion.label}</div>
-            </motion.div>
+            <>
+              <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="glass rounded-2xl p-8 text-center">
+                <Trophy size={48} className="text-amber-300 mx-auto mb-3" />
+                <div className="font-mono text-xs tracking-widest text-amber-300">KUPA SAHİBİ</div>
+                <div className="font-display text-4xl tracking-tight mt-2">{state.champion.label}</div>
+              </motion.div>
+              <TournamentAwards
+                tournamentStats={tournamentStats}
+                userXi={userXi}
+                userTeamName={userTeamName}
+                isChampion={state.champion?.isUser}
+              />
+            </>
           )}
           {state.stage === "eliminated_done" && state.champion && (
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="glass rounded-2xl p-6 text-center">
-              <div className="font-mono text-xs tracking-widest text-red-400">{state.eliminatedAt || "ELENDİN"}</div>
-              <div className="font-display text-2xl mt-1 text-white/70">Senin için final geçti — ama turnuva devam etti.</div>
-              <div className="mt-4 pt-4 border-t border-white/10">
-                <Trophy size={40} className="text-amber-300 mx-auto mb-2" />
-                <div className="font-mono text-xs tracking-widest text-amber-300">ŞAMPİYON</div>
-                <div className="font-display text-3xl tracking-tight mt-1">{state.champion.label}</div>
-              </div>
-              {/* Spectator buttons: let the user watch remaining matches even after elimination */}
-              <div className="mt-5 flex flex-wrap gap-2 justify-center">
-                {state.eliminatedAt === "Son 16" && state.qf && state.qf[0]?.tie && (
-                  <button type="button" className="btn-ghost" data-testid="watch-qf-button"
-                    onClick={() => onMatch({ stage: "Çeyrek Final", knockout: state.qf[0], userWon: false, spectator: true })}>
-                    <Play size={14} className="inline mr-1" /> ÇF MAÇI İZLE
-                  </button>
-                )}
-                {(state.eliminatedAt === "Son 16" || state.eliminatedAt === "Çeyrek Final") && state.sf && state.sf[0]?.tie && (
-                  <button type="button" className="btn-ghost" data-testid="watch-sf-button"
-                    onClick={() => onMatch({ stage: "Yarı Final", knockout: state.sf[0], userWon: false, spectator: true })}>
-                    <Play size={14} className="inline mr-1" /> YF MAÇI İZLE
-                  </button>
-                )}
-                {state.final && state.final[0]?.tie && (
-                  <button type="button" className="btn-primary" data-testid="watch-final-button"
-                    onClick={() => onMatch({ stage: "Final", knockout: state.final[0], userWon: false, spectator: true })}>
-                    <Play size={14} className="inline mr-1" /> FİNALİ İZLE
-                  </button>
-                )}
-              </div>
-            </motion.div>
+            <>
+              <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="glass rounded-2xl p-6 text-center">
+                <div className="font-mono text-xs tracking-widest text-red-400">{state.eliminatedAt || "ELENDİN"}</div>
+                <div className="font-display text-2xl mt-1 text-white/70">Senin için final geçti — ama turnuva devam etti.</div>
+                <div className="mt-4 pt-4 border-t border-white/10">
+                  <Trophy size={40} className="text-amber-300 mx-auto mb-2" />
+                  <div className="font-mono text-xs tracking-widest text-amber-300">ŞAMPİYON</div>
+                  <div className="font-display text-3xl tracking-tight mt-1">{state.champion.label}</div>
+                </div>
+                {/* Spectator buttons: let the user watch remaining matches even after elimination */}
+                <div className="mt-5 flex flex-wrap gap-2 justify-center">
+                  {state.eliminatedAt === "Son 16" && state.qf && state.qf[0]?.tie && (
+                    <button type="button" className="btn-ghost" data-testid="watch-qf-button"
+                      onClick={() => onMatch({ stage: "Çeyrek Final", knockout: state.qf[0], userWon: false, spectator: true })}>
+                      <Play size={14} className="inline mr-1" /> ÇF MAÇI İZLE
+                    </button>
+                  )}
+                  {(state.eliminatedAt === "Son 16" || state.eliminatedAt === "Çeyrek Final") && state.sf && state.sf[0]?.tie && (
+                    <button type="button" className="btn-ghost" data-testid="watch-sf-button"
+                      onClick={() => onMatch({ stage: "Yarı Final", knockout: state.sf[0], userWon: false, spectator: true })}>
+                      <Play size={14} className="inline mr-1" /> YF MAÇI İZLE
+                    </button>
+                  )}
+                  {state.final && state.final[0]?.tie && (
+                    <button type="button" className="btn-primary" data-testid="watch-final-button"
+                      onClick={() => onMatch({ stage: "Final", knockout: state.final[0], userWon: false, spectator: true })}>
+                      <Play size={14} className="inline mr-1" /> FİNALİ İZLE
+                    </button>
+                  )}
+                </div>
+              </motion.div>
+              <TournamentAwards
+                tournamentStats={tournamentStats}
+                userXi={userXi}
+                userTeamName={userTeamName}
+                isChampion={false}
+              />
+            </>
           )}
           {state.stage === "eliminated" && (
             <div className="glass rounded-2xl p-6 text-center text-white/70">

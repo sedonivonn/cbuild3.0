@@ -1,4 +1,26 @@
 import { TACTICS } from "../data/tactics";
+import { pickScorerAndAssist, computePlayerRatings } from "./playerStats";
+
+// After ET events are appended to a leg, recompute the leg's userPlayerStats
+// so that goals/assists scored in extra time are credited correctly.
+// `userPlayers` must be the array of user XI objects. `side` is "home" or "away".
+function recomputeUserStatsFromEvents(leg, userPlayers, side) {
+  if (!leg || !userPlayers || userPlayers.length === 0) return;
+  const userEvents = (leg.events || []).filter((e) => e.side === side && e.type === "GOAL");
+  const goalsFor = side === "home" ? leg.home.score : leg.away.score;
+  const goalsAgainst = side === "home" ? leg.away.score : leg.home.score;
+  const userTeamName = side === "home" ? leg.home.name : leg.away.name;
+  const { ratings, goalsMap, assistsMap } = computePlayerRatings(userPlayers, userEvents, goalsFor, goalsAgainst);
+  leg.userPlayerStats = userPlayers.map((p) => ({
+    name: p.name,
+    slot: p._slot || p.primary,
+    season: p._season,
+    teamName: userTeamName,
+    goals: goalsMap[p.name] || 0,
+    assists: assistsMap[p.name] || 0,
+    rating: ratings[p.name] || 6.5,
+  }));
+}
 
 // Deterministic-ish RNG so games feel fair but varied
 function rng() { return Math.random(); }
@@ -43,7 +65,8 @@ function applyChemistry(stats, isUser) {
 
 // xG model: each side accumulates expected goals based on attack vs (defense + keeper).
 // Tempo and risk influence variance and number of chances.
-export function simulateMatch({ home, away, homeTacticId, awayTacticId, neutral = false, homeIsUser = false, awayIsUser = false }) {
+// Optional `homePlayers` / `awayPlayers` arrays (user XI) enable goal attribution.
+export function simulateMatch({ home, away, homeTacticId, awayTacticId, neutral = false, homeIsUser = false, awayIsUser = false, homePlayers = null, awayPlayers = null }) {
   const A = applyTactic(applyChemistry(home, homeIsUser), homeTacticId);
   const B = applyTactic(applyChemistry(away, awayIsUser), awayTacticId);
 
@@ -109,7 +132,20 @@ export function simulateMatch({ home, away, homeTacticId, awayTacticId, neutral 
     if (goal) {
       if (sh.side === "home") aScore++;
       else bScore++;
-      events.push({ minute: sh.minute, side: sh.side, type: "GOAL", text: `${sh.minute}' GOL! ${sh.side === "home" ? home.name : away.name} ${aScore}-${bScore}` });
+      // Attribute scorer/assist when the scoring side has a known XI (the user side).
+      const scoringPlayers = sh.side === "home" ? homePlayers : awayPlayers;
+      let scorerName = null;
+      let assistName = null;
+      if (scoringPlayers && scoringPlayers.length > 0) {
+        const { scorer, assist } = pickScorerAndAssist(scoringPlayers);
+        if (scorer) scorerName = scorer.name;
+        if (assist) assistName = assist.name;
+      }
+      const teamName = sh.side === "home" ? home.name : away.name;
+      const goalText = scorerName
+        ? `${sh.minute}' GOL! ${scorerName} (${teamName}) ${aScore}-${bScore}${assistName ? ` · asist: ${assistName}` : ""}`
+        : `${sh.minute}' GOL! ${teamName} ${aScore}-${bScore}`;
+      events.push({ minute: sh.minute, side: sh.side, type: "GOAL", text: goalText, scorer: scorerName, assist: assistName });
     } else if (onTarget) {
       events.push({ minute: sh.minute, side: sh.side, type: "SAVE", text: `${sh.minute}' Müthiş kurtarış! ${sh.side === "home" ? home.name : away.name} pozisyondan dönüyor.` });
     } else if (rng() < 0.55) {
@@ -128,19 +164,43 @@ export function simulateMatch({ home, away, homeTacticId, awayTacticId, neutral 
 
   events.sort((a, b) => a.minute - b.minute);
 
+  // Per-player ratings for the USER side (if XI provided).
+  let userPlayerStats = null;
+  let userSide = null;
+  let userPlayers = null;
+  if (homeIsUser && homePlayers) { userSide = "home"; userPlayers = homePlayers; }
+  else if (awayIsUser && awayPlayers) { userSide = "away"; userPlayers = awayPlayers; }
+  if (userPlayers) {
+    const userEvents = events.filter((e) => e.side === userSide && e.type === "GOAL");
+    const goalsFor = userSide === "home" ? aScore : bScore;
+    const goalsAgainst = userSide === "home" ? bScore : aScore;
+    const { ratings, goalsMap, assistsMap } = computePlayerRatings(userPlayers, userEvents, goalsFor, goalsAgainst);
+    const userTeamName = userSide === "home" ? home.name : away.name;
+    userPlayerStats = userPlayers.map((p) => ({
+      name: p.name,
+      slot: p._slot || p.primary,
+      season: p._season,
+      teamName: userTeamName,
+      goals: goalsMap[p.name] || 0,
+      assists: assistsMap[p.name] || 0,
+      rating: ratings[p.name] || 6.5,
+    }));
+  }
+
   return {
     home: { name: home.name, score: aScore, shots: aShots, onTarget: aOnTarget, xg: aXg, possession: Math.round(possessionHome) },
     away: { name: away.name, score: bScore, shots: bShots, onTarget: bOnTarget, xg: bXg, possession: 100 - Math.round(possessionHome) },
     events,
     full: { aScore, bScore },
+    userPlayerStats,
   };
 }
 
 // Knockout: handles ET + penalties if needed
-export function simulateKnockout({ home, away, homeTacticId, awayTacticId, twoLeg = true, homeIsUser = false, awayIsUser = false }) {
+export function simulateKnockout({ home, away, homeTacticId, awayTacticId, twoLeg = true, homeIsUser = false, awayIsUser = false, homePlayers = null, awayPlayers = null }) {
   if (twoLeg) {
-    const leg1 = simulateMatch({ home, away, homeTacticId, awayTacticId, homeIsUser, awayIsUser });
-    const leg2 = simulateMatch({ home: away, away: home, homeTacticId: awayTacticId, awayTacticId: homeTacticId, homeIsUser: awayIsUser, awayIsUser: homeIsUser });
+    const leg1 = simulateMatch({ home, away, homeTacticId, awayTacticId, homeIsUser, awayIsUser, homePlayers, awayPlayers });
+    const leg2 = simulateMatch({ home: away, away: home, homeTacticId: awayTacticId, awayTacticId: homeTacticId, homeIsUser: awayIsUser, awayIsUser: homeIsUser, homePlayers: awayPlayers, awayPlayers: homePlayers });
     const aggA = leg1.home.score + leg2.away.score;
     const aggB = leg1.away.score + leg2.home.score;
     if (aggA !== aggB) {
@@ -152,10 +212,12 @@ export function simulateKnockout({ home, away, homeTacticId, awayTacticId, twoLe
       };
     }
     // extra time on second leg
-    const et = simulateExtraTime({ home: away, away: home, homeTacticId: awayTacticId, awayTacticId: homeTacticId, homeIsUser: awayIsUser, awayIsUser: homeIsUser });
+    const et = simulateExtraTime({ home: away, away: home, homeTacticId: awayTacticId, awayTacticId: homeTacticId, homeIsUser: awayIsUser, awayIsUser: homeIsUser, homePlayers: awayPlayers, awayPlayers: homePlayers });
     leg2.home.score += et.home;
     leg2.away.score += et.away;
     leg2.events = [...(leg2.events || []), ...et.events];
+    // Re-compute leg2 user player stats including ET events so scorers are credited.
+    recomputeUserStatsFromEvents(leg2, awayIsUser ? awayPlayers : homePlayers, awayIsUser ? "home" : "away");
     const aggA2 = leg1.home.score + leg2.away.score;
     const aggB2 = leg1.away.score + leg2.home.score;
     if (aggA2 !== aggB2) {
@@ -165,14 +227,15 @@ export function simulateKnockout({ home, away, homeTacticId, awayTacticId, twoLe
     return { legs: [leg1, leg2], aggregate: { a: aggA2 + pen.a, b: aggB2 + pen.b }, et, penalties: pen, winner: pen.a > pen.b ? "home" : "away", decidedBy: "penalties" };
   }
   // Single match - Final
-  const match = simulateMatch({ home, away, homeTacticId, awayTacticId, neutral: true, homeIsUser, awayIsUser });
+  const match = simulateMatch({ home, away, homeTacticId, awayTacticId, neutral: true, homeIsUser, awayIsUser, homePlayers, awayPlayers });
   if (match.home.score !== match.away.score) {
     return { match, winner: match.home.score > match.away.score ? "home" : "away", decidedBy: "regulation" };
   }
-  const et = simulateExtraTime({ home, away, homeTacticId, awayTacticId, homeIsUser, awayIsUser });
+  const et = simulateExtraTime({ home, away, homeTacticId, awayTacticId, homeIsUser, awayIsUser, homePlayers, awayPlayers });
   match.home.score += et.home;
   match.away.score += et.away;
   match.events = [...(match.events || []), ...et.events];
+  recomputeUserStatsFromEvents(match, homeIsUser ? homePlayers : awayPlayers, homeIsUser ? "home" : "away");
   if (match.home.score !== match.away.score) {
     return { match, et, winner: match.home.score > match.away.score ? "home" : "away", decidedBy: "extra_time" };
   }
@@ -180,7 +243,7 @@ export function simulateKnockout({ home, away, homeTacticId, awayTacticId, twoLe
   return { match, et, penalties: pen, winner: pen.a > pen.b ? "home" : "away", decidedBy: "penalties" };
 }
 
-function simulateExtraTime({ home, away, homeTacticId, awayTacticId, homeIsUser = false, awayIsUser = false }) {
+function simulateExtraTime({ home, away, homeTacticId, awayTacticId, homeIsUser = false, awayIsUser = false, homePlayers = null, awayPlayers = null }) {
   // 30 min (91-120), halved chances - returns events too
   const A = applyTactic(applyChemistry(home, homeIsUser), homeTacticId);
   const B = applyTactic(applyChemistry(away, awayIsUser), awayTacticId);
@@ -198,7 +261,20 @@ function simulateExtraTime({ home, away, homeTacticId, awayTacticId, homeIsUser 
     const xg = sh.side === "home" ? aXgPer : bXgPer;
     if (Math.random() < xg * 1.4) {
       if (sh.side === "home") aGoals++; else bGoals++;
-      events.push({ minute: sh.minute, side: sh.side, type: "GOAL", text: `${sh.minute}' UZATMADA GOL! ${sh.side === "home" ? home.name : away.name}` });
+      // Attribute extra-time scorer/assist when the scoring side has user players.
+      const scoringPlayers = sh.side === "home" ? homePlayers : awayPlayers;
+      let scorerName = null;
+      let assistName = null;
+      if (scoringPlayers && scoringPlayers.length > 0) {
+        const pick = pickScorerAndAssist(scoringPlayers);
+        if (pick.scorer) scorerName = pick.scorer.name;
+        if (pick.assist) assistName = pick.assist.name;
+      }
+      const teamName = sh.side === "home" ? home.name : away.name;
+      const goalText = scorerName
+        ? `${sh.minute}' UZATMADA GOL! ${scorerName} (${teamName})${assistName ? ` · asist: ${assistName}` : ""}`
+        : `${sh.minute}' UZATMADA GOL! ${teamName}`;
+      events.push({ minute: sh.minute, side: sh.side, type: "GOAL", text: goalText, scorer: scorerName, assist: assistName });
     } else if (Math.random() < 0.4) {
       events.push({ minute: sh.minute, side: sh.side, type: "SAVE", text: `${sh.minute}' UZATMA kurtarış!` });
     }

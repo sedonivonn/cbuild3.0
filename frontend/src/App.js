@@ -7,11 +7,13 @@ import { TacticsScreen } from "./screens/TacticsScreen";
 import { TournamentScreen } from "./screens/TournamentScreen";
 import { MatchScreen } from "./screens/MatchScreen";
 import { TrophyScreen } from "./screens/TrophyScreen";
+import { HallOfFameScreen } from "./screens/HallOfFameScreen";
 import { TopBar } from "./components/TopBar";
 import { sound } from "./engine/sounds";
 import { FORMATIONS } from "./data/formations";
 import { computeTeamStats } from "./engine/overallEngine";
 import { readDraftFromUrl, clearDraftFromUrl } from "./engine/shareCode";
+import { saveTrophy } from "./engine/hallOfFame";
 
 const SAVE_KEY = "ucl_draft_save_v1";
 
@@ -97,11 +99,15 @@ function App() {
     }));
   };
 
-  const handleReset = () => {
-    if (!window.confirm("Tüm ilerlemeyi sıfırlayıp baştan başlamak istediğinden emin misin?")) return;
+  const resetState = () => {
     try { localStorage.removeItem(SAVE_KEY); } catch (_) {}
     setTeamName(""); setFormationId(null); setXi([]); setChanges({ remaining: 3, luckyRemaining: 1 });
     setTactic(null); setTournament(null); setActiveMatch(null); setTrophyTeam(null);
+  };
+
+  const handleReset = () => {
+    if (!window.confirm("Tüm ilerlemeyi sıfırlayıp baştan başlamak istediğinden emin misin?")) return;
+    resetState();
     setScreen("home");
   };
 
@@ -127,7 +133,7 @@ function App() {
   return (
     <div className="min-h-screen text-white">
       <TopBar onSoundToggle={handleSoundToggle} soundOn={soundOn} onReset={handleReset} />
-      {screen === "home" && <HomeScreen onStart={handleStart} hasSave={hasSave} onContinue={handleContinue} />}
+      {screen === "home" && <HomeScreen onStart={handleStart} hasSave={hasSave} onContinue={handleContinue} onHallOfFame={() => setScreen("hall_of_fame")} />}
       {screen === "draft" && formationId && (
         <DraftScreen
           formationId={formationId}
@@ -158,6 +164,7 @@ function App() {
           userStats={userTournamentStats}
           userTacticId={tactic}
           userTeamName={displayedTeamName}
+          userXi={xi}
           savedState={tournament}
           onSaveState={setTournament}
           onMatch={setActiveMatch}
@@ -170,10 +177,22 @@ function App() {
         setActiveMatch(null);
         if (m && m.stage === "Final" && m.userWon && m.championRef) {
           sound.trophy();
+          // Persist this win to the Hall of Fame cabinet.
+          try {
+            saveTrophy({
+              teamName: displayedTeamName,
+              formationId,
+              tactic,
+              totalOvr: teamStats?.overall,
+              xi,
+              tournamentStats: tournament?.tournamentStats || null,
+            });
+          } catch (_) { /* localStorage may be unavailable */ }
           setTrophyTeam(m.championRef);
         }
       }} />}
-      {trophyTeam && <TrophyScreen teamLabel={trophyTeam.label} onRestart={() => { setTrophyTeam(null); handleReset(); }} />}
+      {trophyTeam && <TrophyScreen teamLabel={trophyTeam.label} onRestart={() => { setTrophyTeam(null); handleReset(); }} onHallOfFame={() => { setTrophyTeam(null); handleReset(); setScreen("hall_of_fame"); }} />}
+      {screen === "hall_of_fame" && <HallOfFameScreen onBack={() => setScreen("home")} />}
     </div>
   );
 }

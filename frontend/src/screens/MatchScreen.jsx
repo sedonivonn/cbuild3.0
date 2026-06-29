@@ -341,6 +341,68 @@ export const MatchScreen = ({ match, onClose }) => {
           </div>
         )}
 
+        {/* Player of the Match — for the user side. Show only on the last leg. */}
+        {phase === "done" && isLastLeg && (() => {
+          const allLegsPlayerStats = legs.flatMap((l) => l?.userPlayerStats || []);
+          if (allLegsPlayerStats.length === 0) return null;
+          // Merge per-player across legs (sum goals/assists, avg rating).
+          // BUG FIX: do NOT spread `...p` here — it would copy goals/assists
+          // and then we'd accumulate on top, double-counting them.
+          const merged = {};
+          allLegsPlayerStats.forEach((p) => {
+            if (!merged[p.name]) {
+              merged[p.name] = {
+                name: p.name,
+                slot: p.slot,
+                season: p.season,
+                teamName: p.teamName || "",
+                goals: 0,
+                assists: 0,
+                rating: 0,
+                legs: 0,
+              };
+            }
+            merged[p.name].goals += p.goals || 0;
+            merged[p.name].assists += p.assists || 0;
+            merged[p.name].rating += p.rating || 6.5;
+            merged[p.name].legs += 1;
+          });
+          const arr = Object.values(merged).map((p) => ({
+            ...p,
+            rating: p.rating / Math.max(1, p.legs),
+          }));
+          const potm = [...arr].sort((a, b) => b.rating - a.rating)[0];
+          if (!potm) return null;
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+              className="mt-4 p-4 rounded-xl border border-amber-300/40 bg-gradient-to-br from-amber-300/10 to-amber-300/0"
+              data-testid="potm-card"
+            >
+              <div className="flex items-center justify-between">
+                <div className="min-w-0 flex-1 pr-3">
+                  <div className="font-mono text-[10px] tracking-widest text-amber-300">PLAYER OF THE MATCH</div>
+                  <div className="font-display text-2xl tracking-tight mt-0.5 truncate">{potm.name}</div>
+                  {potm.teamName && (
+                    <div className="text-[10px] font-mono text-amber-300/70 tracking-wider truncate">
+                      {potm.teamName}
+                    </div>
+                  )}
+                  <div className="text-[11px] font-mono text-white/50 tracking-wider mt-0.5">
+                    {potm.slot} · {potm.season} · {potm.goals} GOL · {potm.assists} ASİST
+                  </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="font-display text-4xl text-amber-300">{potm.rating.toFixed(1)}</div>
+                  <div className="text-[10px] font-mono text-white/50">REYTING</div>
+                </div>
+              </div>
+            </motion.div>
+          );
+        })()}
+
         {/* Aggregate / result */}
         {showAggregateBlock && (
           <div className="mt-4 text-center" data-testid="aggregate-result">
