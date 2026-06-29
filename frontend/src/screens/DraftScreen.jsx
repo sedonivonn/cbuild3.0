@@ -86,14 +86,14 @@ export const DraftScreen = ({
 
   const handleChange = () => {
     if (changes.remaining <= 0) { sound.error(); return; }
+    const lucky = changes.luckyRemaining > 0;
+    onUseChange(lucky); // decrement immediately for instant UI feedback
     setRolling(true);
     sound.dice();
-    const lucky = changes.luckyRemaining > 0;
     setTimeout(() => {
       const newRoll = lucky ? rollLucky() : rollRandom();
       setPool(newRoll);
       setSelectedPlayerIdx(-1);
-      onUseChange(lucky);
       setRolling(false);
       sound.cardReveal();
     }, 900);
@@ -111,13 +111,13 @@ export const DraftScreen = ({
       if (match) candidates.push({ season: seasonNum, team: match });
     }
     if (candidates.length === 0) { sound.error(); return; }
+    onUseChange(false); // decrement immediately
     setRolling(true);
     sound.dice();
     setTimeout(() => {
       const pick = candidates[Math.floor(Math.random() * candidates.length)];
       setPool(pick);
       setSelectedPlayerIdx(-1);
-      onUseChange(false);
       setRolling(false);
       sound.cardReveal();
     }, 900);

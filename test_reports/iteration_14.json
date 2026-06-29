@@ -1,0 +1,25 @@
+{
+  "summary": "Iteration 14 — TIGHT RETEST of the CHANGE-credit decrement fix from iteration 13 (MEDIUM bug). Fix applied in /app/frontend/src/screens/DraftScreen.jsx: onUseChange(lucky) is now called BEFORE the 900ms setTimeout in both handleChange (line 90) and handleChangeYear (line 114). Verified via Playwright on the preview URL. ALL THREE primary checks PASS plus the regression suite. The MEDIUM bug from iteration_13 is RESOLVED.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix is minimal and correct: moving onUseChange() above setTimeout in both handleChange (line 90) and handleChangeYear (line 114) makes the credit decrement reflect in the same React render cycle as setRolling(true), giving instant UI feedback. Confirmed visually in screenshots (CHANGE HAKKI 3/3 → 2/3 right after click while pool slot is still spinning behind the scenes).",
+    "handleChange's lucky branch is consistent with App.js handleUseChange which uses a functional setState updater — no stale-closure risk.",
+    "DraftScreen.jsx is still 533 lines — under the 700 threshold; previous suggestion to extract PoolRevealModal is a future cleanup, not blocking.",
+    "Minor: handleFormationChange still uses window.confirm — inconsistent with styled modals elsewhere, low priority cosmetic."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (frontend-only)", "frontend": "100%" },
+  "test_credentials": "N/A",
+  "seed_data_creation": "Used localStorage.clear() + fresh navigation + clicked YENİ DRAFT to start fresh games for each test scenario. No injected state — all tests run against the real React state.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iteration 13's MEDIUM bug (CHANGE button not decrementing changes-remaining) is now fully fixed. Test verified: (1) change-button: 3/3 -> 2/3 within ~150ms; (2) change-year-button: same behaviour, keeps club, swaps season (verified Bayern Munich 2004 -> Bayern Munich 2013); (3) 3 consecutive change clicks bring counter to 0/3 and disable BOTH change-button and change-year-button with opacity-30. Regression suite (KOMUTA MERKEZİ heading, formation switching, pool modal with slot-machine spinner, card reveal, player selection, SEÇİLİ banner) all still pass. IMPORTANT TIMING NOTE for next agent: after clicking close-pool-button (X), the modal uses framer-motion AnimatePresence with an exit animation — wait for `state='detached'` on [data-testid='pool-modal'] or sleep 200-300ms BEFORE clicking change/YIL otherwise the click can land while the modal overlay is still fading and the React state update can be missed in measurement (this was a measurement artifact, not a real bug).",
+  "rca_of_the_issue": "Original RCA (iteration 13): onUseChange(lucky) was being called inside the 900ms setTimeout in handleChange. The credit decrement was therefore deferred and could appear lost relative to the visible re-roll. FIX: onUseChange is now invoked synchronously on click (before setRolling and setTimeout), so React batches it with setRolling(true) and the user sees the counter drop instantly. Confirmed working end-to-end: change-button click at t=0 → counter shows new value at t<=150ms (measured ~148ms in run 1) → pool re-rolls at t=900ms."
+}
