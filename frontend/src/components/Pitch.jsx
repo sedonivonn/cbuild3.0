@@ -92,6 +92,11 @@ export const Pitch = ({
             // We animate top/left only (no transform-based props) so the
             // Tailwind `-translate-x-1/2 -translate-y-1/2` keeps each slot
             // visually centered on its anchor point.
+            //
+            // IMPORTANT: only the circle is wrapped by the <Tag> (button).
+            // Keeping the label OUTSIDE the button ensures the button's
+            // geometric center matches the visible circle's center exactly,
+            // so the slot anchor (top/left) aligns with what the user clicks.
             key={idx}
             initial={false}
             animate={{ top: `${slot.top}%`, left: `${slot.left}%` }}
@@ -124,10 +129,16 @@ export const Pitch = ({
                   <span className="text-white/80 font-display tracking-wider">{slot.pos}</span>
                 )}
               </div>
-              <div className={`${labelClass} text-white/90 text-center font-display tracking-wider`}>
-                {player ? <span className={tierTextColor(player, player._season)}>{slot.pos}</span> : slot.pos}
-              </div>
             </Tag>
+            {/* Label rendered OUTSIDE the clickable button, anchored visually
+                below the circle. pointer-events-none keeps it from intercepting
+                clicks that should land on the slot button or nearby slots. */}
+            <div
+              className={`${labelClass} text-white/90 text-center font-display tracking-wider pointer-events-none absolute top-full mt-0.5 left-1/2 -translate-x-1/2 whitespace-nowrap`}
+              style={{ opacity: dim ? 0.55 : 1 }}
+            >
+              {player ? <span className={tierTextColor(player, player._season)}>{slot.pos}</span> : slot.pos}
+            </div>
           </motion.div>
         );
       })}

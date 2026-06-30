@@ -238,10 +238,27 @@ metadata:
 
 test_plan:
   current_focus:
-    - "SIFIRLA inline confirm panel (no window.confirm)"
+    - "Pitch slot click hitbox alignment fix"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
+
+agent_communication:
+    -agent: "main"
+    -message: "BUG FIX TO VERIFY — Pitch slot click hitbox alignment.\n\nReported issue: In the Draft screen, when clicking a slot circle on the pitch (especially the CDM in 4-5-1 / Gegenpress and similar deep central slots), the click would NOT register on the visible circle. The user had to click SLIGHTLY BELOW the circle for the player to be placed. Root cause: the slot label text was rendered INSIDE the same <button> tag as the circle. The label pulled the button's geometric center DOWN, so the button's actual hitbox center sat ~9.5px below the visible circle center. Bounding-box measurement before fix (4-5-1 + Gegenpress, slot-7/CDM): button center y=543.0, circle center y=533.5 → 9.5px misalignment.\n\nFix applied in /app/frontend/src/components/Pitch.jsx: moved the position label OUTSIDE the <button> (still inside the motion.div wrapper) as an absolute-positioned, pointer-events-none element anchored below the circle. The button now wraps ONLY the circle, so button center == circle center == slot anchor. Bounding-box measurement after fix confirmed offset = 0.0px for ALL 11 slots in 4-5-1 + Gegenpress.\n\nVERIFICATION TASK (Playwright/UI):\n  1. Open http://localhost:3000. Click 'YENİ DRAFT BAŞLAT' (data-testid='start-draft-button').\n  2. In the formation chip group, click 4-5-1 (data-testid='formation-4-5-1').\n  3. Click GEGENPRESS in the taktik panel.\n  4. Click 'ROLL DICE' (red button bottom-left of setup column). Wait for player pool.\n  5. Click any player card whose primary or secondary is CM / CDM (e.g. cards labeled CDM or CM).\n  6. Inspect the CDM slot on the pitch (data-testid='pitch-slot-7' for 4-5-1). Get its visible circle bounding rect (.rounded-full child). Click at the EXACT center of the circle.\n  7. Confirm the player gets placed in that slot (slot now shows the player's initials + OVR, and selectedPlayer becomes null). The kadro list on the right should also show one filled row.\n  8. Repeat the same circle-center-click test for slot-7 across other formations (4-3-3 deep CM, 3-5-2 CDM, 5-3-2 CDM) — all clicks at the exact visible circle center should place the player.\n  9. Additionally, programmatically verify alignment: for every [data-testid^='pitch-slot-'], compute button bounding rect center and circle (.rounded-full) bounding rect center. Assert the Y offset is <= 1px for all 11 slots.\n\nPass criteria: (a) clicking the exact center of the visible circle places the player (no need to click below). (b) Y-offset between button center and circle center is ~0 for all slots, all formations.\n\nReport: PASS/FAIL with screenshot of the CDM slot filled, and the bounding-box offset values per slot."
+
+  - task: "Pitch slot click hitbox alignment fix"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/Pitch.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Moved the slot label text OUT of the <button> tag (still inside the motion.div wrapper) so that the button only encloses the circle. Label is now an absolute-positioned, pointer-events-none element anchored below the circle. Bounding-box measurement confirms button center now exactly matches circle center (offset 0.0px) for all 11 slots in 4-5-1 + Gegenpress. This resolves the user-reported issue where clicking the visible circle didn't register and they had to click slightly below."
+
 
 agent_communication:
     -agent: "main"
