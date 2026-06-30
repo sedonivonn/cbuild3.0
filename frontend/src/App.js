@@ -197,6 +197,7 @@ function App() {
         tournamentStats={tournament?.tournamentStats || {}}
         onRestart={() => { setTrophyTeam(null); resetState(); setScreen("home"); }}
         onHallOfFame={() => { setTrophyTeam(null); resetState(); setScreen("hall_of_fame"); }}
+        onDismiss={() => setTrophyTeam(null)}
       />}
       {screen === "hall_of_fame" && <HallOfFameScreen onBack={() => setScreen("home")} />}
     </div>

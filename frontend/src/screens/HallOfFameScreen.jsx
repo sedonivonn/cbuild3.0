@@ -1,10 +1,11 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Trophy, Trash2, ArrowLeft, X, Calendar, Crown } from "lucide-react";
 import { getAllTrophies, deleteTrophy, clearAllTrophies } from "../engine/hallOfFame";
 import { Pitch } from "../components/Pitch";
 import { effOverall } from "../data/ballonDor";
 import { TACTICS } from "../data/tactics";
+import { sound } from "../engine/sounds";
 
 function formatDate(iso) {
   try {
@@ -25,6 +26,25 @@ function tierBg(ovr) {
 export const HallOfFameScreen = ({ onBack }) => {
   const [trophies, setTrophies] = useState(() => getAllTrophies());
   const [selected, setSelected] = useState(null);
+  const [clearAllOpen, setClearAllOpen] = useState(false);
+  const clearAllRef = useRef(null);
+
+  // Outside-click + Escape to dismiss the "tümünü sıfırla" confirm panel
+  useEffect(() => {
+    if (!clearAllOpen) return;
+    const onDocClick = (e) => {
+      if (clearAllRef.current && !clearAllRef.current.contains(e.target)) {
+        setClearAllOpen(false);
+      }
+    };
+    const onKey = (e) => { if (e.key === "Escape") setClearAllOpen(false); };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [clearAllOpen]);
 
   const stats = useMemo(() => {
     if (trophies.length === 0) return { total: 0, avgOvr: 0, bestOvr: 0 };
@@ -36,16 +56,18 @@ export const HallOfFameScreen = ({ onBack }) => {
     };
   }, [trophies]);
 
+  // Delete a single trophy (the detail modal hosts its own inline confirm UI).
   const handleDelete = (id) => {
-    if (!window.confirm("Bu kupayı kabinden silmek istediğinden emin misin?")) return;
     setTrophies(deleteTrophy(id));
     setSelected(null);
   };
 
-  const handleClearAll = () => {
-    if (!window.confirm("TÜM kupalarını silmek istediğinden emin misin? Bu işlem geri alınamaz.")) return;
+  // Confirm + execute the "clear all" action.
+  const handleClearAllConfirmed = () => {
+    sound.click();
     clearAllTrophies();
     setTrophies([]);
+    setClearAllOpen(false);
   };
 
   return (
@@ -70,14 +92,53 @@ export const HallOfFameScreen = ({ onBack }) => {
           </div>
         </div>
         {trophies.length > 0 && (
-          <button
-            type="button"
-            onClick={handleClearAll}
-            className="btn-ghost text-red-300 flex items-center gap-2"
-            data-testid="hof-clear-all-button"
-          >
-            <Trash2 size={14} /> TÜMÜNÜ SIFIRLA
-          </button>
+          <div ref={clearAllRef} className="relative">
+            <button
+              type="button"
+              onClick={() => { sound.click(); setClearAllOpen((v) => !v); }}
+              aria-expanded={clearAllOpen}
+              className={`btn-ghost text-red-300 flex items-center gap-2 ${clearAllOpen ? "ring-1 ring-red-300/60" : ""}`}
+              data-testid="hof-clear-all-button"
+            >
+              <Trash2 size={14} /> TÜMÜNÜ SIFIRLA
+            </button>
+            <AnimatePresence>
+              {clearAllOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -6, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -6, scale: 0.97 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                  className="absolute right-0 mt-2 w-80 rounded-xl border border-white/10 bg-[#0e0e12]/95 backdrop-blur-xl p-4 shadow-2xl z-40"
+                  style={{ boxShadow: "0 18px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(248,113,113,0.18)" }}
+                  data-testid="hof-clear-all-confirm-panel"
+                >
+                  <div className="font-display text-base tracking-wide text-white">Emin misin?</div>
+                  <p className="mt-1 text-[12px] text-white/65 leading-relaxed">
+                    TÜM kupaların kabinden silinecek. Bu işlem geri alınamaz.
+                  </p>
+                  <div className="mt-3 flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { sound.click(); setClearAllOpen(false); }}
+                      data-testid="hof-clear-all-cancel-button"
+                      className="btn-ghost !py-1.5 !px-3 text-xs"
+                    >
+                      VAZGEÇ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClearAllConfirmed}
+                      data-testid="hof-clear-all-confirm-button"
+                      className="btn-primary !py-1.5 !px-3 text-xs"
+                    >
+                      EVET, SIFIRLA
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         )}
       </div>
 
@@ -237,6 +298,26 @@ const TrophyCard = ({ trophy, onClick }) => {
 
 const TrophyDetailModal = ({ trophy, onClose, onDelete }) => {
   const tactic = TACTICS[trophy.tactic];
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const deleteRef = useRef(null);
+
+  // Outside-click + Escape to dismiss the single-trophy delete confirm panel.
+  useEffect(() => {
+    if (!deleteOpen) return;
+    const onDocClick = (e) => {
+      if (deleteRef.current && !deleteRef.current.contains(e.target)) {
+        setDeleteOpen(false);
+      }
+    };
+    const onKey = (e) => { if (e.key === "Escape") setDeleteOpen(false); };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [deleteOpen]);
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -323,14 +404,53 @@ const TrophyDetailModal = ({ trophy, onClose, onDelete }) => {
         </div>
 
         <div className="mt-6 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onDelete}
-            className="btn-ghost text-red-300 flex items-center gap-2"
-            data-testid="trophy-detail-delete"
-          >
-            <Trash2 size={14} /> SİL
-          </button>
+          <div ref={deleteRef} className="relative">
+            <button
+              type="button"
+              onClick={() => { sound.click(); setDeleteOpen((v) => !v); }}
+              aria-expanded={deleteOpen}
+              className={`btn-ghost text-red-300 flex items-center gap-2 ${deleteOpen ? "ring-1 ring-red-300/60" : ""}`}
+              data-testid="trophy-detail-delete"
+            >
+              <Trash2 size={14} /> SİL
+            </button>
+            <AnimatePresence>
+              {deleteOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.97 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                  className="absolute right-0 bottom-full mb-2 w-72 rounded-xl border border-white/10 bg-[#0e0e12]/95 backdrop-blur-xl p-4 shadow-2xl z-40"
+                  style={{ boxShadow: "0 18px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(248,113,113,0.18)" }}
+                  data-testid="trophy-detail-delete-confirm-panel"
+                >
+                  <div className="font-display text-base tracking-wide text-white">Emin misin?</div>
+                  <p className="mt-1 text-[12px] text-white/65 leading-relaxed">
+                    Bu kupa kabinden silinecek. Geri alınamaz.
+                  </p>
+                  <div className="mt-3 flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => { sound.click(); setDeleteOpen(false); }}
+                      data-testid="trophy-detail-delete-cancel-button"
+                      className="btn-ghost !py-1.5 !px-3 text-xs"
+                    >
+                      VAZGEÇ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { sound.click(); setDeleteOpen(false); onDelete(); }}
+                      data-testid="trophy-detail-delete-confirm-button"
+                      className="btn-primary !py-1.5 !px-3 text-xs"
+                    >
+                      EVET, SİL
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
           <button type="button" onClick={onClose} className="btn-primary" data-testid="trophy-detail-close-bottom">
             KAPAT
           </button>

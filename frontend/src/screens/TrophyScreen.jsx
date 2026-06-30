@@ -32,7 +32,7 @@ function pickPlayerOfTournament(tournamentStats, userXi) {
   return best;
 }
 
-export const TrophyScreen = ({ teamLabel, teamName, userXi, tournamentStats, onRestart, onHallOfFame }) => {
+export const TrophyScreen = ({ teamLabel, teamName, userXi, tournamentStats, onRestart, onHallOfFame, onDismiss }) => {
   const potTournament = useMemo(
     () => pickPlayerOfTournament(tournamentStats, userXi),
     [tournamentStats, userXi]
@@ -40,14 +40,17 @@ export const TrophyScreen = ({ teamLabel, teamName, userXi, tournamentStats, onR
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-black/95 backdrop-blur-xl px-4 py-8 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-black/95 backdrop-blur-xl px-4 py-8 overflow-y-auto cursor-pointer"
       data-testid="trophy-screen"
+      onClick={() => onDismiss && onDismiss()}
+      title="Kapatmak için boş alana tıkla"
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.85, y: 40 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={{ type: "spring", stiffness: 180, damping: 14 }}
-        className="max-w-2xl w-full text-center my-auto"
+        className="max-w-2xl w-full text-center my-auto cursor-default"
+        onClick={(e) => e.stopPropagation()}
       >
         <motion.div
           animate={{ y: [-6, 4, -6], rotate: [-3, 3, -3] }}
@@ -135,6 +138,9 @@ export const TrophyScreen = ({ teamLabel, teamName, userXi, tournamentStats, onR
           <button type="button" onClick={onRestart} data-testid="trophy-restart-button" className="btn-primary">
             YENİ DRAFT BAŞLAT
           </button>
+        </div>
+        <div className="mt-5 text-[10px] font-mono tracking-widest text-white/35">
+          KADRO İSTATİSTİKLERİNİ GÖRMEK İÇİN BOŞ ALANA TIKLA
         </div>
       </motion.div>
     </div>
