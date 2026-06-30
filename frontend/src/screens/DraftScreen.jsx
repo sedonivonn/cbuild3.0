@@ -4,7 +4,7 @@ import { DiceButton } from "../components/DiceButton";
 import { PlayerCard } from "../components/PlayerCard";
 import { Pitch } from "../components/Pitch";
 import { Crest } from "../components/Crest";
-import { FORMATIONS, canPlace, hasAvailableSlot } from "../data/formations";
+import { FORMATIONS, canPlace, hasAvailableSlot, applyTacticShift } from "../data/formations";
 import { TACTICS } from "../data/tactics";
 import { effOverall } from "../data/ballonDor";
 import { rollRandom, rollLucky } from "../engine/draftEngine";
@@ -429,6 +429,7 @@ export const DraftScreen = ({
           <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-1">
             {formation.slots.map((slot, idx) => {
               const player = xi[idx];
+              const displayed = applyTacticShift(slot, tactic, formationId).displayPos || slot.pos;
               return (
                 <div
                   key={idx}
@@ -438,7 +439,7 @@ export const DraftScreen = ({
                   data-testid={`roster-row-${idx}`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-mono text-[10px] tracking-wider text-white/45 w-8 shrink-0">{slot.pos}</span>
+                    <span className="font-mono text-[10px] tracking-wider text-white/45 w-8 shrink-0">{displayed}</span>
                     {player ? (
                       <span className="text-xs text-white truncate" title={player.name}>{player.name}</span>
                     ) : (

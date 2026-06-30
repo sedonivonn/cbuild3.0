@@ -170,11 +170,54 @@ const POS_GROUP = {
   LW: "ATT", RW: "ATT", ST: "ATT", CF: "ATT",
 };
 
-export function applyTacticShift(slot, tacticId) {
-  if (!tacticId || !TACTIC_SHIFTS[tacticId]) return slot;
+// Tactic-based ROLE / LABEL overrides per formation.
+// Keys: formation id → tactic id → { slotId: newDisplayPos }
+// Football logic notes:
+// - GEGENPRESS: high press, midfielders pushed up aggressively
+// - TIKI_TAKA:  controlled possession, deep playmaker as the anchor
+// - PARK_THE_BUS: defensive block, midfielders sit very deep
+export const TACTIC_POS_OVERRIDES = {
+  "4-3-3": {
+    // Deepest central mid slot ("CM" id, top:58) is the holding role
+    GEGENPRESS:   { CM: "CAM" },                       // push the #6 up to a #10
+    TIKI_TAKA:    { CM: "CDM" },                       // single pivot (Busquets-style)
+    PARK_THE_BUS: { LCM: "CDM", CM: "CDM", RCM: "CDM" }, // triple pivot
+  },
+  "4-2-3-1": {
+    GEGENPRESS:   { LDM: "CM", RDM: "CM" },            // double pivot becomes box-to-box
+    TIKI_TAKA:    {},                                  // already balanced (CDM + CDM + CAM)
+    PARK_THE_BUS: { CAM: "CM" },                       // CAM drops to support midfield
+  },
+  "4-4-2": {
+    GEGENPRESS:   { RCM: "CAM" },                      // asymmetric attacking mid
+    TIKI_TAKA:    { LCM: "CDM" },                      // one anchor for build-up
+    PARK_THE_BUS: { LCM: "CDM", RCM: "CDM" },          // double pivot
+  },
+  "3-5-2": {
+    // Default CM(CDM) at top:58 with LCM/RCM as CM either side
+    GEGENPRESS:   { CM: "CM", LCM: "CAM", RCM: "CAM" }, // attacking midfield trio
+    TIKI_TAKA:    {},                                   // CDM stays as the anchor
+    PARK_THE_BUS: { LCM: "CDM", RCM: "CDM" },           // triple defensive mid
+  },
+  "5-3-2": {
+    // 5 defenders + 3 mids (CDM in the middle, CM either side)
+    GEGENPRESS:   { LCM: "CAM", RCM: "CAM" },           // wings of midfield push up
+    TIKI_TAKA:    {},
+    PARK_THE_BUS: { LCM: "CDM", RCM: "CDM" },           // double pivot, ultra deep
+  },
+};
+
+export function applyTacticShift(slot, tacticId, formationId = null) {
+  if (!tacticId || !TACTIC_SHIFTS[tacticId]) return { ...slot, displayPos: slot.pos };
   const group = POS_GROUP[slot.pos] || "MID";
   const dy = TACTIC_SHIFTS[tacticId][group] || 0;
   // clamp top between 6 and 92 to keep within pitch bounds
   const newTop = Math.max(6, Math.min(92, slot.top + dy));
-  return { ...slot, top: newTop };
+  // Role label override (display only — placement compatibility still uses slot.pos)
+  let displayPos = slot.pos;
+  if (formationId && TACTIC_POS_OVERRIDES[formationId]) {
+    const map = TACTIC_POS_OVERRIDES[formationId][tacticId] || {};
+    if (map[slot.id]) displayPos = map[slot.id];
+  }
+  return { ...slot, top: newTop, displayPos };
 }

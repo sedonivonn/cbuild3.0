@@ -53,7 +53,8 @@ export const Pitch = ({
   return (
     <div className={`pitch w-full ${compact ? "aspect-[3/4]" : "aspect-[3/4]"} max-w-[480px] mx-auto`} data-testid="pitch-container">
       {formation.slots.map((rawSlot, idx) => {
-        const slot = applyTacticShift(rawSlot, tactic);
+        const slot = applyTacticShift(rawSlot, tactic, formationId);
+        const labelPos = slot.displayPos || slot.pos;
         const player = xi[idx];
         const active = idx === activeSlotIndex;
         const hint = slotHints ? slotHints[idx] : null;
@@ -121,11 +122,11 @@ export const Pitch = ({
                     <span className="leading-tight text-white mt-0.5">{initials(player.name)}</span>
                   </>
                 ) : (
-                  <span className="text-white/80 font-display tracking-wider">{slot.pos}</span>
+                  <span className="text-white/80 font-display tracking-wider">{labelPos}</span>
                 )}
               </div>
               <div className={`${labelClass} text-white/90 text-center font-display tracking-wider`}>
-                {player ? <span className={tierTextColor(player, player._season)}>{slot.pos}</span> : slot.pos}
+                {player ? <span className={tierTextColor(player, player._season)}>{labelPos}</span> : labelPos}
               </div>
             </Tag>
           </motion.div>
