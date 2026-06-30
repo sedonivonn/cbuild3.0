@@ -25,7 +25,7 @@ export const HomeScreen = ({ onStart, hasSave, onContinue, onHallOfFame }) => {
         className="w-full max-w-5xl py-14 text-center"
       >
         <div className="mb-7" />
-        <h1 className="font-display leading-[0.95] tracking-tight flex items-baseline justify-center text-5xl sm:text-6xl md:text-8xl lg:text-9xl whitespace-nowrap">
+        <h1 className="font-display leading-[0.95] tracking-tight flex items-baseline justify-center gap-3 md:gap-5 text-5xl sm:text-6xl md:text-8xl lg:text-9xl whitespace-nowrap">
           <span
             style={{
               color: "#d4af37",
