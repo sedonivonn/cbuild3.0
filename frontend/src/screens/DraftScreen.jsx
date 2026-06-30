@@ -4,7 +4,7 @@ import { DiceButton } from "../components/DiceButton";
 import { PlayerCard } from "../components/PlayerCard";
 import { Pitch } from "../components/Pitch";
 import { Crest } from "../components/Crest";
-import { FORMATIONS, canPlace, hasAvailableSlot, applyTacticShift } from "../data/formations";
+import { FORMATIONS, canPlace, hasAvailableSlot } from "../data/formations";
 import { TACTICS } from "../data/tactics";
 import { effOverall } from "../data/ballonDor";
 import { rollRandom, rollLucky } from "../engine/draftEngine";
@@ -270,7 +270,7 @@ export const DraftScreen = ({
           {/* Formation */}
           <div className="glass rounded-2xl p-4">
             <div className="text-[10px] text-white/55 tracking-widest font-mono mb-3">DİZİLİŞ</div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-4 gap-2">
               {Object.values(FORMATIONS).map((f) => {
                 const active = formationId === f.id;
                 return (
@@ -279,7 +279,7 @@ export const DraftScreen = ({
                     type="button"
                     onClick={() => handleFormationChange(f.id)}
                     data-testid={`formation-${f.id}`}
-                    className={`rounded-lg py-2 px-1 text-sm font-display tracking-tight transition-all ${
+                    className={`rounded-lg py-2 px-1 text-[12px] font-display tracking-tight transition-all ${
                       active
                         ? "bg-amber-300 text-black ring-2 ring-amber-300/80"
                         : "bg-white/5 text-white/80 hover:bg-white/10 ring-1 ring-white/10"
@@ -429,7 +429,6 @@ export const DraftScreen = ({
           <div className="space-y-1.5 max-h-[420px] overflow-y-auto pr-1">
             {formation.slots.map((slot, idx) => {
               const player = xi[idx];
-              const displayed = applyTacticShift(slot, tactic, formationId).displayPos || slot.pos;
               return (
                 <div
                   key={idx}
@@ -439,7 +438,7 @@ export const DraftScreen = ({
                   data-testid={`roster-row-${idx}`}
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="font-mono text-[10px] tracking-wider text-white/45 w-8 shrink-0">{displayed}</span>
+                    <span className="font-mono text-[10px] tracking-wider text-white/45 w-8 shrink-0">{slot.pos}</span>
                     {player ? (
                       <span className="text-xs text-white truncate" title={player.name}>{player.name}</span>
                     ) : (

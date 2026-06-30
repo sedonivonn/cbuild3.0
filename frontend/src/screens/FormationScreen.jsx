@@ -39,7 +39,7 @@ export const FormationScreen = ({ selected, onSelect, onContinue, teamName, setT
         <div className="text-[10px] text-white/40 mt-1 font-mono">{(teamName || "").length}/24</div>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-3">
         {Object.values(FORMATIONS).map((f) => {
           const active = selected === f.id;
           return (
