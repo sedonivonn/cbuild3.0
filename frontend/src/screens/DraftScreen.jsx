@@ -378,9 +378,9 @@ export const DraftScreen = ({
         </div>
         )}
 
-        {/* MIDDLE COLUMN — pitch (col-span varies: 6 setup, 5 draft, 3 when 11/11 to give cards room) */}
+        {/* MIDDLE COLUMN — pitch (col-span varies: 6 setup, 5 draft, 4 when 11/11 to give cards room but keep pitch readable) */}
         <div className={`glass rounded-2xl p-4 ${
-          phase === "setup" ? "lg:col-span-6" : (isDraftComplete ? "lg:col-span-3" : "lg:col-span-5")
+          phase === "setup" ? "lg:col-span-6" : (isDraftComplete ? "lg:col-span-4" : "lg:col-span-5")
         }`}>
           <div className="text-xs text-white/55 mb-3 font-mono tracking-widest flex items-center justify-between">
             <span>SAHA · {formation.label} {tactic ? `· ${TACTICS[tactic].name}` : ""}</span>
@@ -474,7 +474,7 @@ export const DraftScreen = ({
 
         {/* RIGHT COLUMN — draft phase: Spin the Wheel + cards (wider when 11/11 final) */}
         {phase === "draft" && (
-          <div className={`glass rounded-2xl p-4 flex flex-col ${isDraftComplete ? "lg:col-span-9" : "lg:col-span-7"}`}>
+          <div className={`glass rounded-2xl p-4 flex flex-col ${isDraftComplete ? "lg:col-span-8" : "lg:col-span-7"}`}>
             {!pool && !rolling && !isDraftComplete && (
               <SpinTheWheelIdle
                 onSpin={handleRoll}

@@ -466,27 +466,15 @@ export const TournamentScreen = ({ userStats, userTacticId, userTeamName, userXi
                   <div className="font-mono text-xs tracking-widest text-amber-300">ŞAMPİYON</div>
                   <div className="font-display text-3xl tracking-tight mt-1">{state.champion.label}</div>
                 </div>
-                {/* Spectator buttons: let the user watch remaining matches even after elimination */}
-                <div className="mt-5 flex flex-wrap gap-2 justify-center">
-                  {state.eliminatedAt === "Son 16" && state.qf && state.qf[0]?.tie && (
-                    <button type="button" className="btn-ghost" data-testid="watch-qf-button"
-                      onClick={() => onMatch({ stage: "Çeyrek Final", knockout: state.qf[0], userWon: false, spectator: true })}>
-                      <Play size={14} className="inline mr-1" /> ÇF MAÇI İZLE
-                    </button>
-                  )}
-                  {(state.eliminatedAt === "Son 16" || state.eliminatedAt === "Çeyrek Final") && state.sf && state.sf[0]?.tie && (
-                    <button type="button" className="btn-ghost" data-testid="watch-sf-button"
-                      onClick={() => onMatch({ stage: "Yarı Final", knockout: state.sf[0], userWon: false, spectator: true })}>
-                      <Play size={14} className="inline mr-1" /> YF MAÇI İZLE
-                    </button>
-                  )}
-                  {state.final && state.final[0]?.tie && (
+                {/* Spectator button: only the final is worth watching after elimination */}
+                {state.final && state.final[0]?.tie && (
+                  <div className="mt-5 flex justify-center">
                     <button type="button" className="btn-primary" data-testid="watch-final-button"
                       onClick={() => onMatch({ stage: "Final", knockout: state.final[0], userWon: false, spectator: true })}>
                       <Play size={14} className="inline mr-1" /> FİNALİ İZLE
                     </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </motion.div>
               <TournamentAwards
                 tournamentStats={tournamentStats}
