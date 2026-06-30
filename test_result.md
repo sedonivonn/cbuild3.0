@@ -186,19 +186,56 @@ frontend:
         -agent: "testing"
         -comment: "UI VERIFICATION PASSED. Opened http://localhost:3000 and confirmed: (1) THREE trophy emojis (🏆🏆🏆) are visible to the LEFT of '13-0' in the hero heading; (2) Trophies are staggered in size (small-big-small pattern: text-2xl/3xl/2xl at lines 33,41,49); (3) Golden/glowing appearance confirmed in screenshot; (4) Code verified: each trophy has gold drop-shadow filter with rgba(212,175,55) at lines 36,44,52. All requirements met."
 
+
+  - task: "Rebrand to championsbuild — TopBar logo + Hero title"
+    implemented: true
+    working: true
+    file: "frontend/src/components/TopBar.jsx, frontend/src/screens/HomeScreen.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "TopBar logo: replaced '13-0' chip with 'championsbuild' (champions in gold #d4af37 with glow, build in white). Hero: replaced the giant '13-0' + 3 trophy emojis with a big 'championsbuild' headline (champions gold gradient #f4d77a→#d4af37→#a87f24, build white). Removed the 1995-2025 badge. Description line updated: 'Efsane UCL takımları arasından' instead of 'UCL son dörtlerinden'. Unused Sparkles import removed. Visually verified."
+        -working: true
+        -agent: "testing"
+        -comment: "UI VERIFICATION PASSED. (A) TopBar logo: Confirmed 'championsbuild' displayed in top-left with 'champions' in gold (#d4af37) and 'build' in white. NO '13-0' present. Screenshot: topbar_logo.png. (B) Hero section: Confirmed large 'championsbuild' heading with 'champions' in gold gradient and 'build' in white. NO '13-0', NO trophy emojis (🏆), NO '1995-2025' badge, NO '31 SEZON' or '124 YARI FİNALİST' text. Description correctly contains 'Efsane UCL takımları arasından' (NOT 'UCL son dörtlerinden'). Screenshots: hero_section.png, full_homepage.png. All four conditions for (B) met."
+
+  - task: "Hall of Fame TrophyCard shows Sezonun En İyi Oyuncusu"
+    implemented: true
+    working: true
+    file: "frontend/src/screens/HallOfFameScreen.jsx"
+    stuck_count: 0
+    priority: "medium"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Added a potPlayer useMemo that computes Ballon d'Or-style player of tournament from trophy.tournamentStats + trophy.xi (avg*matches + 1.2*goals + 0.7*assists + 0.5*mom). Renders a small gold-bordered chip above YILDIZLAR: Crown icon, 'SEZONUN EN İYİ' label, player name, OVR. Only shows when tournamentStats exist."
+        -working: true
+        -agent: "testing"
+        -comment: "CODE-LEVEL VERIFICATION PASSED. Verified TrophyCard component in HallOfFameScreen.jsx. All four required conditions confirmed: (1) Lines 146-161: potPlayer useMemo exists with composite scoring formula (avg*matches + 1.2*goals + 0.7*assists + 0.5*mom), returns {score, name, ovr} shape. (2) Lines 201-218: Render block with conditional {potPlayer && ()} wrapping. (3) Line 210: Crown icon size={12}, Line 212: 'SEZONUN EN İYİ' label, Line 213: {potPlayer.name}, Line 216: {potPlayer.ovr}. (4) Line 205: Gold-tinted border borderColor 'rgba(212,175,55,0.3)'. Block positioned ABOVE YILDIZLAR section (line 221). Implementation correct."
+
 metadata:
   created_by: "main_agent"
   version: "1.0"
-  test_sequence: 4
+  test_sequence: 6
   run_ui: true
 
 test_plan:
-  current_focus:
-    - "User's group card highlighted with subtle gold border"
-    - "Hero 13-0 has 3 animated trophy emojis to the left"
+  current_focus: []
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
+
+agent_communication:
+    -agent: "main"
+    -message: "Rebrand + Hall of Fame addition. Verify the following on http://localhost:3000:\n\n(A) TopBar logo (sol üst) must say 'championsbuild' where 'champions' is gold (#d4af37, slightly glowing) and 'build' is white. NO '13-0' anymore. Verify via screenshot or by inspecting /app/frontend/src/components/TopBar.jsx (title='championsbuild', span styles).\n\n(B) Hero (anasayfa ortası) shows a big 'championsbuild' headline. 'champions' uses gold gradient, 'build' is white. NO '13-0', NO trophy emojis, NO '1995-2025 31 SEZON 124 YARI FİNALİST' badge. Description paragraph contains 'Efsane UCL takımları arasından' (not 'UCL son dörtlerinden'). Verify via screenshot.\n\n(C) Hall of Fame TrophyCard (frontend/src/screens/HallOfFameScreen.jsx) must, when trophy.tournamentStats exists, render a small gold-bordered chip ABOVE the YILDIZLAR section showing a Crown icon, 'SEZONUN EN İYİ' label, the best player's name, and their OVR. Code-level verification preferred (the gallery is empty in a fresh session). Confirm the potPlayer useMemo + the JSX block exist in TrophyCard.\n\nReport PASS/FAIL with screenshots for (A) and (B). For (C) confirm code presence."
+
+agent_communication:
+    -agent: "testing"
+    -message: "✅ ALL VERIFICATIONS PASSED. Completed targeted rebrand + feature verification for Turkish UCL Draft Builder.\n\n(A) TopBar Logo: PASS - 'championsbuild' displayed correctly with 'champions' in gold (#d4af37) and 'build' in white. NO '13-0' present. Screenshot: topbar_logo.png\n\n(B) Hero Section: PASS - Large 'championsbuild' heading with correct styling. NO '13-0', NO trophy emojis, NO '1995-2025' badge. Description contains 'Efsane UCL takımları arasından' (correct phrase). Screenshots: hero_section.png, full_homepage.png\n\n(C) Hall of Fame Code: PASS - potPlayer useMemo with composite scoring exists (lines 146-161). Render block with Crown icon, 'SEZONUN EN İYİ' label, player name, and OVR correctly implemented (lines 201-218). Gold-tinted border present. Positioned above YILDIZLAR section.\n\nAll tasks marked as working: true, needs_retesting: false. No issues found."
 
 agent_communication:
     -agent: "main"

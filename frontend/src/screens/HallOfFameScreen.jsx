@@ -142,6 +142,24 @@ const TrophyCard = ({ trophy, onClick }) => {
       .slice(0, 3);
   }, [trophy.xi]);
 
+  // "Sezonun en iyi oyuncusu" — Ballon d'Or-style composite over tournamentStats.
+  const potPlayer = useMemo(() => {
+    const stats = trophy.tournamentStats;
+    if (!stats || !trophy.xi) return null;
+    let best = null;
+    trophy.xi.forEach((p) => {
+      if (!p) return;
+      const s = stats[p.name];
+      if (!s || !s.matches) return;
+      const avg = s.totalRating / s.matches;
+      const score = avg * s.matches + (s.goals || 0) * 1.2 + (s.assists || 0) * 0.7 + (s.mom || 0) * 0.5;
+      if (!best || score > best.score) {
+        best = { score, name: p.name, ovr: effOverall(p, p._season) };
+      }
+    });
+    return best;
+  }, [trophy.tournamentStats, trophy.xi]);
+
   return (
     <motion.button
       type="button"
@@ -178,6 +196,26 @@ const TrophyCard = ({ trophy, onClick }) => {
         <span className="text-white/30">·</span>
         <span style={{ color: tactic?.color || "white" }}>{tactic?.name || trophy.tactic}</span>
       </div>
+
+      {/* Sezonun en iyi oyuncusu (player of the tournament) */}
+      {potPlayer && (
+        <div
+          className="rounded-md px-2.5 py-1.5 mb-3 flex items-center justify-between gap-2 border"
+          style={{
+            borderColor: "rgba(212,175,55,0.3)",
+            background: "linear-gradient(90deg, rgba(212,175,55,0.10) 0%, rgba(212,175,55,0.02) 100%)",
+          }}
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <Crown size={12} className="text-amber-300 shrink-0" />
+            <div className="flex flex-col min-w-0">
+              <span className="font-mono text-[8px] text-amber-300/80 tracking-widest leading-none">SEZONUN EN İYİ</span>
+              <span className="truncate text-xs text-white/90 font-medium leading-tight">{potPlayer.name}</span>
+            </div>
+          </div>
+          <span className="font-mono text-[11px] text-amber-300 shrink-0">{potPlayer.ovr}</span>
+        </div>
+      )}
 
       {/* Top 3 player names */}
       <div className="border-t border-white/10 pt-2.5 space-y-1">

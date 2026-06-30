@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
-import { Trophy, Shuffle, Swords, Sparkles, Archive } from "lucide-react";
+import { Trophy, Shuffle, Swords, Archive } from "lucide-react";
 import { getAllTrophies, getTopTrophies } from "../engine/hallOfFame";
 import { effOverall } from "../data/ballonDor";
 
@@ -24,36 +24,8 @@ export const HomeScreen = ({ onStart, hasSave, onContinue, onHallOfFame }) => {
         transition={{ duration: 0.6, ease: [0.2, 0.8, 0.2, 1] }}
         className="w-full max-w-5xl py-14 text-center"
       >
-        <div className="inline-flex items-center gap-2 mb-7 px-3 py-1 rounded-full border border-white/15 text-xs font-mono tracking-widest text-white/70">
-          <Sparkles size={14} className="text-amber-300" /> 1995 — 2025 · 31 SEZON · 124 YARI FİNALİST
-        </div>
-        <h1 className="font-display leading-[0.9] tracking-tight flex items-baseline justify-center gap-1 md:gap-2 text-[7rem] md:text-[12rem]">
-          <span className="inline-flex items-end gap-1 md:gap-1.5 mr-2 md:mr-3 self-center" aria-hidden>
-            <motion.span
-              className="text-2xl md:text-4xl"
-              animate={{ y: [0, -6, 0], rotate: [-6, 6, -6] }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut", delay: 0 }}
-              style={{ filter: "drop-shadow(0 0 8px rgba(212,175,55,0.5))" }}
-            >
-              🏆
-            </motion.span>
-            <motion.span
-              className="text-3xl md:text-5xl"
-              animate={{ y: [0, -9, 0], rotate: [-4, 4, -4], scale: [1, 1.06, 1] }}
-              transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut", delay: 0.25 }}
-              style={{ filter: "drop-shadow(0 0 12px rgba(212,175,55,0.6))" }}
-            >
-              🏆
-            </motion.span>
-            <motion.span
-              className="text-2xl md:text-4xl"
-              animate={{ y: [0, -6, 0], rotate: [6, -6, 6] }}
-              transition={{ duration: 2.2, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-              style={{ filter: "drop-shadow(0 0 8px rgba(212,175,55,0.5))" }}
-            >
-              🏆
-            </motion.span>
-          </span>
+        <div className="mb-7" />
+        <h1 className="font-display leading-[0.95] tracking-tight flex items-baseline justify-center text-5xl sm:text-6xl md:text-8xl lg:text-9xl whitespace-nowrap">
           <span
             style={{
               color: "#d4af37",
@@ -65,17 +37,17 @@ export const HomeScreen = ({ onStart, hasSave, onContinue, onHallOfFame }) => {
               filter: "drop-shadow(0 2px 0 rgba(0,0,0,0.4))",
             }}
           >
-            13
+            champions
           </span>
           <span
             className="text-white"
             style={{ textShadow: "0 0 22px rgba(255,255,255,0.22)" }}
           >
-            -0
+            build
           </span>
         </h1>
         <p className="mt-6 text-white/70 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">
-          Tarihin en güçlü karma takımını sen kur. UCL son dörtlerinden zar zar oyuncu seç,
+          Tarihin en güçlü karma takımını sen kur. Efsane UCL takımları arasından zar zar oyuncu seç,
           taktiğini belirle ve 31 efsane şampiyonu eleyerek kupayı kaldır.
         </p>
         <div className="mt-10 flex flex-wrap gap-3 justify-center">

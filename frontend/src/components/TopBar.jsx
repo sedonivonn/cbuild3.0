@@ -7,13 +7,13 @@ export const TopBar = ({ onSoundToggle, soundOn, onReset, title }) => {
     <div className="w-full px-5 md:px-10 py-4 flex items-center justify-between border-b border-white/5 sticky top-0 z-30 glass">
       <div className="flex items-center gap-3 ml-2 md:ml-4">
         <div
-          className="px-3 h-11 min-w-[56px] rounded-md flex items-center justify-center border border-white/10 bg-black/70"
+          className="px-3.5 h-11 rounded-md flex items-center justify-center border border-white/10 bg-black/70"
           style={{ boxShadow: "0 0 14px rgba(212,175,55,0.2), inset 0 0 7px rgba(212,175,55,0.07)" }}
-          title="13-0"
+          title="championsbuild"
         >
-          <span className="font-display text-xl leading-none tracking-tight flex items-baseline">
-            <span style={{ color: "#d4af37", textShadow: "0 0 7px rgba(212,175,55,0.4)" }}>13</span>
-            <span className="text-white">-0</span>
+          <span className="font-display text-lg leading-none tracking-tight flex items-baseline">
+            <span style={{ color: "#d4af37", textShadow: "0 0 7px rgba(212,175,55,0.4)" }}>champions</span>
+            <span className="text-white">build</span>
           </span>
         </div>
         {title ? (
