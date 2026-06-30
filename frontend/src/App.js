@@ -106,7 +106,6 @@ function App() {
   };
 
   const handleReset = () => {
-    if (!window.confirm("Tüm ilerlemeyi sıfırlayıp baştan başlamak istediğinden emin misin?")) return;
     resetState();
     setScreen("home");
   };

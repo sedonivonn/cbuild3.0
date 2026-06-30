@@ -212,6 +212,19 @@ frontend:
     status_history:
         -working: "NA"
         -agent: "main"
+
+  - task: "SIFIRLA inline confirm panel (no window.confirm)"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/components/TopBar.jsx, frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Removed window.confirm() from App.handleReset. TopBar SIFIRLA button now toggles an anchored confirmation panel (data-testid='reset-confirm-panel') below the button, containing 'Emin misin?' heading + short description + VAZGEÇ (reset-cancel-button) and EVET, SIFIRLA (reset-confirm-button). Outside-click and Escape close the panel. EVET triggers onReset; VAZGEÇ just dismisses. Visually verified via screenshot."
+
         -comment: "Added a potPlayer useMemo that computes Ballon d'Or-style player of tournament from trophy.tournamentStats + trophy.xi (avg*matches + 1.2*goals + 0.7*assists + 0.5*mom). Renders a small gold-bordered chip above YILDIZLAR: Crown icon, 'SEZONUN EN İYİ' label, player name, OVR. Only shows when tournamentStats exist."
         -working: true
         -agent: "testing"
@@ -224,14 +237,15 @@ metadata:
   run_ui: true
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "SIFIRLA inline confirm panel (no window.confirm)"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
 agent_communication:
     -agent: "main"
-    -message: "Rebrand + Hall of Fame addition. Verify the following on http://localhost:3000:\n\n(A) TopBar logo (sol üst) must say 'championsbuild' where 'champions' is gold (#d4af37, slightly glowing) and 'build' is white. NO '13-0' anymore. Verify via screenshot or by inspecting /app/frontend/src/components/TopBar.jsx (title='championsbuild', span styles).\n\n(B) Hero (anasayfa ortası) shows a big 'championsbuild' headline. 'champions' uses gold gradient, 'build' is white. NO '13-0', NO trophy emojis, NO '1995-2025 31 SEZON 124 YARI FİNALİST' badge. Description paragraph contains 'Efsane UCL takımları arasından' (not 'UCL son dörtlerinden'). Verify via screenshot.\n\n(C) Hall of Fame TrophyCard (frontend/src/screens/HallOfFameScreen.jsx) must, when trophy.tournamentStats exists, render a small gold-bordered chip ABOVE the YILDIZLAR section showing a Crown icon, 'SEZONUN EN İYİ' label, the best player's name, and their OVR. Code-level verification preferred (the gallery is empty in a fresh session). Confirm the potPlayer useMemo + the JSX block exist in TrophyCard.\n\nReport PASS/FAIL with screenshots for (A) and (B). For (C) confirm code presence."
+    -message: "SIFIRLA reset flow no longer uses window.confirm. Clicking the SIFIRLA button (top-right) toggles an in-page confirmation panel anchored beneath the button. Verify: 1) Open http://localhost:3000. 2) Click button[data-testid='reset-button']. 3) Element data-testid='reset-confirm-panel' appears (NOT a native browser dialog). 4) Contains 'Emin misin?', a VAZGEÇ button (data-testid='reset-cancel-button'), and 'EVET, SIFIRLA' button (data-testid='reset-confirm-button'). 5) Clicking VAZGEÇ closes the panel; no navigation. 6) Click outside the panel — it should also close. 7) Click EVET, SIFIRLA — page resets to home, no native browser popup at any point. Provide screenshot of the open panel."
 
 agent_communication:
     -agent: "testing"
