@@ -170,54 +170,165 @@ const POS_GROUP = {
   LW: "ATT", RW: "ATT", ST: "ATT", CF: "ATT",
 };
 
-// Tactic-based ROLE / LABEL overrides per formation.
-// Keys: formation id → tactic id → { slotId: newDisplayPos }
-// Football logic notes:
-// - GEGENPRESS: high press, midfielders pushed up aggressively
-// - TIKI_TAKA:  controlled possession, deep playmaker as the anchor
-// - PARK_THE_BUS: defensive block, midfielders sit very deep
+// Tactic-based ROLE + POSITION overrides per formation (FC 26 styled presets).
+// Keys: formation id → tactic id → { slotId: { pos?, top?, left? } }
+// - pos: override the displayed label only (placement compatibility still uses slot.pos)
+// - top / left: absolute pitch coordinates that REPLACE the group shift for that slot
+//
+// Football logic:
+// - GEGENPRESS  ≈ FC26 "ATAK"  (high block, attacking presets, #10 pushed up)
+// - TIKI_TAKA   ≈ FC26 "DENGE" / possession (single pivot anchor, controlled)
+// - PARK_THE_BUS ≈ FC26 "SAVUNMA" (deep block, double pivot, compact mid)
 export const TACTIC_POS_OVERRIDES = {
   "4-3-3": {
-    // Deepest central mid slot ("CM" id, top:58) is the holding role
-    GEGENPRESS:   { CM: "CAM" },                       // push the #6 up to a #10
-    TIKI_TAKA:    { CM: "CDM" },                       // single pivot (Busquets-style)
-    PARK_THE_BUS: { LCM: "CDM", CM: "CDM", RCM: "CDM" }, // triple pivot
+    // Base: LCM(top:48), CM(top:58, deepest), RCM(top:48), LW(22), ST(14), RW(22)
+    GEGENPRESS: {
+      // 4-3-3 ATAK: deepest central mid becomes a #10 and jumps ahead of the other two CMs
+      CM:  { pos: "CAM", top: 34 },
+      LCM: { top: 50 },
+      RCM: { top: 50 },
+      LW:  { top: 18 },
+      RW:  { top: 18 },
+      ST:  { top: 10 },
+    },
+    TIKI_TAKA: {
+      // 4-3-3 DENGE: single pivot in front of the back four, two free 8s
+      CM:  { pos: "CDM", top: 62 },
+      LCM: { top: 46 },
+      RCM: { top: 46 },
+    },
+    PARK_THE_BUS: {
+      // 4-5-1 shell: triple pivot deep, wingers tracked back
+      LCM: { pos: "CDM", top: 58 },
+      CM:  { pos: "CDM", top: 64 },
+      RCM: { pos: "CDM", top: 58 },
+      LW:  { top: 34 },
+      RW:  { top: 34 },
+      ST:  { top: 26 },
+    },
   },
   "4-2-3-1": {
-    GEGENPRESS:   { LDM: "CM", RDM: "CM" },            // double pivot becomes box-to-box
-    TIKI_TAKA:    {},                                  // already balanced (CDM + CDM + CAM)
-    PARK_THE_BUS: { CAM: "CM" },                       // CAM drops to support midfield
+    // Base: LDM(58, CDM), RDM(58, CDM), CAM(36), LM(32, LW), RM(32, RW), ST(14)
+    GEGENPRESS: {
+      // Box-to-box pivots push higher, CAM hugs the ST
+      LDM: { pos: "CM", top: 50 },
+      RDM: { pos: "CM", top: 50 },
+      CAM: { top: 28 },
+      ST:  { top: 10 },
+    },
+    TIKI_TAKA: {
+      // Asymmetric pivot: one CDM holds, the other plays as a CM
+      LDM: { pos: "CDM", top: 60 },
+      RDM: { pos: "CM",  top: 52 },
+    },
+    PARK_THE_BUS: {
+      // CAM drops to CM, wide attackers track as wide midfielders
+      CAM: { pos: "CM", top: 48 },
+      LM:  { pos: "LM", top: 42 },
+      RM:  { pos: "RM", top: 42 },
+      ST:  { top: 22 },
+    },
   },
   "4-4-2": {
-    GEGENPRESS:   { RCM: "CAM" },                      // asymmetric attacking mid
-    TIKI_TAKA:    { LCM: "CDM" },                      // one anchor for build-up
-    PARK_THE_BUS: { LCM: "CDM", RCM: "CDM" },          // double pivot
+    // Base: LM(46), LCM(50), RCM(50), RM(46), LST(18), RST(18)
+    GEGENPRESS: {
+      // 4-4-2 ATAK: asymmetric — one CM advances to a #10 role
+      LCM: { top: 48 },
+      RCM: { pos: "CAM", top: 32 },
+      LST: { top: 12 },
+      RST: { top: 12 },
+    },
+    TIKI_TAKA: {
+      // Holding mid + box-to-box (Pirlo-style deep playmaker on the left)
+      LCM: { pos: "CDM", top: 58 },
+      RCM: { top: 48 },
+    },
+    PARK_THE_BUS: {
+      // Flat 4-4-2 block, double pivot
+      LCM: { pos: "CDM", top: 58 },
+      RCM: { pos: "CDM", top: 58 },
+      LM:  { top: 52 },
+      RM:  { top: 52 },
+      LST: { top: 24 },
+      RST: { top: 24 },
+    },
   },
   "3-5-2": {
-    // Default CM(CDM) at top:58 with LCM/RCM as CM either side
-    GEGENPRESS:   { CM: "CM", LCM: "CAM", RCM: "CAM" }, // attacking midfield trio
-    TIKI_TAKA:    {},                                   // CDM stays as the anchor
-    PARK_THE_BUS: { LCM: "CDM", RCM: "CDM" },           // triple defensive mid
+    // Base: LCM(54, CM), CM(58, CDM), RCM(54, CM), LWB(50), RWB(50), LST(18), RST(18)
+    GEGENPRESS: {
+      // Mezzala duo high, single pivot holds the middle
+      LCM: { pos: "CAM", top: 36 },
+      RCM: { pos: "CAM", top: 36 },
+      CM:  { pos: "CM",  top: 52 },
+      LWB: { top: 42 },
+      RWB: { top: 42 },
+      LST: { top: 14 },
+      RST: { top: 14 },
+    },
+    TIKI_TAKA: {
+      // Diamond-ish: CDM anchor, two CMs balanced
+      LCM: { top: 50 },
+      RCM: { top: 50 },
+    },
+    PARK_THE_BUS: {
+      // Triple defensive mid in front of back three
+      LCM: { pos: "CDM", top: 58 },
+      CM:  { pos: "CDM", top: 62 },
+      RCM: { pos: "CDM", top: 58 },
+      LWB: { top: 58 },
+      RWB: { top: 58 },
+    },
   },
   "5-3-2": {
-    // 5 defenders + 3 mids (CDM in the middle, CM either side)
-    GEGENPRESS:   { LCM: "CAM", RCM: "CAM" },           // wings of midfield push up
-    TIKI_TAKA:    {},
-    PARK_THE_BUS: { LCM: "CDM", RCM: "CDM" },           // double pivot, ultra deep
+    // Base: LWB(64), LCB(74), CCB(76), RCB(74), RWB(64), LCM(48), CM(52, CDM), RCM(48), LST(18), RST(18)
+    GEGENPRESS: {
+      // Push wing-backs much higher, mezzalas as attacking mids
+      LCM: { pos: "CAM", top: 36 },
+      RCM: { pos: "CAM", top: 36 },
+      CM:  { top: 50 },
+      LWB: { top: 46 },
+      RWB: { top: 46 },
+      LST: { top: 12 },
+      RST: { top: 12 },
+    },
+    TIKI_TAKA: {
+      // Controlled — keep the anchor, mids stay balanced
+      LCM: { top: 48 },
+      RCM: { top: 48 },
+    },
+    PARK_THE_BUS: {
+      // Ultra-deep block, double pivot in front of back five
+      LCM: { pos: "CDM", top: 56 },
+      RCM: { pos: "CDM", top: 56 },
+      LWB: { top: 70 },
+      RWB: { top: 70 },
+      LST: { top: 26 },
+      RST: { top: 26 },
+    },
   },
 };
 
 export function applyTacticShift(slot, tacticId, formationId = null) {
-  if (!tacticId || !TACTIC_SHIFTS[tacticId]) return { ...slot, displayPos: slot.pos };
-  const group = POS_GROUP[slot.pos] || "MID";
-  const dy = TACTIC_SHIFTS[tacticId][group] || 0;
-  // clamp top between 6 and 92 to keep within pitch bounds
-  const newTop = Math.max(6, Math.min(92, slot.top + dy));
-  // Role label override (display only — placement compatibility still uses slot.pos)
-  let displayPos = slot.pos;
+  if (!tacticId || !TACTIC_SHIFTS[tacticId]) {
+    return { ...slot, displayPos: slot.pos };
+  }
+  // Look up explicit override for this slot under this formation+tactic
+  let override = null;
   if (formationId && TACTIC_POS_OVERRIDES[formationId]) {
     const map = TACTIC_POS_OVERRIDES[formationId][tacticId] || {};
-    if (map[slot.id]) displayPos = map[slot.id];
+    override = map[slot.id] || null;
   }
-  return { ...slot, top: newTop, displayPos };
+  // Default top: apply the group shift unless override gives an absolute value
+  let newTop;
+  if (override && typeof override.top === "number") {
+    newTop = override.top;
+  } else {
+    const group = POS_GROUP[slot.pos] || "MID";
+    const dy = TACTIC_SHIFTS[tacticId][group] || 0;
+    newTop = slot.top + dy;
+  }
+  newTop = Math.max(6, Math.min(92, newTop));
+  const newLeft = override && typeof override.left === "number" ? override.left : slot.left;
+  const displayPos = override && override.pos ? override.pos : slot.pos;
+  return { ...slot, top: newTop, left: newLeft, displayPos };
 }
