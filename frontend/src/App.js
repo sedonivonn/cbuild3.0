@@ -5,6 +5,7 @@ import { DraftScreen } from "./screens/DraftScreen";
 import { ConfirmScreen } from "./screens/ConfirmScreen";
 import { TacticsScreen } from "./screens/TacticsScreen";
 import { TournamentScreen } from "./screens/TournamentScreen";
+import { LeagueTournamentScreen } from "./screens/LeagueTournamentScreen";
 import { MatchScreen } from "./screens/MatchScreen";
 import { TrophyScreen } from "./screens/TrophyScreen";
 import { HallOfFameScreen } from "./screens/HallOfFameScreen";
@@ -37,6 +38,9 @@ function App() {
   const [changes, setChanges] = useState(initial?.changes || { remaining: 3, luckyRemaining: 1 });
   const [tactic, setTactic] = useState(initial?.tactic || null);
   const [tournament, setTournament] = useState(initial?.tournament || null);
+  // "group" = legacy 8x4 group phase, "league" = 32-team Swiss-model league phase.
+  // Existing saves without this field default to "group" for backward compat.
+  const [tournamentMode, setTournamentMode] = useState(initial?.tournamentMode || "group");
   const [activeMatch, setActiveMatch] = useState(null);
   const [trophyTeam, setTrophyTeam] = useState(null);
   const [soundOn, setSoundOn] = useState(sound.isEnabled());
@@ -62,8 +66,8 @@ function App() {
 
   // Persist
   useEffect(() => {
-    saveState({ screen, teamName, formationId, xi, changes, tactic, tournament });
-  }, [screen, teamName, formationId, xi, changes, tactic, tournament]);
+    saveState({ screen, teamName, formationId, xi, changes, tactic, tournament, tournamentMode });
+  }, [screen, teamName, formationId, xi, changes, tactic, tournament, tournamentMode]);
 
   const teamStats = useMemo(() => {
     if (!formationId || xi.length === 0) return null;
@@ -81,6 +85,20 @@ function App() {
     setChanges({ remaining: 3, luckyRemaining: 1 });
     setTactic(null);
     setTournament(null);
+    setTournamentMode("group");
+    setScreen("draft");
+  };
+
+  // League mode: identical draft flow, only the post-draft tournament changes.
+  const handleStartLeague = () => {
+    sound.click();
+    setTeamName("");
+    setFormationId("4-3-3");
+    setXi(new Array(FORMATIONS["4-3-3"].slots.length).fill(null));
+    setChanges({ remaining: 3, luckyRemaining: 1 });
+    setTactic(null);
+    setTournament(null);
+    setTournamentMode("league");
     setScreen("draft");
   };
 
@@ -103,6 +121,7 @@ function App() {
     try { localStorage.removeItem(SAVE_KEY); } catch (_) {}
     setTeamName(""); setFormationId(null); setXi([]); setChanges({ remaining: 3, luckyRemaining: 1 });
     setTactic(null); setTournament(null); setActiveMatch(null); setTrophyTeam(null);
+    setTournamentMode("group");
   };
 
   const handleReset = () => {
@@ -132,7 +151,7 @@ function App() {
   return (
     <div className="min-h-screen text-white">
       <TopBar onSoundToggle={handleSoundToggle} soundOn={soundOn} onReset={handleReset} />
-      {screen === "home" && <HomeScreen onStart={handleStart} hasSave={hasSave} onContinue={handleContinue} onHallOfFame={() => setScreen("hall_of_fame")} />}
+      {screen === "home" && <HomeScreen onStart={handleStart} onStartLeague={handleStartLeague} hasSave={hasSave} onContinue={handleContinue} onHallOfFame={() => setScreen("hall_of_fame")} />}
       {screen === "draft" && formationId && (
         <DraftScreen
           formationId={formationId}
@@ -158,8 +177,20 @@ function App() {
       {screen === "tactics" && formationId && (
         <TacticsScreen formationId={formationId} xi={xi} teamStats={teamStats} tactic={tactic} setTactic={setTactic} onContinue={() => setScreen("tournament")} />
       )}
-      {screen === "tournament" && userTournamentStats && tactic && (
+      {screen === "tournament" && userTournamentStats && tactic && tournamentMode === "group" && (
         <TournamentScreen
+          userStats={userTournamentStats}
+          userTacticId={tactic}
+          userTeamName={displayedTeamName}
+          userXi={xi}
+          savedState={tournament}
+          onSaveState={setTournament}
+          onMatch={setActiveMatch}
+          onTrophy={(team) => setTrophyTeam(team)}
+        />
+      )}
+      {screen === "tournament" && userTournamentStats && tactic && tournamentMode === "league" && (
+        <LeagueTournamentScreen
           userStats={userTournamentStats}
           userTacticId={tactic}
           userTeamName={displayedTeamName}
@@ -185,6 +216,7 @@ function App() {
               totalOvr: teamStats?.overall,
               xi,
               tournamentStats: tournament?.tournamentStats || null,
+              tournamentMode,
             });
           } catch (_) { /* localStorage may be unavailable */ }
           setTrophyTeam(m.championRef);

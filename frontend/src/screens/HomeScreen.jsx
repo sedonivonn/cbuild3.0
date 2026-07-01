@@ -11,7 +11,7 @@ function tierBg(ovr) {
   return "linear-gradient(135deg, #5a3818 0%, #b07333 100%)";
 }
 
-export const HomeScreen = ({ onStart, hasSave, onContinue, onHallOfFame }) => {
+export const HomeScreen = ({ onStart, onStartLeague, hasSave, onContinue, onHallOfFame }) => {
   const trophies = useMemo(() => getAllTrophies(), []);
   const topThree = useMemo(() => getTopTrophies(3), []);
   const hasTrophies = trophies.length > 0;
@@ -52,7 +52,10 @@ export const HomeScreen = ({ onStart, hasSave, onContinue, onHallOfFame }) => {
         </p>
         <div className="mt-10 flex flex-wrap gap-3 justify-center">
           <button type="button" onClick={onStart} className="btn-primary" data-testid="start-draft-button">
-            YENİ DRAFT BAŞLAT
+            GRUP BAZINDA (ESKİ TİP)
+          </button>
+          <button type="button" onClick={onStartLeague} className="btn-primary" data-testid="start-draft-league-button">
+            LİG BAZINDA (YENİ TİP)
           </button>
           {hasSave && (
             <button type="button" onClick={onContinue} className="btn-ghost" data-testid="continue-button">
