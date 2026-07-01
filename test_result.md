@@ -238,12 +238,62 @@ metadata:
 
 test_plan:
   current_focus:
-    - "Pitch slot click hitbox alignment fix"
-    - "HallOfFame inline confirm panels (no window.confirm)"
-    - "TrophyScreen backdrop click dismiss"
+    - "Ballon d'Or 99 OVR tile — black instead of purple"
+    - "Home buttons rename: GRUP FORMATI / LİG FORMATI / ONLİNE (placeholder), KUPA KABİNİM removed"
+    - "TopBar logo → home navigation"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
+
+agent_communication:
+    -agent: "main"
+    -message: "THREE UI polish tasks to verify. Hot-reload ON. App URL: http://localhost:3000.\n\n===== TASK #1: 99 OVR tile shows BLACK background (not purple) =====\nFiles: /app/frontend/src/screens/HallOfFameScreen.jsx, /app/frontend/src/screens/HomeScreen.jsx\nChange: `tierBg(ovr)` — added a new tier for ovr>=99 that returns a black gradient (`#000000 → #1a1a1a`). 90-98 remain purple, 85-89 gold, 80-84 silver, <80 bronze.\nTest:\n  1) Clear localStorage. Seed one trophy under key 'ucl_hall_of_fame_v1' with an XI containing at least one player whose `overall` is 99 (e.g. Luís Figo 2000, Lionel Messi 2009, George Weah 1995). Include totalOvr=92 so the trophy card header stays purple.\n  2) Reload the page. On home, the cabinet preview should show 1 trophy card. Click TÜMÜNÜ GÖR (data-testid='see-all-trophies-button').\n  3) On Hall of Fame, click data-testid='trophy-card-t-99'. Trophy detail modal opens.\n  4) Locate the roster rows for the 99 OVR players. Their number tile on the right should have a BLACK gradient background (rgb close to 0-26). Non-99 players (90 OVR Ramos, Kimmich, Ferdinand, Carlos) should be PURPLE.\n  5) Inspect background style via evaluate: get the numeric tile's computed background-image or the inline style attribute; assert 99 tiles have '#000000' / '#1a1a1a' substring OR resolve rgb close to black; other 90+ have '#7c3aed' / purple.\n  6) Take screenshot 'trophy_black_99.png'.\nPass: 99 OVR tiles use black gradient, others unchanged.\n\n===== TASK #2: Home buttons rename + KUPA KABİNİM removed + ONLİNE placeholder =====\nFile: /app/frontend/src/screens/HomeScreen.jsx\nChange: Removed the top-level KUPA KABİNİM button. Renamed labels: 'GRUP BAZINDA (ESKİ TİP)' → 'GRUP FORMATI'; 'LİG BAZINDA (YENİ TİP)' → 'LİG FORMATI'. Added a placeholder ONLİNE button (data-testid='online-placeholder-button') that is DISABLED (opacity-60 cursor-not-allowed, aria-disabled='true') and shows the label 'ONLİNE' with a small 'YAKINDA' badge. Access to Hall of Fame is now ONLY via the TÜMÜNÜ GÖR link on the cabinet preview (which only appears when the user has trophies).\nTest:\n  1) On home screen, assert data-testid='start-draft-button' has innerText 'GRUP FORMATI'.\n  2) Assert data-testid='start-draft-league-button' has innerText 'LİG FORMATI'.\n  3) Assert data-testid='online-placeholder-button' exists and its innerText contains 'ONLİNE' and 'YAKINDA'.\n  4) Assert data-testid='open-hall-of-fame-button' does NOT exist anymore (the top-level KUPA KABİNİM button was removed).\n  5) With a seeded trophy in localStorage, reload. Assert data-testid='see-all-trophies-button' (TÜMÜNÜ GÖR link) is visible and clicking it navigates to Hall of Fame (data-testid='hall-of-fame-screen' becomes visible).\nPass: labels changed, KUPA KABİNİM top-level button removed, ONLİNE placeholder visible with 'yakında' badge, Hall of Fame accessible ONLY via TÜMÜNÜ GÖR.\n\n===== TASK #3: TopBar logo → home navigation =====\nFiles: /app/frontend/src/components/TopBar.jsx, /app/frontend/src/App.js\nChange: The top-left 'championsbuild' logo is now a real <button data-testid='topbar-logo-button'>. Clicking it calls onLogoClick prop, which App.js wires to `setScreen('home')`.\nTest:\n  1) Navigate to any non-home screen (easiest: from home, click 'GRUP FORMATI' → draft screen).\n  2) Click data-testid='topbar-logo-button'. Wait ~700ms.\n  3) Assert we're back on the home screen: data-testid='start-draft-button' visible AND the CHAMPIONSBUILD hero title is visible.\n  4) Repeat by navigating to Hall of Fame (via TÜMÜNÜ GÖR) and clicking the logo — should return to home.\nPass: logo click always brings user back to home screen from any inner screen.\n\nReport PASS/FAIL per task with screenshots."
+
+  - task: "Ballon d'Or 99 OVR tile black background"
+    implemented: true
+    working: true
+    file: "frontend/src/screens/HallOfFameScreen.jsx, frontend/src/screens/HomeScreen.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Added `if (ovr >= 99) return 'linear-gradient(135deg,#000000 0%,#1a1a1a 100%)'` at the top of tierBg in both HallOfFameScreen and HomeScreen. 90-98 remain purple. Visually confirmed via a seeded trophy screenshot: Luís Figo/Messi/Weah tiles now black."
+        -working: true
+        -agent: "testing"
+        -comment: "UI VERIFICATION PASSED. Seeded trophy with 3x 99 OVR players (Luís Figo, Lionel Messi, George Weah) and verified in Hall of Fame trophy detail modal. All three 99 OVR tiles display BLACK gradient background (#000000→#1a1a1a) as expected. Non-99 players (90 OVR: Rio Ferdinand, Sergio Ramos, Roberto Carlos, Joshua Kimmich) correctly display PURPLE gradient backgrounds. Programmatic check confirmed background styles contain black color values for 99 OVR tiles. Screenshot: trophy_black_99.png."
+
+  - task: "Home buttons rename + KUPA KABİNİM removal + ONLİNE placeholder"
+    implemented: true
+    working: true
+    file: "frontend/src/screens/HomeScreen.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Renamed the two CTA buttons to GRUP FORMATI / LİG FORMATI. Removed the KUPA KABİNİM top-level button. Added an ONLİNE placeholder button (data-testid='online-placeholder-button', disabled visual with YAKINDA badge). Hall of Fame access remains via the TÜMÜNÜ GÖR link on the cabinet preview (only shown when trophies exist)."
+        -working: true
+        -agent: "testing"
+        -comment: "UI VERIFICATION PASSED. All five checks confirmed: (1) GRUP FORMATI button (data-testid='start-draft-button') displays correct text. (2) LİG FORMATI button (data-testid='start-draft-league-button') displays correct text. (3) ONLİNE placeholder button (data-testid='online-placeholder-button') visible with 'ONLİNE' text and 'YAKINDA' badge, correctly disabled (aria-disabled='true'). (4) KUPA KABİNİM top-level button (data-testid='open-hall-of-fame-button') NOT found - correctly removed. (5) Hall of Fame accessible via TÜMÜNÜ GÖR link (data-testid='see-all-trophies-button') which navigates to Hall of Fame screen (data-testid='hall-of-fame-screen'). Screenshots: task2_home_initial.png, task2_hall_of_fame.png."
+
+  - task: "TopBar logo → home navigation"
+    implemented: true
+    working: true
+    file: "frontend/src/components/TopBar.jsx, frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Wrapped the championsbuild logo in a <button data-testid='topbar-logo-button'>. Added onLogoClick prop to TopBar, wired in App.js to setScreen('home'). Kept the same visual with a subtle hover (brightness + amber border ring)."
+        -working: true
+        -agent: "testing"
+        -comment: "UI VERIFICATION PASSED. Tested logo navigation from two different screens: (1) From draft screen: Clicked GRUP FORMATI button to navigate to draft screen, then clicked logo button (data-testid='topbar-logo-button'), successfully returned to home screen (data-testid='start-draft-button' visible). (2) From Hall of Fame: Navigated to Hall of Fame via TÜMÜNÜ GÖR, clicked logo button, successfully returned to home screen. Logo navigation works correctly from all screens. Screenshots: task3_draft_screen.png, task3_back_to_home.png."
+
 
 agent_communication:
     -agent: "testing"
@@ -313,4 +363,8 @@ agent_communication:
     -message: "Single bug to verify. After a user is eliminated and clicks SİMÜLASYONU BİTİR, the post-tournament view renders ALL brackets (R16, ÇF, YF, FİNAL) and a ŞAMPİYON card. Previously the FİNAL bracket card displayed '—' for both teams' scores (final is single-match: tie.match.home.score, NOT tie.aggregate). I added a fallback. Please verify.\n\nDirect code-level verification (acceptable):\n  Open /app/frontend/src/screens/TournamentScreen.jsx KnockoutCard component (~line 574) and confirm:\n    const aggA = pair.tie?.aggregate?.a ?? pair.tie?.match?.home?.score;\n    const aggB = pair.tie?.aggregate?.b ?? pair.tie?.match?.away?.score;\n  This is the fix. Confirm both lines exist with the ?? fallback to tie.match.\n\nUI verification (if feasible):\n  1. Start a fresh draft, fill 11 players (use first option for each).\n  2. Play through group + R16. If user wins R16, continue with QF/SF until eliminated OR wins entire tournament.\n  3. If eliminated → click 'SİMÜLASYONU BİTİR'. Inspect the FINAL bracket card: both team rows should show a numeric score (e.g. 2 / 1), not '—'.\n  4. If user wins entire tournament, the TrophyScreen opens; no bracket visible. Restart and try again with weaker random picks. UI test is best-effort — code-level pass is sufficient given test difficulty.\n\nReport: PASS/FAIL with screenshot if possible. Other tasks (AYARLARA DÖN, elendin screen, match counter) were already validated previously — do not re-test them."
     -agent: "testing"
     -message: "✅ VERIFICATION COMPLETE - CODE-LEVEL PASS. Inspected /app/frontend/src/screens/TournamentScreen.jsx lines 574-578. The KnockoutCard component correctly implements both fallbacks using the nullish coalescing operator (??). Line 577: aggA falls back to pair.tie?.match?.home?.score. Line 578: aggB falls back to pair.tie?.match?.away?.score. The fix ensures that single-match finals (which return tie.match instead of tie.aggregate) will display numeric scores instead of '—'. Bug fix verified and working as intended."
+
+agent_communication:
+    -agent: "testing"
+    -message: "✅ ALL THREE UI POLISH TASKS VERIFIED AND PASSED. Completed comprehensive UI testing for Turkish UCL Draft Builder.\n\n**TASK #1: 99 OVR Ballon d'Or tile BLACK background** - PASS\n- Seeded trophy with 3x 99 OVR players (Luís Figo, Lionel Messi, George Weah)\n- Verified in Hall of Fame trophy detail modal: all 99 OVR tiles show BLACK gradient (#000000→#1a1a1a)\n- Non-99 players (90 OVR) correctly show PURPLE gradient\n- Programmatic check confirmed background styles\n- Screenshot: trophy_black_99.png\n\n**TASK #2: Home buttons rename + KUPA KABİNİM removal + ONLİNE placeholder** - PASS\n- ✓ GRUP FORMATI button displays correct text\n- ✓ LİG FORMATI button displays correct text\n- ✓ ONLİNE placeholder button visible with YAKINDA badge, correctly disabled\n- ✓ KUPA KABİNİM top-level button removed (not found)\n- ✓ Hall of Fame accessible ONLY via TÜMÜNÜ GÖR link\n- Screenshots: task2_home_initial.png, task2_hall_of_fame.png\n\n**TASK #3: TopBar logo → home navigation** - PASS\n- ✓ Logo click from draft screen → returns to home\n- ✓ Logo click from Hall of Fame → returns to home\n- Logo navigation works correctly from all screens\n- Screenshots: task3_draft_screen.png, task3_back_to_home.png\n\nAll tasks marked as working: true, needs_retesting: false. No issues found."
 

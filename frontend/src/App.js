@@ -150,7 +150,7 @@ function App() {
 
   return (
     <div className="min-h-screen text-white">
-      <TopBar onSoundToggle={handleSoundToggle} soundOn={soundOn} onReset={handleReset} />
+      <TopBar onSoundToggle={handleSoundToggle} soundOn={soundOn} onReset={handleReset} onLogoClick={() => setScreen("home")} />
       {screen === "home" && <HomeScreen onStart={handleStart} onStartLeague={handleStartLeague} hasSave={hasSave} onContinue={handleContinue} onHallOfFame={() => setScreen("hall_of_fame")} />}
       {screen === "draft" && formationId && (
         <DraftScreen

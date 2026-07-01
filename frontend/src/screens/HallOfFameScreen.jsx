@@ -17,6 +17,7 @@ function formatDate(iso) {
 }
 
 function tierBg(ovr) {
+  if (ovr >= 99) return "linear-gradient(135deg, #000000 0%, #1a1a1a 100%)"; // Ballon d'Or 99 → siyah
   if (ovr >= 90) return "linear-gradient(135deg, #4a2569 0%, #7c3aed 100%)";
   if (ovr >= 85) return "linear-gradient(135deg, #7c5f00 0%, #f5c542 100%)";
   if (ovr >= 80) return "linear-gradient(135deg, #6b7280 0%, #cbd5e1 100%)";

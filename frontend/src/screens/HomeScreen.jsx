@@ -1,10 +1,11 @@
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
-import { Trophy, Shuffle, Swords, Archive } from "lucide-react";
+import { Trophy, Shuffle, Swords, Wifi } from "lucide-react";
 import { getAllTrophies, getTopTrophies } from "../engine/hallOfFame";
 import { effOverall } from "../data/ballonDor";
 
 function tierBg(ovr) {
+  if (ovr >= 99) return "linear-gradient(135deg, #000000 0%, #1a1a1a 100%)"; // Ballon d'Or 99 → siyah
   if (ovr >= 90) return "linear-gradient(135deg, #4a2569 0%, #7c3aed 100%)";
   if (ovr >= 85) return "linear-gradient(135deg, #7c5f00 0%, #f5c542 100%)";
   if (ovr >= 80) return "linear-gradient(135deg, #6b7280 0%, #cbd5e1 100%)";
@@ -52,30 +53,29 @@ export const HomeScreen = ({ onStart, onStartLeague, hasSave, onContinue, onHall
         </p>
         <div className="mt-10 flex flex-wrap gap-3 justify-center">
           <button type="button" onClick={onStart} className="btn-primary" data-testid="start-draft-button">
-            GRUP BAZINDA (ESKİ TİP)
+            GRUP FORMATI
           </button>
           <button type="button" onClick={onStartLeague} className="btn-primary" data-testid="start-draft-league-button">
-            LİG BAZINDA (YENİ TİP)
+            LİG FORMATI
+          </button>
+          <button
+            type="button"
+            className="btn-ghost flex items-center gap-2 opacity-60 cursor-not-allowed"
+            title="Yakında"
+            aria-disabled="true"
+            data-testid="online-placeholder-button"
+          >
+            <Wifi size={16} className="text-amber-300" />
+            ONLİNE
+            <span className="ml-1 px-1.5 py-0.5 rounded bg-white/10 text-white/60 text-[9px] font-mono tracking-wider">
+              YAKINDA
+            </span>
           </button>
           {hasSave && (
             <button type="button" onClick={onContinue} className="btn-ghost" data-testid="continue-button">
               KAYDA DEVAM ET
             </button>
           )}
-          <button
-            type="button"
-            onClick={onHallOfFame}
-            className="btn-ghost flex items-center gap-2"
-            data-testid="open-hall-of-fame-button"
-          >
-            <Archive size={16} className="text-amber-300" />
-            KUPA KABİNİM
-            {hasTrophies && (
-              <span className="ml-1 px-2 py-0.5 rounded-full bg-amber-300 text-black text-[10px] font-bold">
-                {trophies.length}
-              </span>
-            )}
-          </button>
         </div>
 
         {/* Cabinet preview — only when user has trophies */}
