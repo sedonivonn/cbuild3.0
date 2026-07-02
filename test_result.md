@@ -102,7 +102,100 @@
 # Testing Data - Main Agent and testing sub agent both should log testing data below this section
 #====================================================================================================
 
-user_problem_statement: "TrophyScreen Yılın Oyuncusu kartında MAÇ değeri 19 görünüyor; UCL turnuva yapısına göre bir oyuncunun oynayabileceği maksimum maç 13 olmalı (6 grup + 2 R16 + 2 QF + 2 SF + 1 Final). Logo (sol üst) biraz daha büyük ve hafif sağa kaydırılmış olmalı."
+user_problem_statement: "Bu projeyi MongoDB yerine Firebase Firestore kullanacak şekilde düzenle. Kullanıcı girişini Firebase Authentication ile yap. Backend'i Cloud Run'a deploy edilecek şekilde ayarla. Mevcut API yapısını bozma."
+
+backend:
+  - task: "Firebase/Firestore migration + dual-mode DB provider"
+    implemented: true
+    working: "NA"
+    file: "backend/server.py, backend/db/*, backend/firebase_admin_init.py, backend/config.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Refactored monolithic server.py into modular structure. Added `DBProvider` abstraction with `MongoProvider` (motor) and `FirestoreProvider` (google-cloud-firestore AsyncClient). Env `DB_PROVIDER=mongo|firestore` switches at runtime; defaults to mongo for local dev. Firebase Admin initialization is lazy and safe: `FIREBASE_ENABLED=false` skips init entirely so backend still starts without credentials. Existing /api/status endpoints preserved (contract unchanged). Added /api/health for Cloud Run probe. All routes remain under /api/*."
+
+  - task: "Firebase Auth endpoints: /api/auth/sync, /api/auth/me, /api/auth/logout"
+    implemented: true
+    working: "NA"
+    file: "backend/auth/router.py, backend/auth/dependencies.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Added Firebase ID token verification via `firebase_admin.auth.verify_id_token`. `get_current_user` dependency reads Authorization: Bearer <token>. Endpoints: POST /api/auth/sync (upserts user doc into users collection), GET /api/auth/me (returns profile, auto-creates on first hit), POST /api/auth/logout (stateless ack). When Firebase is disabled/unconfigured, endpoints return 503 with a clear message instead of crashing."
+
+  - task: "Cloud Run deployment artifacts: Dockerfile, cloudbuild.yaml, deploy.sh"
+    implemented: true
+    working: "NA"
+    file: "backend/Dockerfile, backend/.dockerignore, cloudbuild.yaml, deploy.sh, FIREBASE_SETUP.md"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Dockerfile: python:3.11-slim + gunicorn/uvicorn workers, binds to $PORT (default 8080), HEALTHCHECK on /api/health. cloudbuild.yaml: builds and pushes to Artifact Registry, deploys to Cloud Run with env vars APP_ENV=production, DB_PROVIDER=firestore, FIREBASE_ENABLED=true. deploy.sh: idempotent manual deploy script (enable APIs, create AR repo, build, deploy, print URL). FIREBASE_SETUP.md documents the full path from empty Firebase project to live Cloud Run URL."
+
+frontend:
+  - task: "Firebase Web SDK integration with graceful degradation"
+    implemented: true
+    working: true
+    file: "frontend/src/lib/firebase.js, frontend/src/lib/api.js, frontend/src/hooks/useAuth.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "Added firebase npm package. `lib/firebase.js` initializes Firebase App + Auth (browserLocalPersistence) + Firestore + GoogleAuthProvider ONLY if all REACT_APP_FIREBASE_* vars are set. `isFirebaseConfigured()` gates every UI feature. `lib/api.js` is an axios instance that auto-attaches Bearer <ID token> to /api/* calls when the user is signed in. `useAuth` hook exposes: registerEmail, loginEmail, loginGoogle, logout, resetPassword + Turkish error mapping. Visually confirmed home screen renders unchanged when Firebase vars are empty."
+
+  - task: "AuthScreen modal (login / register / password reset) + Google sign-in"
+    implemented: true
+    working: "NA"
+    file: "frontend/src/screens/AuthScreen.jsx"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Glass/gold modal matching existing design language. Three modes (login/register/reset) with animated transitions, escape-to-close, backdrop click to dismiss, Turkish error messages, Google sign-in button. Requires Firebase config to render forms; otherwise shows a helpful setup hint."
+
+  - task: "TopBar UserMenu: login button when signed out, avatar dropdown when signed in"
+    implemented: true
+    working: true
+    file: "frontend/src/components/UserMenu.jsx, frontend/src/components/TopBar.jsx, frontend/src/App.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: true
+        -agent: "main"
+        -comment: "Wrapped App with AuthProvider. TopBar now hosts UserMenu (signed-out => GİRİŞ YAP btn opens AuthScreen; signed-in => avatar/name pill with dropdown containing ÇIKIŞ YAP). Component is invisible when Firebase not configured. Rest of the app (localStorage-based game data) untouched."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.1"
+  test_sequence: 7
+  run_ui: true
+
+test_plan:
+  current_focus:
+    - "Firebase/Firestore migration + dual-mode DB provider"
+    - "Firebase Auth endpoints: /api/auth/sync, /api/auth/me, /api/auth/logout"
+    - "AuthScreen modal (login / register / password reset) + Google sign-in"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    -agent: "main"
+    -message: "Firebase migration scaffolding complete. IMPORTANT: user has NOT yet provided Firebase credentials, so FIREBASE_ENABLED defaults to false and DB_PROVIDER defaults to mongo. In this state:\n  - Backend starts cleanly (verified GET /api/health -> 200).\n  - /api/status POST/GET works via MongoDB (verified end-to-end).\n  - /api/auth/* returns 503 with 'Firebase Admin is not configured' (verified).\n  - Frontend home renders unchanged; UserMenu is hidden (verified via screenshot).\n\nWhen the user sets Firebase env vars (FIREBASE_ENABLED=true + credentials, plus REACT_APP_FIREBASE_* on frontend), Auth features light up automatically. See FIREBASE_SETUP.md for the full walkthrough.\n\nCloud Run: backend/Dockerfile, cloudbuild.yaml, deploy.sh, backend/.dockerignore all created. deploy.sh is idempotent; requires only PROJECT_ID env var.\n\nNo automated backend testing performed yet (would need real Firebase creds to fully test /api/auth/*). Recommend the user provide creds then request a targeted test run."
 
 frontend:
   - task: "Tournament stats: matches counter must cap at 13 (no inflation due to mutation/StrictMode)"

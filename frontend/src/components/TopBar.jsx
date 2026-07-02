@@ -2,8 +2,9 @@ import React, { useEffect, useRef, useState } from "react";
 import { Volume2, VolumeX, RotateCcw } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { sound } from "../engine/sounds";
+import { UserMenu } from "./UserMenu";
 
-export const TopBar = ({ onSoundToggle, soundOn, onReset, onLogoClick, title }) => {
+export const TopBar = ({ onSoundToggle, soundOn, onReset, onLogoClick, onOpenAuth, title }) => {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const wrapperRef = useRef(null);
 
@@ -45,6 +46,7 @@ export const TopBar = ({ onSoundToggle, soundOn, onReset, onLogoClick, title }) 
         ) : null}
       </div>
       <div className="flex items-center gap-2">
+        <UserMenu onOpenAuth={onOpenAuth} />
         <button
           type="button"
           onClick={() => { sound.click(); onSoundToggle && onSoundToggle(); }}

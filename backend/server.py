@@ -1,89 +1,86 @@
-from fastapi import FastAPI, APIRouter
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-import os
+"""championsbuild backend entrypoint.
+
+Modular FastAPI app with dual DB support (MongoDB / Firestore) and optional
+Firebase Authentication. Env-driven; see backend/.env.example.
+"""
+from __future__ import annotations
+
 import logging
-from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
-import uuid
-from datetime import datetime, timezone
 
+from fastapi import APIRouter, FastAPI
+from starlette.middleware.cors import CORSMiddleware
 
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+from auth.router import router as auth_router
+from config import settings
+from db import close_db
+from firebase_admin_init import (
+    get_init_error,
+    init_firebase,
+    is_firebase_ready,
+)
+from routers.status import router as status_router
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
-# Create the main app without a prefix
-app = FastAPI()
+app = FastAPI(title="championsbuild-api", version="1.0.0")
 
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
-
-
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class StatusCheckCreate(BaseModel):
-    client_name: str
-
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
-
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
-
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
-
-# Include the router in the main app
-app.include_router(api_router)
-
+# --- CORS ---
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=settings.cors_origins or ["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+# --- Startup: initialize Firebase (best-effort) ---
+@app.on_event("startup")
+async def on_startup() -> None:
+    logger.info(
+        "Starting championsbuild-api | env=%s db_provider=%s firebase_enabled=%s",
+        settings.app_env,
+        settings.db_provider,
+        settings.firebase_enabled,
+    )
+    if settings.firebase_enabled:
+        init_firebase()
+        if not is_firebase_ready():
+            logger.warning(
+                "Firebase Admin failed to initialize: %s", get_init_error()
+            )
+
 
 @app.on_event("shutdown")
-async def shutdown_db_client():
-    client.close()
+async def on_shutdown() -> None:
+    await close_db()
+
+
+# --- API router with /api prefix (required by Kubernetes ingress) ---
+api_router = APIRouter(prefix="/api")
+api_router.include_router(status_router)
+api_router.include_router(auth_router)
+
+
+@api_router.get("/health")
+async def health() -> dict:
+    """Liveness + readiness endpoint used by Cloud Run."""
+    return {
+        "status": "ok",
+        "env": settings.app_env,
+        "db_provider": settings.db_provider,
+        "firebase_enabled": settings.firebase_enabled,
+        "firebase_ready": is_firebase_ready(),
+    }
+
+
+app.include_router(api_router)
+
+
+@app.get("/")
+async def index() -> dict:
+    """Non-API root, useful when hitting the Cloud Run URL directly."""
+    return {"service": "championsbuild-api", "docs": "/docs"}

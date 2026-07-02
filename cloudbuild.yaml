@@ -1,0 +1,72 @@
+# ============================================================
+# Google Cloud Build pipeline for championsbuild backend
+# ============================================================
+# Trigger this file with:
+#   gcloud builds submit --config cloudbuild.yaml \
+#     --substitutions=_REGION=europe-west1,_SERVICE=championsbuild-api
+#
+# Or wire it to a Cloud Build trigger on your Git repo.
+
+substitutions:
+  _REGION: "europe-west1"
+  _SERVICE: "championsbuild-api"
+  _REPO: "championsbuild"          # Artifact Registry repo name
+  _ARTIFACT_HOST: "europe-west1-docker.pkg.dev"
+  _RUNTIME_SA: ""                   # optional: runtime service account email
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+steps:
+  # 1. Build the container image from /backend.
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_ARTIFACT_HOST}/${PROJECT_ID}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+      - -t
+      - ${_ARTIFACT_HOST}/${PROJECT_ID}/${_REPO}/${_SERVICE}:latest
+      - -f
+      - backend/Dockerfile
+      - backend
+
+  # 2. Push both tags to Artifact Registry.
+  - id: push-sha
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_ARTIFACT_HOST}/${PROJECT_ID}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+
+  - id: push-latest
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_ARTIFACT_HOST}/${PROJECT_ID}/${_REPO}/${_SERVICE}:latest
+
+  # 3. Deploy to Cloud Run.
+  #    Secrets and non-secret env vars are read from `deploy.env` and
+  #    referenced with `--set-env-vars` at deploy time (see deploy.sh for the
+  #    manual path). Here we keep the minimum production defaults.
+  - id: deploy
+    name: gcr.io/google.cloud-sdk/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_ARTIFACT_HOST}/${PROJECT_ID}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=8080
+      - --memory=512Mi
+      - --cpu=1
+      - --min-instances=0
+      - --max-instances=5
+      - --timeout=120s
+      - --set-env-vars=APP_ENV=production,DB_PROVIDER=firestore,FIREBASE_ENABLED=true,FIREBASE_PROJECT_ID=${PROJECT_ID},CORS_ORIGINS=*
+
+images:
+  - ${_ARTIFACT_HOST}/${PROJECT_ID}/${_REPO}/${_SERVICE}:${SHORT_SHA}
+  - ${_ARTIFACT_HOST}/${PROJECT_ID}/${_REPO}/${_SERVICE}:latest

@@ -1,0 +1,21 @@
+# Files ignored by `docker build` when copying the backend.
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+.git/
+.gitignore
+tests/
+node_modules/

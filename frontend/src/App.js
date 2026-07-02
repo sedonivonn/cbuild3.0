@@ -15,6 +15,8 @@ import { FORMATIONS } from "./data/formations";
 import { computeTeamStats } from "./engine/overallEngine";
 import { readDraftFromUrl, clearDraftFromUrl } from "./engine/shareCode";
 import { saveTrophy } from "./engine/hallOfFame";
+import { AuthProvider } from "./hooks/useAuth";
+import { AuthScreen } from "./screens/AuthScreen";
 
 const SAVE_KEY = "ucl_draft_save_v1";
 
@@ -44,6 +46,7 @@ function App() {
   const [activeMatch, setActiveMatch] = useState(null);
   const [trophyTeam, setTrophyTeam] = useState(null);
   const [soundOn, setSoundOn] = useState(sound.isEnabled());
+  const [authOpen, setAuthOpen] = useState(false);
 
   // Read shared draft from URL hash on first mount
   useEffect(() => {
@@ -150,7 +153,7 @@ function App() {
 
   return (
     <div className="min-h-screen text-white">
-      <TopBar onSoundToggle={handleSoundToggle} soundOn={soundOn} onReset={handleReset} onLogoClick={() => setScreen("home")} />
+      <TopBar onSoundToggle={handleSoundToggle} soundOn={soundOn} onReset={handleReset} onLogoClick={() => setScreen("home")} onOpenAuth={() => setAuthOpen(true)} />
       {screen === "home" && <HomeScreen onStart={handleStart} onStartLeague={handleStartLeague} hasSave={hasSave} onContinue={handleContinue} onHallOfFame={() => setScreen("hall_of_fame")} />}
       {screen === "draft" && formationId && (
         <DraftScreen
@@ -232,8 +235,15 @@ function App() {
         onDismiss={() => setTrophyTeam(null)}
       />}
       {screen === "hall_of_fame" && <HallOfFameScreen onBack={() => setScreen("home")} />}
+      {authOpen && <AuthScreen onClose={() => setAuthOpen(false)} />}
     </div>
   );
 }
 
-export default App;
+export default function AppWithProviders() {
+  return (
+    <AuthProvider>
+      <App />
+    </AuthProvider>
+  );
+}
