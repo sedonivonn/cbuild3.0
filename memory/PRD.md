@@ -1,59 +1,79 @@
-# Ultimate Champions League Draft Builder — PRD
+# championsbuild — PRD
 
-## Original Problem Statement
-A web-based football draft & simulation game inspired by 38-0.online. Players randomly draft 11 footballers from UEFA Champions League semifinalist squads (1995-2025), select a formation and tactic, then compete in a 32-team Champions League tournament against the 31 historic UCL champions to lift the trophy.
+## Original problem statement (2026-07-05)
+Implement the "Online Kapışma" (Online Multi-Player Room) feature in the
+existing championsbuild React (CRA) + FastAPI + MongoDB app. Config UI with
+tabs (+ ODA KUR / KATIL), nickname, MAX OYUNCU 2–8, OYUN MODU
+(GRUP FORMATI / LİG FORMATI). Lobby screen with 5-char room code, copy /
+WhatsApp / share actions, dynamic `?room=CODE` URL, live player list with
+BOŞ SLOT placeholders, EV SAHİBİ crown, connection dot; BAŞLAT button
+(host-only). Real-time sync across clients.
 
-## User Choices (gathered via ask_human)
-- Data: Full set (all seasons, all semifinalists) — 31 seasons × 4 teams
-- Player cards: FIFA UT–style with initial-based avatars (no real photos)
-- Architecture: Frontend-only (React/HTML/JS), localStorage save
-- Sound: ON by default, with toggle to mute
-- Design: EA FC + Football Manager hybrid (dark theme, FUT cards, FM-style ticker)
+## Architecture
+| Layer     | Choice                                | Notes                                          |
+|-----------|---------------------------------------|------------------------------------------------|
+| Frontend  | React 19 (CRA + craco), Tailwind      | Existing stack — no Vite migration             |
+| Backend   | FastAPI + Motor (async MongoDB)       | Existing app; added new router                 |
+| Real-time | **FastAPI WebSockets**                | Native — no extra service, no ping-pong worries |
+| Storage   | MongoDB collection `online_rooms`     | Documents include players[], settings, status  |
 
-## Latest Tweaks — Feb 2026
-- Difficulty re-tuned 55 → 62: `HARD_MODE_FACTOR` 0.5 → 0.62, `legacyBonus` default 1, user form `r(-1.5, 1)` (was -1..+2), user chemistry +1 per line (was +2)
-- POTM now considers BOTH sides: opponent's best player can win if they outperform user XI. Opponent POTM card uses white frame (vs gold for user) to distinguish
-- Event ticker color coding: user goals stay amber/yellow, opponent goals now white (less eye-straining)
-- `homePlayerStats` & `awayPlayerStats` now both computed in `simulateMatch`; ET recompute generalized via `buildSidePlayerStats`
-- Hall of Fame & Trophy Cabinet (localStorage) — UCL kazanınca otomatik kaydedilir, ana ekranda en iyi 3 draft önizlemesi, detaylı kabin ekranı
-- Match Stats Hub — gol/asist atribüsyonu (OVR + pozisyon ağırlıklı), Player of the Match kartı (takım adıyla), maç sonu istatistikler
-- Tournament Awards — Altın Krampon, Altın Top, Oyun Kurucu + Turnuva En İyi 11 (gol/asist/MOM/reyting tablo)
-- Shareable Draft (html2canvas) — Görsel olarak indir/paylaş, Twitter, WhatsApp, linki kopyala
-- Pitch center line: vertical → horizontal dashed
-- Hard Mode rebalanced (~55/100): AI legacy 3→1, stage × 0.5, user form neutral (-1..+2), injury 5%/-1, +2 chemistry
-- POTM goal double-count bug fixed (merge'da `...p` spread sonrası ekleme yapılıyordu → çift sayım)
-- ET goals now properly credited to scorers via `recomputeUserStatsFromEvents`
+If the user later migrates to Vite + Netlify, the recommended swap is
+**Supabase Realtime** (WebSocket + row-level Postgres replication) — the
+frontend hook + API client structure is portable.
 
-## Implementation Status — Feb 2026
-### ✅ Done (MVP)
-- Dataset: 31 seasons of UCL semifinalists with squads & overall ratings (1995–2025)
-- 31 historic UCL champion teams metadata + base overalls
-- Formations: 4-3-3, 4-2-3-1, 4-4-2, 3-5-2, 5-3-2 (with pitch coords + compatibility penalties)
-- Tactics: GEGENPRESS / TIKI-TAKA / PARK THE BUS (each with attack/midfield/defense/keeper modifiers, tempo, xG modifiers, counters)
-- Match engine: chance generation, xG, possession, minute-by-minute events, two-leg ties, extra time, penalties
-- Tournament engine: group stage drawing, fixtures, knockout brackets, AI tactic selection
-- Draft engine: random + "lucky change" (1 of 3 changes biased toward strong teams)
-- Sound engine: synthesized WebAudio sounds (dice, card reveal, goal, whistles, trophy)
-- UI: Home, Formation select, Draft, Tactics, Tournament (groups + brackets), live Match modal with ticker, Trophy ceremony
-- localStorage save/load + reset
+## Room schema (MongoDB `online_rooms`)
+```
+{
+  code:         "SNBTT3",      // 5-char [A-Z0-9], unique
+  status:       "lobby|started|closed",
+  host_id:      "abc123",
+  max_players:  4,             // 2..8
+  mode:         "group|league",
+  duration_sec: 90,
+  players: [
+    { id, nickname, is_host, connected, joined_at }
+  ],
+  created_at, updated_at, started_at
+}
+```
 
-### Architecture Notes
-- All data in /app/frontend/src/data/
-- Engines in /app/frontend/src/engine/
-- Components in /app/frontend/src/components/
-- Screens in /app/frontend/src/screens/
-- Backend (FastAPI/MongoDB) untouched — pure frontend MVP
+## API surface
+| Method | Path                                                    | Purpose                          |
+|--------|---------------------------------------------------------|----------------------------------|
+| POST   | `/api/online/rooms`                                     | Create room (host)               |
+| GET    | `/api/online/rooms/{code}`                              | Fetch state                      |
+| POST   | `/api/online/rooms/{code}/join`                         | Join as guest                    |
+| POST   | `/api/online/rooms/{code}/start`                        | Host starts the match            |
+| DELETE | `/api/online/rooms/{code}/players/{player_id}`          | Leave (host leave = close room)  |
+| WS     | `/api/online/ws/{code}?player_id=…`                     | Real-time state feed             |
 
-## P1 Backlog (next iterations)
-- Expand player squads (add more depth for smaller clubs/older seasons)
-- Background music
-- Match minute-by-minute simulation timer (instead of instant ticker)
-- Leaderboard (would require backend)
-- Custom team naming
-- Player kit colors / team color theming on FUT cards
+## What's implemented (2026-07-05)
+- Backend router `/app/backend/routers/online.py` with REST + WS,
+  `ConnectionManager` for fan-out, MongoDB persistence, and full input
+  validation (nickname 2–16, max_players 2–8, mode ∈ {group,league}).
+- Frontend API client `/app/frontend/src/lib/onlineApi.js`.
+- WebSocket hook `/app/frontend/src/hooks/useRoomSocket.js` with
+  reconnect (5-attempt backoff) and 25s heartbeat.
+- `OnlineScreen.jsx` — two-tab config UI matching the requested design
+  (red #ff3b30 active state, dark bg, uppercase Bebas Neue).
+- `OnlineLobbyScreen.jsx` — room code hero, share URL bar, copy /
+  WhatsApp / native share buttons, real-time slot list with BOŞ SLOT
+  placeholders, connection dot, host crown, status pills
+  (SÜRE / O.MAX / MOD), BAŞLAT / AYRIL actions.
+- `App.js` — new `online` and `online_lobby` screens, `?room=CODE`
+  URL detection on load, cleanup on leave.
+- `HomeScreen.jsx` — activated the previously-disabled ONLINE button.
+- Tested: 21/21 backend cases, 100% frontend flows via testing agent.
 
-## P2 Backlog
-- Online PvP
-- Card packs
-- Daily quests
-- Transfer mode
+## Backlog / P1
+- Fully synchronized per-pick draft over WebSocket (currently BAŞLAT
+  drops each client into the local DraftScreen with the room's mode).
+- Chat channel in the lobby ("MESAJLAŞ" already in the subtitle).
+- LİG TABLOSU (persistent leaderboard) across online sessions.
+- Auto-reap stale/closed rooms (TTL index on `updated_at`).
+- Redis pub/sub if the backend scales beyond 1 worker.
+
+## P2 / nice-to-have
+- Room-owner kick action.
+- Custom timer configuration in the UI (`duration_sec` currently fixed to 90s).
+- Ready-check state before BAŞLAT enables.
