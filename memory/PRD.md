@@ -66,21 +66,56 @@ frontend hook + API client structure is portable.
 - `HomeScreen.jsx` — activated the previously-disabled ONLINE button.
 - Tested: 21/21 backend cases, 100% frontend flows.
 
-### 2026-07-05 (v2 — this iteration)
-- **Per-pick timer**: `CreateRoomBody.pick_seconds` (∈ {15, 30, 45})
-  replaces old `duration_sec`. UI: new "OYUNCU BAŞINA SÜRE" selector
-  in `OnlineScreen`. Lobby SÜRE pill now reflects the chosen value.
-- **Ready-check flow**: `PlayerSlot.ready` flag; new endpoint
-  `POST /rooms/{code}/ready`. Host is force-ready. `POST /start` now
-  returns 409 unless every player has `ready=true`. Guests see a
-  big "HAZIRIM" toggle button in place of the passive waiting block;
-  host BAŞLAT is disabled with a "DİĞER OYUNCULAR HAZIR VERMEYİ
-  BEKLİYOR" hint until all guests are ready.
-- **Quick-join via URL**: opening `?room=CODE` no longer lands on the
-  config screen. Instead a compact `quickjoin-form` shows the code +
-  a single nickname field. If a nickname is saved in localStorage
-  the join fires automatically on mount — one click to lobby.
-- Tested: 29/29 backend cases, 100% frontend flows.
+### 2026-07-05 (v3 — Phase 1: Server-Authoritative Draft)
+- **60s option** added to per-pick timer (15/30/45/60).
+- **Server-authoritative draft engine** (`/app/backend/game_engine.py`):
+  8 formations + slot-compat helpers, `roll_random`/`roll_lucky`,
+  `init_player_draft`/`make_pick`/`apply_change`/`auto_pick`, and a
+  `DraftTimerManager` that schedules per-player asyncio auto-pick tasks
+  when a pick deadline expires.
+- **Frozen pool contract**: `POST /rooms/{code}/start` now REQUIRES the
+  host to upload the full team pool (built via `buildPoolSnapshot()` on
+  the client). From that moment forward the server owns every dice
+  roll, every pick validation, every timer — the client can no longer
+  inject arbitrary players.
+- **New endpoints**: `/game/pick`, `/game/change`, `/game/start_tournament`.
+  All picks are validated against the current server roll (name+slot
+  compat). Draft phase auto-transitions to `draft_complete` when every
+  player fills 11 slots; host can then flip the room to `tournament`.
+- **New frontend screen** `OnlineDraftScreen.jsx`: live progress board
+  (X/11 per player, red border on self, crown on host), current team
+  roll with sorted player cards (placeable / already-picked states),
+  DEĞİŞTİR / ŞANSLI DEĞİŞTİR with counters, TimerPill counting down
+  from the server-issued deadline (pulses red under 5s), mini pitch
+  with legal-slot highlighting.
+- **BAŞLAT rewired**: no longer drops each client into a local solo
+  draft. Both host and guests transition to the same server draft
+  session.
+- **Tournament kickoff**: when `phase="draft_complete"`, host sees
+  TURNUVAYA BAŞLA. Clicking it flips the phase to `tournament`; each
+  client boots into their existing local TournamentScreen/LeagueTournamentScreen
+  with their server-drafted squad. *Phase 2 (next iteration) will
+  replace this with a synchronized server-authoritative match sim.*
+- Tested: 46/46 backend, 100% frontend flows; only issue was a
+  non-blocking React duplicate-key warning (fixed post-test).
+
+## Roadmap
+### Phase 2 (next iteration) — Server-authoritative Tournament
+- Team-placement engine: for League mode remove N random AI from a
+  32/36-team master fixture and slot real players in; same for Group.
+- Port `matchEngine.js` to Python; every match result computed on the
+  server with a deterministic seed so all clients see identical events.
+- Broadcast per-round schedule; host `Continue` gate between rounds.
+- Waiting screens between matches; watch-mode for synchronized live
+  viewing when two humans meet.
+
+### Phase 3 — Knockouts + endgame
+- Server-side bracket generation (last 16 → final).
+- Host-elimination handling (game continues, host becomes spectator).
+- Auto-complete tournament when all humans are eliminated.
+- Awards computation (golden boot, best XI, etc.) on the server.
+- Room lifecycle hardening: TTL index, reconnect tokens, Redis pubsub
+  for multi-worker scaling.
 
 ## Backlog / P1
 - Fully synchronized per-pick draft over WebSocket (currently BAŞLAT

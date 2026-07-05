@@ -277,12 +277,12 @@ export const OnlineDraftScreen = ({ code, me, onLeave, onTournamentStart }) => {
                 </div>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {sortedPool.map((p) => {
+                {sortedPool.map((p, idx) => {
                   const disabled = !p._placeable;
                   const selected = selectedPlayerName === p.name;
                   return (
                     <button
-                      key={p.name}
+                      key={`${p.name}-${p.primary}-${idx}`}
                       type="button"
                       disabled={disabled || busy}
                       onClick={() => {
