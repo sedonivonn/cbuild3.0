@@ -5,7 +5,7 @@ import { sound } from "../engine/sounds";
 import { createRoom, joinRoom, getRoom } from "../lib/onlineApi";
 
 const MAX_OPTIONS = [2, 3, 4, 5, 6, 7, 8];
-const PICK_OPTIONS = [15, 30, 45];
+const PICK_OPTIONS = [15, 30, 45, 60];
 const MODES = [
   { id: "group", label: "GRUP FORMATI" },
   { id: "league", label: "LİG FORMATI" },
@@ -258,7 +258,7 @@ export const OnlineScreen = ({ onBack, onEnterLobby, prefillCode }) => {
                 <label className="block font-mono text-[10px] tracking-[0.3em] text-white/50 mb-2 flex items-center gap-1.5">
                   <Clock size={11} /> OYUNCU BAŞINA SÜRE
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   {PICK_OPTIONS.map((s) => (
                     <button
                       key={s}

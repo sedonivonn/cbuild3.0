@@ -11,6 +11,7 @@ import { TrophyScreen } from "./screens/TrophyScreen";
 import { HallOfFameScreen } from "./screens/HallOfFameScreen";
 import { OnlineScreen } from "./screens/OnlineScreen";
 import { OnlineLobbyScreen } from "./screens/OnlineLobbyScreen";
+import { OnlineDraftScreen } from "./screens/OnlineDraftScreen";
 import { TopBar } from "./components/TopBar";
 import { sound } from "./engine/sounds";
 import { FORMATIONS } from "./data/formations";
@@ -188,13 +189,39 @@ function App() {
           code={onlineCode}
           me={onlineMe}
           onLeave={() => { setOnlineCode(null); setOnlineMe(null); setOnlinePrefill(null); setScreen("home"); try { const u = new URL(window.location.href); u.searchParams.delete("room"); window.history.replaceState({}, "", u); } catch (_) { /* noop */ } }}
-          onStarted={(room) => {
-            // For now the "BAŞLAT" event kicks each client into the LOCAL
-            // draft flow with the room's chosen mode. A fully synchronized
-            // per-pick draft is a follow-up iteration.
+          onStarted={() => {
+            // Server has flipped the room to `started`. Every client (host
+            // and guests) now transitions to the online draft view. The
+            // draft screen re-reads state via WebSocket, so it's safe to
+            // enter here without any additional payload.
             sound.click();
-            if (room?.mode === "league") handleStartLeague();
-            else handleStart();
+            setScreen("online_draft");
+          }}
+        />
+      )}
+      {screen === "online_draft" && onlineCode && onlineMe && (
+        <OnlineDraftScreen
+          code={onlineCode}
+          me={onlineMe}
+          onLeave={() => { setOnlineCode(null); setOnlineMe(null); setOnlinePrefill(null); setScreen("home"); try { const u = new URL(window.location.href); u.searchParams.delete("room"); window.history.replaceState({}, "", u); } catch (_) { /* noop */ } }}
+          onTournamentStart={(r) => {
+            // Phase 1: server-authoritative tournament sim is not yet
+            // implemented. When the host clicks TURNUVAYA BAŞLA we drop
+            // each client into their local tournament using their
+            // server-drafted squad. Phase 2 will replace this with a
+            // synchronized server sim.
+            const mine = r?.game?.drafts?.[onlineMe.id];
+            if (!mine) return;
+            const formationSlots = FORMATIONS[mine.formation_id]?.slots || FORMATIONS["4-3-3"].slots;
+            setFormationId(mine.formation_id || "4-3-3");
+            setXi(mine.xi && mine.xi.length === formationSlots.length ? mine.xi : (new Array(formationSlots.length).fill(null)));
+            setTactic(mine.tactic_id || "GEGENPRESS");
+            setTeamName(mine.team_name || onlineMe.nickname);
+            setChanges({ remaining: 0, luckyRemaining: 0 });
+            setTournament(null);
+            setTournamentMode(r?.mode === "league" ? "league" : "group");
+            setOnlineCode(null); setOnlineMe(null); setOnlinePrefill(null);
+            setScreen("tournament");
           }}
         />
       )}

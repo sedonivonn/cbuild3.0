@@ -14,6 +14,23 @@ import pytest
 import requests
 import websockets
 
+
+def _mk_p(name, primary, sec=None, ovr=80):
+    return {"name": name, "primary": primary, "secondary": sec or primary, "overall": ovr, "nationality": "N"}
+
+
+def _legacy_pool():
+    """A minimal legal pool (2 teams, 11 players each) for start_room()."""
+    core = [
+        _mk_p("GK", "GK"), _mk_p("LB", "LB"), _mk_p("CB1", "CB"), _mk_p("CB2", "CB"), _mk_p("RB", "RB"),
+        _mk_p("CM1", "CM"), _mk_p("CM2", "CM"), _mk_p("CM3", "CM"),
+        _mk_p("LW", "LW"), _mk_p("ST", "ST"), _mk_p("RW", "RW"),
+    ]
+    return [
+        {"season": 2024, "team": {"club": "TEST_LEGACY_A", "country": "X", "crest": "", "players": [dict(p) for p in core]}},
+        {"season": 2024, "team": {"club": "TEST_LEGACY_B", "country": "X", "crest": "", "players": [dict(p) for p in core]}},
+    ]
+
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 if not BASE_URL:
     with open("/app/frontend/.env") as f:
@@ -185,7 +202,7 @@ class TestJoinRoom:
         j = requests.post(f"{API}/rooms/{code}/join", json={"nickname": "TEST_p2"})
         # Mark guest ready so start succeeds
         requests.post(f"{API}/rooms/{code}/ready", json={"player_id": j.json()["you"]["id"], "ready": True})
-        s = requests.post(f"{API}/rooms/{code}/start", json={"player_id": host["id"]})
+        s = requests.post(f"{API}/rooms/{code}/start", json={"player_id": host["id"], "pool": _legacy_pool()})
         assert s.status_code == 200
         j2 = requests.post(f"{API}/rooms/{code}/join", json={"nickname": "TEST_late"})
         assert j2.status_code == 409
@@ -270,7 +287,7 @@ class TestStartRoom:
         gid = j.json()["you"]["id"]
         # Mark guest ready
         requests.post(f"{API}/rooms/{code}/ready", json={"player_id": gid, "ready": True})
-        s = requests.post(f"{API}/rooms/{code}/start", json={"player_id": host_id})
+        s = requests.post(f"{API}/rooms/{code}/start", json={"player_id": host_id, "pool": _legacy_pool()})
         assert s.status_code == 200
         assert s.json()["room"]["status"] == "started"
 

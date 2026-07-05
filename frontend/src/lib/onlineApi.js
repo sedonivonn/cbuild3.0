@@ -52,8 +52,37 @@ export function joinRoom(code, nickname) {
   });
 }
 
-export function startRoom(code, playerId) {
+export function startRoom(code, playerId, { pool, setup } = {}) {
   return req(`/rooms/${encodeURIComponent(code)}/start`, {
+    method: "POST",
+    body: JSON.stringify({
+      player_id: playerId,
+      pool: pool ?? [],
+      setup: setup ?? {},
+    }),
+  });
+}
+
+export function gamePick(code, { playerId, slotIndex, playerName }) {
+  return req(`/rooms/${encodeURIComponent(code)}/game/pick`, {
+    method: "POST",
+    body: JSON.stringify({
+      player_id: playerId,
+      slot_index: slotIndex,
+      player_name: playerName,
+    }),
+  });
+}
+
+export function gameChange(code, { playerId, lucky }) {
+  return req(`/rooms/${encodeURIComponent(code)}/game/change`, {
+    method: "POST",
+    body: JSON.stringify({ player_id: playerId, lucky: !!lucky }),
+  });
+}
+
+export function gameStartTournament(code, playerId) {
+  return req(`/rooms/${encodeURIComponent(code)}/game/start_tournament`, {
     method: "POST",
     body: JSON.stringify({ player_id: playerId }),
   });

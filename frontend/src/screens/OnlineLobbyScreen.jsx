@@ -7,6 +7,7 @@ import {
 import { sound } from "../engine/sounds";
 import { useRoomSocket } from "../hooks/useRoomSocket";
 import { getRoom, startRoom, leaveRoom, setReady } from "../lib/onlineApi";
+import { buildPoolSnapshot } from "../lib/poolSnapshot";
 
 const MODE_LABEL = { group: "GRUP", league: "LİG" };
 
@@ -106,7 +107,9 @@ export const OnlineLobbyScreen = ({ code, me, onLeave, onStarted }) => {
     setBusy(true); setErr(null);
     try {
       sound.click();
-      await startRoom(code, me.id);
+      // Upload the frozen pool snapshot so the server owns all future rolls.
+      const pool = buildPoolSnapshot();
+      await startRoom(code, me.id, { pool, setup: { formation_id: "4-3-3", tactic_id: "GEGENPRESS" } });
       // onStarted will fire via WS `state` message.
     } catch (e) {
       setErr(e.message || "Başlatılamadı");

@@ -24,6 +24,17 @@ from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
 from pydantic import BaseModel, Field, field_validator
 
 from config import settings
+from game_engine import (
+    FORMATIONS,
+    apply_change,
+    auto_pick,
+    can_place,
+    deadline_from_now,
+    init_player_draft,
+    make_pick,
+    timer_manager,
+    validate_pool,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +60,7 @@ def _rooms() -> AsyncIOMotorCollection:
 # Schemas
 # ---------------------------------------------------------------------------
 GAME_MODES = {"group", "league"}
-PICK_SECONDS_OPTIONS = {15, 30, 45}
+PICK_SECONDS_OPTIONS = {15, 30, 45, 60}
 MIN_PLAYERS = 2
 MAX_PLAYERS = 8
 NICKNAME_MIN = 2
@@ -75,7 +86,7 @@ class CreateRoomBody(BaseModel):
     @classmethod
     def _pick_ok(cls, v: int) -> int:
         if v not in PICK_SECONDS_OPTIONS:
-            raise ValueError("pick_seconds must be one of: 15, 30, 45")
+            raise ValueError("pick_seconds must be one of: 15, 30, 45, 60")
         return v
 
     @field_validator("nickname")
@@ -295,6 +306,8 @@ async def join_room(code: str, body: JoinRoomBody) -> Dict[str, Any]:
 
 class StartRoomBody(BaseModel):
     player_id: str
+    pool: List[Dict[str, Any]] = Field(default_factory=list)
+    setup: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ReadyBody(BaseModel):
@@ -325,6 +338,12 @@ async def set_ready(code: str, body: ReadyBody) -> Dict[str, Any]:
 
 @router.post("/rooms/{code}/start")
 async def start_room(code: str, body: StartRoomBody) -> Dict[str, Any]:
+    """Host starts the multiplayer game.
+
+    In addition to the ready/min-players checks, the host uploads the
+    frozen team pool that the server uses for the rest of the session.
+    All subsequent dice rolls happen server-side against this pool.
+    """
     code = code.upper()
     room = await _get_room(code)
     if not room:
@@ -340,11 +359,188 @@ async def start_room(code: str, body: StartRoomBody) -> Dict[str, Any]:
             status_code=409,
             detail="All players must be READY before starting",
         )
+    # Validate uploaded pool
+    try:
+        pool = validate_pool(body.pool)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid pool: {e}")
 
     now = _now_iso()
+    pick_seconds = int(room.get("pick_seconds", 30))
+
+    # Optional host-level game defaults (formation/tactic prefill).
+    default_formation = str(body.setup.get("formation_id", "4-3-3"))
+    if default_formation not in FORMATIONS:
+        default_formation = "4-3-3"
+    default_tactic = str(body.setup.get("tactic_id", "GEGENPRESS"))
+
+    # Bootstrap per-player draft state.
+    drafts: Dict[str, Any] = {}
+    for p in room["players"]:
+        drafts[p["id"]] = init_player_draft(
+            formation_id=default_formation,
+            tactic_id=default_tactic,
+            team_name=p["nickname"],
+            pool=pool,
+            pick_seconds=pick_seconds,
+        )
+
+    game_doc = {
+        "phase": "draft",           # draft | draft_complete | tournament | done
+        "pool": pool,               # frozen for the session
+        "drafts": drafts,           # per-player-id draft state
+        "started_at": now,
+    }
+
     await _rooms().update_one(
         {"code": code},
-        {"$set": {"status": "started", "started_at": now, "updated_at": now}},
+        {"$set": {"status": "started", "started_at": now, "updated_at": now,
+                  "game": game_doc}},
+    )
+    room = await _broadcast_state(code)
+
+    # Schedule initial auto-pick timers for every drafter.
+    for pid, draft in drafts.items():
+        if draft.get("deadline"):
+            timer_manager.schedule(code, pid, draft["deadline"], _auto_pick_and_broadcast)
+    return {"room": room}
+
+
+# ---------------------------------------------------------------------------
+# Game endpoints (draft phase)
+# ---------------------------------------------------------------------------
+class PickBody(BaseModel):
+    player_id: str
+    slot_index: int = Field(..., ge=0, le=20)
+    player_name: str = Field(..., min_length=1, max_length=64)
+
+
+class ChangeBody(BaseModel):
+    player_id: str
+    lucky: bool = False
+
+
+async def _auto_pick_and_broadcast(code: str, player_id: str) -> None:
+    """Timer callback: perform an auto-pick and broadcast the new state."""
+    room = await _get_room(code)
+    if not room or room.get("status") != "started":
+        return
+    game = room.get("game") or {}
+    if game.get("phase") != "draft":
+        return
+    draft = (game.get("drafts") or {}).get(player_id)
+    if not draft or draft.get("complete"):
+        return
+    pool = game["pool"]
+    pick_seconds = int(room.get("pick_seconds", 30))
+    ok, _ = auto_pick(draft, pool, pick_seconds)
+    if not ok:
+        return
+    game["drafts"][player_id] = draft
+    if all(d.get("complete") for d in game["drafts"].values()):
+        game["phase"] = "draft_complete"
+
+    await _rooms().update_one(
+        {"code": code},
+        {"$set": {f"game.drafts.{player_id}": draft, "game.phase": game["phase"],
+                  "updated_at": _now_iso()}},
+    )
+    await _broadcast_state(code)
+    if not draft["complete"] and draft.get("deadline"):
+        timer_manager.schedule(code, player_id, draft["deadline"], _auto_pick_and_broadcast)
+
+
+@router.post("/rooms/{code}/game/pick")
+async def game_pick(code: str, body: PickBody) -> Dict[str, Any]:
+    code = code.upper()
+    room = await _get_room(code)
+    if not room or room.get("status") != "started":
+        raise HTTPException(status_code=404, detail="Game not active")
+    game = room.get("game") or {}
+    if game.get("phase") != "draft":
+        raise HTTPException(status_code=409, detail="Not in draft phase")
+    drafts = game.get("drafts") or {}
+    draft = drafts.get(body.player_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Unknown player")
+    pool = game["pool"]
+    pick_seconds = int(room.get("pick_seconds", 30))
+    ok, err = make_pick(draft, body.slot_index, body.player_name, pool, pick_seconds)
+    if not ok:
+        raise HTTPException(status_code=409, detail=err)
+    drafts[body.player_id] = draft
+    if all(d.get("complete") for d in drafts.values()):
+        game["phase"] = "draft_complete"
+        timer_manager.cancel_room(code)
+    await _rooms().update_one(
+        {"code": code},
+        {"$set": {f"game.drafts.{body.player_id}": draft,
+                  "game.phase": game["phase"], "updated_at": _now_iso()}},
+    )
+    await _broadcast_state(code)
+    if not draft["complete"] and draft.get("deadline"):
+        timer_manager.schedule(code, body.player_id, draft["deadline"], _auto_pick_and_broadcast)
+    else:
+        timer_manager.cancel(code, body.player_id)
+    return {"draft": draft, "phase": game["phase"]}
+
+
+@router.post("/rooms/{code}/game/change")
+async def game_change(code: str, body: ChangeBody) -> Dict[str, Any]:
+    code = code.upper()
+    room = await _get_room(code)
+    if not room or room.get("status") != "started":
+        raise HTTPException(status_code=404, detail="Game not active")
+    game = room.get("game") or {}
+    if game.get("phase") != "draft":
+        raise HTTPException(status_code=409, detail="Not in draft phase")
+    drafts = game.get("drafts") or {}
+    draft = drafts.get(body.player_id)
+    if not draft:
+        raise HTTPException(status_code=404, detail="Unknown player")
+    pool = game["pool"]
+    pick_seconds = int(room.get("pick_seconds", 30))
+    ok, err = apply_change(draft, body.lucky, pool, pick_seconds)
+    if not ok:
+        raise HTTPException(status_code=409, detail=err)
+    drafts[body.player_id] = draft
+    await _rooms().update_one(
+        {"code": code},
+        {"$set": {f"game.drafts.{body.player_id}": draft,
+                  "updated_at": _now_iso()}},
+    )
+    await _broadcast_state(code)
+    if draft.get("deadline"):
+        timer_manager.schedule(code, body.player_id, draft["deadline"], _auto_pick_and_broadcast)
+    return {"draft": draft}
+
+
+class StartTournamentBody(BaseModel):
+    player_id: str
+
+
+@router.post("/rooms/{code}/game/start_tournament")
+async def start_tournament(code: str, body: StartTournamentBody) -> Dict[str, Any]:
+    """Host transitions the room from `draft_complete` -> `tournament`.
+
+    NOTE (Phase 1 delivery): the tournament simulation itself is not yet
+    server-authoritative. Each client boots into its local tournament
+    engine with its own drafted squad. Server-side sim is scheduled for
+    the next iteration and only requires filling in the `tournament`
+    phase handlers below without breaking this contract.
+    """
+    code = code.upper()
+    room = await _get_room(code)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["host_id"] != body.player_id:
+        raise HTTPException(status_code=403, detail="Only the host can start the tournament")
+    game = room.get("game") or {}
+    if game.get("phase") != "draft_complete":
+        raise HTTPException(status_code=409, detail="All players must finish drafting first")
+    await _rooms().update_one(
+        {"code": code},
+        {"$set": {"game.phase": "tournament", "updated_at": _now_iso()}},
     )
     room = await _broadcast_state(code)
     return {"room": room}

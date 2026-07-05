@@ -1,0 +1,58 @@
+{
+  "summary": "Iteration 23 verification: server-authoritative Online multiplayer draft (Phase 1). Backend: 46/46 pytest cases pass (29 legacy + 17 new game-engine tests). Verified pick_seconds=60 accepted / 90 rejected (422), /start requires a non-empty valid pool (400 for missing/empty/insufficient players), /start creates room.game.phase='draft' with per-player drafts (current_roll, deadline, changes_remaining=3, lucky_remaining=1), /game/pick success + all 4 rejection paths (invalid slot 422, player-not-in-pool 409, wrong-position 409, slot-already-filled 409), /game/change decrements counters and re-rolls (409 when exhausted), full 11-pick draft flow triggers phase='draft_complete', /game/start_tournament host-only (403 for guest) and phase-guarded (409 if not draft_complete) and flips to 'tournament', and server-side auto-pick fires within ~17s of pick_seconds=15 deadline and broadcasts via WebSocket. Frontend end-to-end verified with 2-browser (host + guest) automation: SÜRE selector shows 4 options (15/30/45/60) with red active state, single-player GRUP FORMATI / LİG FORMATI still routes to local DraftScreen (no online endpoint touched), /?room=CODE quickjoin unchanged, and BAŞLAT now transitions BOTH host and guest to OnlineDraftScreen (mp-current-team visible on both), progress board shows 2 cards with correct names + host crown + (SEN) marker on own card, mp-timer-pill counts down from pick_seconds, DEĞİŞTİR decrements 3→2→1 and re-rolls, ŞANSLI DEĞİŞTİR additionally decrements lucky 1→0 and becomes disabled at 0, pool player selection highlights in red border, 11 pitch slots are interactive, and picks/changes broadcast between browsers via WebSocket in <2s.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "OnlineDraftScreen pool grid", "issues": ["React 'Encountered two children with the same key' warning fires when a rolled team contains duplicate player names in its players[] array. Pool cards use key={p.name}; the underlying seed data (SEASONS/QUARTERFINALISTS) has at least one team with a repeated player name. Non-blocking (React still renders) but should be fixed by using a composite key like `${p.name}-${p.primary}-${idx}` in OnlineDraftScreen.jsx:285."]}
+    ]
+  },
+  "verified_features": [
+    "POST /api/online/rooms accepts pick_seconds=60 (200) and rejects 90 (422).",
+    "POST /api/online/rooms/{code}/start returns 400 when body has no pool, empty pool, or teams with fewer than 11 players.",
+    "POST /api/online/rooms/{code}/start with valid pool transitions status='started', creates game.phase='draft' + drafts[player_id] for every player (current_roll set, deadline set, xi=11 nulls, changes_remaining=3, lucky_remaining=1, complete=false).",
+    "POST /api/online/rooms/{code}/game/pick: success advances current_roll + refreshes deadline; slot_index=99 -> 422; unknown player_name -> 409 'player not in current pool'; wrong-position player -> 409 'player cannot fill this slot'; picking into already-filled slot -> 409 'slot already filled'.",
+    "POST /api/online/rooms/{code}/game/change lucky=false decrements changes_remaining only; lucky=true decrements both counters; when changes_remaining==0 -> 409.",
+    "When every player's draft.complete is True, game.phase automatically flips to 'draft_complete'.",
+    "POST /api/online/rooms/{code}/game/start_tournament: guest -> 403 'Only the host can start the tournament'; host before draft_complete -> 409; host from draft_complete -> 200 and game.phase becomes 'tournament'.",
+    "Auto-pick: with pick_seconds=15 and no user action, the server fires auto_pick within ~17s and broadcasts a WS 'state' with draft.auto_picks>=1 and an entry appearing in xi.",
+    "OnlineScreen: online-pick-15/30/45/60 all present; clicking any of them applies the red bg-[#ff3b30] active state exclusively to the clicked one.",
+    "Home -> GRUP FORMATI: routes directly to local single-player DraftScreen (KOMUTA MERKEZİ / DRAFT & DİZİLİŞ & TAKTİK / CHANGE HAKKI 3/3 visible). No online endpoint touched.",
+    "Home -> LİG FORMATI: routes directly to local DraftScreen (same regression pass as GRUP).",
+    "URL prefill regression: /?room=NOTREAL renders quickjoin-form + quickjoin-code with no online-tab-create tabs visible.",
+    "End-to-end 2-browser flow: host creates room (pick_seconds=15) -> guest joins via KATIL tab -> guest clicks lobby-ready-button -> host clicks lobby-start-button -> BOTH clients navigate to OnlineDraftScreen and see mp-current-team + timer pill at 15s + 13 pool players + DEĞİŞTİR/ŞANSLI DEĞİŞTİR buttons.",
+    "OnlineDraftScreen progress board: shows one draft-progress-<id> per player on BOTH host and guest browsers, current user's card has red border, host's card shows the Crown icon, and '(SEN)' marker on own card.",
+    "OnlineDraftScreen DEĞİŞTİR/ŞANSLI DEĞİŞTİR: DEĞİŞTİR click decrements counter 3/3 -> 2/3 (roll refreshes); ŞANSLI DEĞİŞTİR further decrements to 1/3 and ŞANSLI 1/1 -> 0/1; ŞANSLI button is disabled at 0/1.",
+    "OnlineDraftScreen pool selection: clicking a placeable mp-pool-player-<Name> highlights that card with the red border/background."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_online.py",
+    "/app/backend/tests/test_online_game.py",
+    "/app/test_reports/pytest/all_results.xml",
+    "/app/test_reports/pytest/online_game_results.xml"
+  ],
+  "action_items": [
+    "Fix React duplicate-key warning in OnlineDraftScreen.jsx (line ~285): change key={p.name} on pool player buttons to something composite like key={`${p.name}-${p.primary}-${idx}`} to tolerate duplicate names within a single team's players list. Non-blocking but noisy in console."
+  ],
+  "critical_code_review_comments": [
+    "OnlineDraftScreen.jsx:285 uses key={p.name} while iterating sortedPool — real pool data has duplicate player names in the same team (seed data), which triggers React duplicate-key console errors on every roll. Use a composite key.",
+    "onlineApi.js:39 hardcodes a fallback of 30 for pick_seconds when the caller omits it; backend also defaults to 30 in models. Both sides need to be kept in sync — no automatic drift protection.",
+    "routers/online.py:369 does `int(room.get('pick_seconds', 30))` which duplicates the default already enforced upstream in CreateRoomBody. Consider dropping the fallback and asserting the field.",
+    "game_engine.py:355 auto_pick fetches a fresh random roll starting at attempt==1 but keeps the previous roll for attempt==0 — subtle: if the current_roll has no legal candidate, the attempt==0 branch loops through it fully first (fine) but this could be worth an explicit comment.",
+    "OnlineDraftScreen.jsx has no early-return / block on `phase !== 'draft'` between draft_complete and tournament transition — the draft workspace is hidden by `!myDraft?.complete` but if my draft completes early and phase is still 'draft' for others, the mp-waiting-others-panel renders which is correct; documented for future maintainer.",
+    "routers/online.py:474 timer_manager.cancel_room(code) is called when all drafts complete, then _rooms().update_one persists the new phase='draft_complete' — order is OK but the cancel and the DB write happen in separate awaits; a crash in between would leave stale timers. Acceptable for Phase 1.",
+    "The pool uploaded via /start is stored in Mongo (game.pool) which for the full app pool is a large document — as the pool grows the document could exceed Mongo's 16 MB BSON limit. Consider capping pool size or splitting into a separate collection referenced by id."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_online.py (updated 2 legacy tests to send a valid pool now that /start requires it)",
+    "/app/backend/tests/test_online_game.py (NEW — 17 tests covering server-authoritative draft)"
+  ],
+  "success_rate": {"backend": "100% (46/46)", "frontend": "100% of the tested flows"},
+  "seed_data_creation": "Test rooms created with TESTHOST, TESTGUEST, PICKHOST, PICKGUEST, TEST_ghost, TEST_gguest, TEST_p60, TEST_p90 nickname prefixes — ephemeral MongoDB documents in online_rooms collection. Some documents also carry a `game.pool` field (the frozen pool snapshot uploaded by the host on /start) which contains full team+player rosters — this can accumulate storage. Consider periodic cleanup of the online_rooms collection.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression: `pytest /app/backend/tests/ -v` (46 tests total, ~45-50s runtime, parallelized -n 2 loadscope). test_online.py covers lobby + ready + WS; test_online_game.py covers draft + pick + change + auto-pick + tournament transition. Auto-pick test uses pick_seconds=15 and waits up to 25s over WS. For the frontend, key testids to know: online-pick-15/30/45/60, lobby-ready-button, lobby-start-button, mp-current-team, mp-timer-pill, mp-change-button, mp-lucky-change-button, mp-pool-player-<Name>, draft-progress-<player_id>, mp-waiting-others-panel, mp-draft-complete-panel, mp-start-tournament-button. Host uploads full frozen pool via buildPoolSnapshot() at /start; server owns every subsequent roll. The 2-browser flow uses `page.context.browser.new_context(...)` in the same MCP session — that works reliably. Note: pool player list keys currently use p.name which trips React duplicate-key warnings when the same name appears twice in one team's players[] (seed-data quirk); not a blocker. Auto-pick timing is deterministic in backend test suite; frontend auto-pick was NOT explicitly re-validated in the browser (backend WS test already covers it).",
+  "test_credentials": "N/A — no auth in this feature. /app/memory/test_credentials.md was not needed for this iteration.",
+  "rca of the issue": "N/A — feature verification, no bugs found. Single stylistic issue (duplicate React keys) noted but not blocking any user flow."
+}
