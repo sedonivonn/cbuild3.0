@@ -12,7 +12,7 @@ function tierBg(ovr) {
   return "linear-gradient(135deg, #5a3818 0%, #b07333 100%)";
 }
 
-export const HomeScreen = ({ onStart, onStartLeague, hasSave, onContinue, onHallOfFame }) => {
+export const HomeScreen = ({ onStart, onStartLeague, hasSave, onContinue, onHallOfFame, onOnline }) => {
   const trophies = useMemo(() => getAllTrophies(), []);
   const topThree = useMemo(() => getTopTrophies(3), []);
   const hasTrophies = trophies.length > 0;
@@ -60,15 +60,15 @@ export const HomeScreen = ({ onStart, onStartLeague, hasSave, onContinue, onHall
           </button>
           <button
             type="button"
-            className="btn-ghost flex items-center gap-2 opacity-60 cursor-not-allowed"
-            title="Yakında"
-            aria-disabled="true"
-            data-testid="online-placeholder-button"
+            onClick={onOnline}
+            className="btn-ghost flex items-center gap-2 hover:!border-[#ff3b30]/50 hover:!bg-[#ff3b30]/10 transition"
+            title="Online Kapışma"
+            data-testid="online-button"
           >
-            <Wifi size={16} className="text-amber-300" />
+            <Wifi size={16} className="text-[#ff3b30]" />
             ONLİNE
-            <span className="ml-1 px-1.5 py-0.5 rounded bg-white/10 text-white/60 text-[9px] font-mono tracking-wider">
-              YAKINDA
+            <span className="ml-1 px-1.5 py-0.5 rounded bg-[#ff3b30]/20 text-[#ff3b30] text-[9px] font-mono tracking-wider">
+              CANLI
             </span>
           </button>
           {hasSave && (

@@ -18,6 +18,7 @@ from firebase_admin_init import (
     init_firebase,
     is_firebase_ready,
 )
+from routers.online import router as online_router
 from routers.status import router as status_router
 
 logging.basicConfig(
@@ -63,6 +64,7 @@ async def on_shutdown() -> None:
 api_router = APIRouter(prefix="/api")
 api_router.include_router(status_router)
 api_router.include_router(auth_router)
+api_router.include_router(online_router)
 
 
 @api_router.get("/health")

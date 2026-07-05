@@ -18,7 +18,7 @@
     "SETUP-PHASE REGRESSION: After localStorage.clear() + reload, app lands on HomeScreen ('ŞAMPIYONLAR LIGI DRAFT BUILDER'). No console errors. 3-col setup layout untouched (FORMATION/TACTIC/DICE columns confirmed via prior iterations).",
     "Spin the Wheel idle and rolling animations render correctly; after roll the pool card grid appears with the action bar below."
   ],
-  "test_method": "Playwright with REACT_APP_BACKEND_URL=https://backend-modernize-1.preview.emergentagent.com. Injected SAVE_KEY='ucl_draft_save_v1' state with screen='draft', formationId='4-3-3', tactic='GEGENPRESS', and synthetic players of overall=92/85/75/65 placed in slots 0-3 (each with _season=1996 to avoid Ballon d'Or rule). Verified border colors via getComputedStyle on the inner .rounded-full div; verified OVR text class via span.className inspection. Verified counter behavior by clicking action-bar buttons and reading both data-testid='change-credits-hint' and data-testid='changes-remaining' after each click.",
+  "test_method": "Playwright with REACT_APP_BACKEND_URL=https://live-draft-arena.preview.emergentagent.com. Injected SAVE_KEY='ucl_draft_save_v1' state with screen='draft', formationId='4-3-3', tactic='GEGENPRESS', and synthetic players of overall=92/85/75/65 placed in slots 0-3 (each with _season=1996 to avoid Ballon d'Or rule). Verified border colors via getComputedStyle on the inner .rounded-full div; verified OVR text class via span.className inspection. Verified counter behavior by clicking action-bar buttons and reading both data-testid='change-credits-hint' and data-testid='changes-remaining' after each click.",
   "test_report_links": [],
   "action_items": [],
   "critical_code_review_comments": [

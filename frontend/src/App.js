@@ -9,6 +9,8 @@ import { LeagueTournamentScreen } from "./screens/LeagueTournamentScreen";
 import { MatchScreen } from "./screens/MatchScreen";
 import { TrophyScreen } from "./screens/TrophyScreen";
 import { HallOfFameScreen } from "./screens/HallOfFameScreen";
+import { OnlineScreen } from "./screens/OnlineScreen";
+import { OnlineLobbyScreen } from "./screens/OnlineLobbyScreen";
 import { TopBar } from "./components/TopBar";
 import { sound } from "./engine/sounds";
 import { FORMATIONS } from "./data/formations";
@@ -47,6 +49,25 @@ function App() {
   const [trophyTeam, setTrophyTeam] = useState(null);
   const [soundOn, setSoundOn] = useState(sound.isEnabled());
   const [authOpen, setAuthOpen] = useState(false);
+
+  // Online multiplayer state (kept out of the persisted save on purpose —
+  // sessions are ephemeral and depend on server-side room lifecycle).
+  const [onlineMe, setOnlineMe] = useState(null);       // { id, nickname, is_host }
+  const [onlineCode, setOnlineCode] = useState(null);
+  const [onlinePrefill, setOnlinePrefill] = useState(null);
+
+  // Detect `?room=CODE` on initial load and route to the Online KATIL tab.
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const roomFromUrl = params.get("room");
+      if (roomFromUrl) {
+        setOnlinePrefill(roomFromUrl.toUpperCase());
+        setScreen("online");
+      }
+    } catch (_) { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Read shared draft from URL hash on first mount
   useEffect(() => {
@@ -154,7 +175,29 @@ function App() {
   return (
     <div className="min-h-screen text-white">
       <TopBar onSoundToggle={handleSoundToggle} soundOn={soundOn} onReset={handleReset} onLogoClick={() => setScreen("home")} onOpenAuth={() => setAuthOpen(true)} />
-      {screen === "home" && <HomeScreen onStart={handleStart} onStartLeague={handleStartLeague} hasSave={hasSave} onContinue={handleContinue} onHallOfFame={() => setScreen("hall_of_fame")} />}
+      {screen === "home" && <HomeScreen onStart={handleStart} onStartLeague={handleStartLeague} hasSave={hasSave} onContinue={handleContinue} onHallOfFame={() => setScreen("hall_of_fame")} onOnline={() => { setOnlinePrefill(null); setScreen("online"); }} />}
+      {screen === "online" && !onlineCode && (
+        <OnlineScreen
+          prefillCode={onlinePrefill}
+          onBack={() => { setOnlinePrefill(null); setScreen("home"); try { const u = new URL(window.location.href); u.searchParams.delete("room"); window.history.replaceState({}, "", u); } catch (_) { /* noop */ } }}
+          onEnterLobby={({ code, you }) => { setOnlineMe(you); setOnlineCode(code); setScreen("online_lobby"); }}
+        />
+      )}
+      {screen === "online_lobby" && onlineCode && onlineMe && (
+        <OnlineLobbyScreen
+          code={onlineCode}
+          me={onlineMe}
+          onLeave={() => { setOnlineCode(null); setOnlineMe(null); setOnlinePrefill(null); setScreen("home"); try { const u = new URL(window.location.href); u.searchParams.delete("room"); window.history.replaceState({}, "", u); } catch (_) { /* noop */ } }}
+          onStarted={(room) => {
+            // For now the "BAŞLAT" event kicks each client into the LOCAL
+            // draft flow with the room's chosen mode. A fully synchronized
+            // per-pick draft is a follow-up iteration.
+            sound.click();
+            if (room?.mode === "league") handleStartLeague();
+            else handleStart();
+          }}
+        />
+      )}
       {screen === "draft" && formationId && (
         <DraftScreen
           formationId={formationId}

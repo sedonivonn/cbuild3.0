@@ -1,0 +1,40 @@
+{
+  "summary": "First testing run of the Online Kapışma multiplayer feature. Backend REST + WebSocket endpoints all pass (21/21 pytest cases). Frontend end-to-end flows verified: ONLINE button enabled and routes to OnlineScreen; ODA KUR create-room path lands in lobby with 5-char code, share URL, host row (SEN + EV SAHİBİ crown), empty BOŞ SLOT rows, status pills, and live WS CANLI badge. Real-time sync verified — a REST /join from the test side updated the first browser's DOM (0→2/6, JOINER row appearing) within ~500ms without refresh. URL ?room=CODE prefills the KATIL tab; joining via URL works, lobby shows 2/N with EV SAHİBİ BAŞLATANA KADAR BEKLENİYOR... state for the guest. Bad code (ZZZZZ) surfaces 'Oda bulunamadı'. BAŞLAT enabled with 2+ players; clicking triggers a screen transition away from the lobby.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verified_features": [
+    "POST /api/online/rooms: valid create (group/league, custom duration_sec 120), validation for invalid mode / short nickname / max out-of-range (2-8) → 422",
+    "GET /api/online/rooms/{code}: 200 for existing, 404 for unknown code",
+    "POST /api/online/rooms/{code}/join: adds player, dedupes duplicate nickname with #2 suffix, 409 when full (max=2 → 3rd rejected), 404 for unknown room, 409 when started",
+    "POST /api/online/rooms/{code}/start: 403 for non-host player_id, 409 when <2 players, 200 + status='started' with host + 2 players",
+    "DELETE /api/online/rooms/{code}/players/{player_id}: guest leave removes player, host leave in lobby closes room (status='closed')",
+    "WS /api/online/ws/{code}: initial 'state' message received on connect for member; unknown room closes with 4404; non-member player_id closes with 4403; REST /join triggers a broadcasted state to already-connected WS clients within 5s",
+    "HomeScreen: data-testid='online-button' is enabled (label 'ONLİNE CANLI' — no longer 'YAKINDA'); clicking navigates to OnlineScreen",
+    "OnlineScreen: title 'ONLİNE KAPIŞMA', subtitle 'MESAJLAŞ · ODA KUR · LİG TABLOSU', tabs (online-tab-create, online-tab-join), nickname-input, max-players 2-8 buttons, mode buttons (group/league). ODA KUR submit disabled for nickname length 0 and 1; enabled at ≥2",
+    "OnlineLobbyScreen: 5-char lobby-room-code, share URL bar containing ?room=CODE, copy/whatsapp/paylaş buttons, status pills (SÜRE 90s, O.MAX 6, MOD LİG), player row with '(SEN)' + Crown 'EV SAHİBİ', 5 lobby-empty-row-* rows for max=6, WS badge shows CANLI",
+    "Real-time sync (single browser + REST-driven second player): DOM updated from 1/6 to 2/6 with JOINER1 row appearing without any refresh; BAŞLAT went from disabled→enabled",
+    "URL prefill: /?room=FX6KM prefilled the KATIL code input and activated the join tab; ODAYA KATIL joined successfully into a lobby showing '2 / 4' and 'EV SAHİBİ BAŞLATANA KADAR BEKLENİYOR...'",
+    "BAŞLAT: with 2 players, host click transitioned away from the lobby (lobby-room-code disappeared from DOM)"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_online.py",
+    "/app/test_reports/pytest/online_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routers/online.py:194-199 _broadcast_state re-reads room from Mongo after every mutation — correct but 2 round-trips per action; acceptable for lobby-scale traffic.",
+    "OnlineLobbyScreen.jsx:61 uses `max_players ?? 2` as fallback while REST fetch is pending. This causes a brief '0 / 2' flicker before room state loads (seen in test: 0/2 → 2/6 after ~500ms). Minor UX polish: gate the slot-count render on `room` being non-null or use the initial creator's max_players from props if available.",
+    "routers/online.py:170-176 ConnectionManager.disconnect only removes the specific player_id socket; if the same player has stale sockets from prior sessions they linger until the room dict is emptied. Not observed in testing but worth noting for reconnect scenarios.",
+    "onlineApi.js:69-72 buildWsUrl uses simple http→ws replace; edge case: BASE without scheme would produce a bad URL. Currently guarded by REACT_APP_BACKEND_URL check but a URL() parse would be safer.",
+    "OnlineScreen.jsx:70 pre-checks room existence with getRoom before /join — friendly for 404 but adds one extra request per join attempt.",
+    "routers/online.py:342 declares `player_id: str` as a required query param via FastAPI — good; but if omitted the WS will 422 on accept which isn't caught anywhere. Not user-facing since the frontend always sends it.",
+    "No rate limiting on POST /rooms — anyone can spam-create; consider adding once auth is introduced."
+  ],
+  "updated_files": ["/app/backend/tests/test_online.py"],
+  "success_rate": {"backend": "100% (21/21)", "frontend": "100%"},
+  "seed_data_creation": "Test rooms created with 'TEST_' nickname prefixes (host, bob, etc.) — ephemeral and left in Mongo `online_rooms` collection. No cleanup performed; rooms are harmless placeholder documents.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend online endpoints live at /api/online/rooms and /api/online/ws/{code}?player_id=. Regression: `pytest /app/backend/tests/test_online.py -v` from repo root. Frontend flow to smoke-test: click data-testid='online-button' → 'online-nickname-input' → click 'online-max-N' + 'online-mode-group|league' → 'online-create-submit' → verify 'lobby-room-code' present. To simulate a second player without a second browser, POST /api/online/rooms/{code}/join {nickname:'X'} and watch DOM for 'lobby-slot-count' text changing — WebSocket pushes state within ~500ms. Minor UX: brief 0/2 flicker in the lobby before REST loads room state.",
+  "rca of the issue": "N/A — feature verification, no bugs found."
+}
