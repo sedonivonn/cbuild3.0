@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 22 verification: pick_seconds (15/30/45), ready-check flow, and URL prefill quick-join. Backend: 29/29 pytest cases pass, including new pick_seconds validation, ready endpoint (guest toggle + host force-ready), start gating on all-ready, and WS broadcast on ready toggle. Frontend: pick_seconds buttons work with red active state, SÜRE pill shows correct value (15s/30s/45s) instead of hardcoded 90s, guest sees HAZIRIM button (replacing old passive EV SAHİBİ BAŞLATANA block), HAZIR badge appears after ready, quick-join minimal layout renders for ?room=CODE without tabs/config, invalid code shows 'Oda bulunamadı', auto-join with saved localStorage nickname works end-to-end.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verified_features": [
+    "POST /api/online/rooms: pick_seconds field accepts 15|30|45 (200), rejects 90/20 (422), defaults to 30 when omitted, duration_sec removed from response",
+    "POST /api/online/rooms: host player slot returns ready=true immediately after creation",
+    "POST /api/online/rooms/{code}/join: guest slot returns ready=false",
+    "POST /api/online/rooms/{code}/ready: guest can set ready true/false; host is force-set to ready=true (cannot un-ready); 404 for unknown room/player",
+    "POST /api/online/rooms/{code}/start: returns 409 with detail containing 'READY' when any guest not ready; returns 200 once all guests toggle ready=true",
+    "WS /api/online/ws/{code}: broadcasts state after ready toggle within a few seconds",
+    "Frontend config: online-pick-15/30/45 buttons all present, red bg-[#ff3b30] active state applied on click, only one active at a time, selected pick_seconds sent in create request",
+    "Frontend lobby SÜRE pill: displays the actual pick_seconds value ('15s' for pick=15, '30s' for default, '45s' for pick=45) — no longer hardcoded 90s",
+    "Frontend lobby host view: BAŞLAT disabled while any guest not ready; helper text 'DİĞER OYUNCULAR HAZIR VERMEYİ BEKLİYOR' visible under button; enables once guest sets ready",
+    "Frontend lobby guest view: HAZIRIM button (lobby-ready-button) replaces old passive 'EV SAHİBİ BAŞLATANA KADAR BEKLENİYOR...' block; label toggles to 'HAZIRSIN — İPTAL ET' after click; green HAZIR badge (lobby-player-ready-N) appears on row",
+    "Frontend real-time: guest ready toggle -> host UI updates (green HAZIR badge visible, BAŞLAT enabled) via WebSocket state push within ~1s",
+    "Frontend URL prefill (empty localStorage): /?room=CODE renders quickjoin-code + quickjoin-form only; no online-tab-create/join, no max/mode buttons",
+    "Frontend URL prefill (saved nickname): setting localStorage cb_online_nick before navigating to /?room=CODE auto-joins and lands in lobby without user clicks",
+    "Frontend URL prefill error: /?room=ZZZZZ shows 'Oda bulunamadı' in online-error and stays on quick-join layout"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_online.py",
+    "/app/test_reports/pytest/online_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "OnlineLobbyScreen.jsx:70 uses `pick_seconds ?? 30` fallback; while REST getRoom is pending, the SÜRE pill briefly shows the fallback (30s) before jumping to the true value. Same flicker noted in iteration 21 for max_players. Consider hiding the pill until room is loaded, or delaying render until room state exists.",
+    "OnlineScreen.jsx:60-66 auto-join useEffect depends only on prefillCode, with doJoin explicitly excluded from deps and gated by autoJoined state — the manual dep management works but a stable useCallback for doJoin would be cleaner and remove the eslint disable comment.",
+    "onlineApi.js:32-42 createRoom sends pick_seconds default of 30 client-side, and the backend also defaults to 30 — dual defaulting is fine but keep them in sync (they'd drift silently).",
+    "routers/online.py:305-323 set_ready does an extra Mongo read via _get_room before the update; could be collapsed to a single conditional update to save a round-trip.",
+    "OnlineLobbyScreen.jsx canStart requires `guests.length > 0 && guests.every(ready)` — correct, but this means a 2-player lobby where the guest disconnects (still in players list) would keep BAŞLAT enabled if that stale guest is marked ready. Consider also checking `p.connected` in canStart.",
+    "OnlineScreen.jsx:47-57 quick-join branch still runs getRoom before joinRoom (round-trip for pre-flight 404 check). Fine for UX but adds latency; could rely on join's 404 directly."
+  ],
+  "updated_files": ["/app/backend/tests/test_online.py"],
+  "success_rate": {"backend": "100% (29/29)", "frontend": "100%"},
+  "seed_data_creation": "Test rooms created with TEST_ / HOSTX / HOST15 / HOST45 nickname prefixes — ephemeral MongoDB documents in online_rooms collection. No cleanup performed; documents are harmless placeholders.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Regression: `pytest /app/backend/tests/test_online.py -v` from repo root — 29 tests, ~60s. Frontend smoke test: (1) online-button -> online-pick-15|30|45 shows red active state -> online-create-submit -> lobby with SÜRE pill matching pick. (2) /?room=CODE with cleared localStorage -> quickjoin layout (quickjoin-code, quickjoin-form, no tabs). (3) localStorage.setItem('cb_online_nick','x') then /?room=CODE -> auto-join into lobby. (4) Guest lobby-ready-button toggles HAZIRIM <-> HAZIRSIN — İPTAL ET and lobby-player-ready-N badge. Duplicate rooms accumulate across runs; if lobby count keeps growing you may want to drop the online_rooms collection.",
+  "rca of the issue": "N/A — feature verification, no bugs found."
+}

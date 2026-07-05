@@ -29,14 +29,14 @@ async function req(path, options = {}) {
   return data;
 }
 
-export function createRoom({ nickname, maxPlayers, mode, durationSec }) {
+export function createRoom({ nickname, maxPlayers, mode, pickSeconds }) {
   return req("/rooms", {
     method: "POST",
     body: JSON.stringify({
       nickname,
       max_players: maxPlayers,
       mode,
-      duration_sec: durationSec ?? 90,
+      pick_seconds: pickSeconds ?? 30,
     }),
   });
 }
@@ -56,6 +56,13 @@ export function startRoom(code, playerId) {
   return req(`/rooms/${encodeURIComponent(code)}/start`, {
     method: "POST",
     body: JSON.stringify({ player_id: playerId }),
+  });
+}
+
+export function setReady(code, playerId, ready) {
+  return req(`/rooms/${encodeURIComponent(code)}/ready`, {
+    method: "POST",
+    body: JSON.stringify({ player_id: playerId, ready: !!ready }),
   });
 }
 

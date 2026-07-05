@@ -49,6 +49,7 @@ def _rooms() -> AsyncIOMotorCollection:
 # Schemas
 # ---------------------------------------------------------------------------
 GAME_MODES = {"group", "league"}
+PICK_SECONDS_OPTIONS = {15, 30, 45}
 MIN_PLAYERS = 2
 MAX_PLAYERS = 8
 NICKNAME_MIN = 2
@@ -60,7 +61,7 @@ class CreateRoomBody(BaseModel):
     nickname: str = Field(..., min_length=NICKNAME_MIN, max_length=NICKNAME_MAX)
     max_players: int = Field(..., ge=MIN_PLAYERS, le=MAX_PLAYERS)
     mode: str = Field(..., description="group | league")
-    duration_sec: Optional[int] = Field(default=90, ge=15, le=600)
+    pick_seconds: int = Field(default=30, description="Per-pick timer: 15|30|45")
 
     @field_validator("mode")
     @classmethod
@@ -68,6 +69,13 @@ class CreateRoomBody(BaseModel):
         v = v.strip().lower()
         if v not in GAME_MODES:
             raise ValueError("mode must be one of: group, league")
+        return v
+
+    @field_validator("pick_seconds")
+    @classmethod
+    def _pick_ok(cls, v: int) -> int:
+        if v not in PICK_SECONDS_OPTIONS:
+            raise ValueError("pick_seconds must be one of: 15, 30, 45")
         return v
 
     @field_validator("nickname")
@@ -96,6 +104,7 @@ class PlayerSlot(BaseModel):
     nickname: str
     is_host: bool = False
     connected: bool = True
+    ready: bool = False
     joined_at: str
 
 
@@ -105,7 +114,7 @@ class RoomState(BaseModel):
     host_id: str
     max_players: int
     mode: str
-    duration_sec: int
+    pick_seconds: int
     players: List[PlayerSlot]
     created_at: str
     updated_at: str
@@ -213,6 +222,7 @@ async def create_room(body: CreateRoomBody) -> Dict[str, Any]:
         "nickname": body.nickname,
         "is_host": True,
         "connected": False,  # flips true when WS connects
+        "ready": True,       # host is implicitly ready
         "joined_at": now,
     }
     room = {
@@ -221,7 +231,7 @@ async def create_room(body: CreateRoomBody) -> Dict[str, Any]:
         "host_id": host_id,
         "max_players": body.max_players,
         "mode": body.mode,
-        "duration_sec": body.duration_sec or 90,
+        "pick_seconds": body.pick_seconds,
         "players": [host_slot],
         "created_at": now,
         "updated_at": now,
@@ -266,6 +276,7 @@ async def join_room(code: str, body: JoinRoomBody) -> Dict[str, Any]:
         "nickname": nick,
         "is_host": False,
         "connected": False,
+        "ready": False,
         "joined_at": _now_iso(),
     }
 
@@ -286,6 +297,32 @@ class StartRoomBody(BaseModel):
     player_id: str
 
 
+class ReadyBody(BaseModel):
+    player_id: str
+    ready: bool = True
+
+
+@router.post("/rooms/{code}/ready")
+async def set_ready(code: str, body: ReadyBody) -> Dict[str, Any]:
+    """Toggle a player's ready flag. Host is always ready and cannot un-ready."""
+    code = code.upper()
+    room = await _get_room(code)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    if room["status"] != "lobby":
+        raise HTTPException(status_code=409, detail="Room already started")
+    if not any(p["id"] == body.player_id for p in room["players"]):
+        raise HTTPException(status_code=404, detail="Player not in room")
+    # Host is force-ready.
+    ready = True if body.player_id == room["host_id"] else bool(body.ready)
+    await _rooms().update_one(
+        {"code": code, "players.id": body.player_id},
+        {"$set": {"players.$.ready": ready, "updated_at": _now_iso()}},
+    )
+    room = await _broadcast_state(code)
+    return {"room": room}
+
+
 @router.post("/rooms/{code}/start")
 async def start_room(code: str, body: StartRoomBody) -> Dict[str, Any]:
     code = code.upper()
@@ -298,6 +335,11 @@ async def start_room(code: str, body: StartRoomBody) -> Dict[str, Any]:
         raise HTTPException(status_code=409, detail="Room already started")
     if len(room["players"]) < MIN_PLAYERS:
         raise HTTPException(status_code=409, detail="Need at least 2 players")
+    if not all(p.get("ready") for p in room["players"]):
+        raise HTTPException(
+            status_code=409,
+            detail="All players must be READY before starting",
+        )
 
     now = _now_iso()
     await _rooms().update_one(

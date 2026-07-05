@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { sound } from "../engine/sounds";
 import { useRoomSocket } from "../hooks/useRoomSocket";
-import { getRoom, startRoom, leaveRoom } from "../lib/onlineApi";
+import { getRoom, startRoom, leaveRoom, setReady } from "../lib/onlineApi";
 
 const MODE_LABEL = { group: "GRUP", league: "LİG" };
 
@@ -62,7 +62,12 @@ export const OnlineLobbyScreen = ({ code, me, onLeave, onStarted }) => {
   const filledCount = players.length;
   const emptySlots = Math.max(0, maxPlayers - filledCount);
   const isHost = !!me?.is_host || room?.host_id === me?.id;
-  const canStart = isHost && filledCount >= 2 && room?.status === "lobby";
+  const meSlot = players.find((p) => p.id === me?.id);
+  const iAmReady = !!meSlot?.ready;
+  const guests = players.filter((p) => p.id !== room?.host_id);
+  const allGuestsReady = guests.length > 0 && guests.every((p) => p.ready);
+  const canStart = isHost && filledCount >= 2 && allGuestsReady && room?.status === "lobby";
+  const pickSec = room?.pick_seconds ?? 30;
 
   const copyText = async (text, kind) => {
     try {
@@ -108,6 +113,17 @@ export const OnlineLobbyScreen = ({ code, me, onLeave, onStarted }) => {
     } finally { setBusy(false); }
   };
 
+  const handleToggleReady = async () => {
+    if (busy || !me?.id) return;
+    setBusy(true); setErr(null);
+    try {
+      sound.click();
+      await setReady(code, me.id, !iAmReady);
+    } catch (e) {
+      setErr(e.message || "Hazır ayarlanamadı");
+    } finally { setBusy(false); }
+  };
+
   const handleLeave = async () => {
     if (busy) return;
     setBusy(true);
@@ -136,7 +152,7 @@ export const OnlineLobbyScreen = ({ code, me, onLeave, onStarted }) => {
 
         {/* Status pills */}
         <div className="flex flex-wrap items-center gap-2 mb-4">
-          <StatusPill icon={<Clock size={12} />} label="SÜRE" value={`${room?.duration_sec ?? 90}s`} />
+          <StatusPill icon={<Clock size={12} />} label="SÜRE" value={`${pickSec}s`} />
           <StatusPill icon={<Users size={12} />} label="O.MAX" value={String(maxPlayers)} />
           <StatusPill icon={<Trophy size={12} />} label="MOD" value={MODE_LABEL[room?.mode] || "—"} />
           <div className="ml-auto flex items-center gap-1.5 text-[10px] font-mono tracking-widest text-white/50" data-testid="lobby-ws-status">
@@ -210,6 +226,7 @@ export const OnlineLobbyScreen = ({ code, me, onLeave, onStarted }) => {
                 nickname={p.nickname}
                 isHost={p.is_host}
                 connected={p.connected}
+                ready={p.ready}
                 isMe={p.id === me?.id}
               />
             ))}
@@ -228,21 +245,44 @@ export const OnlineLobbyScreen = ({ code, me, onLeave, onStarted }) => {
         {/* Start / leave actions */}
         <div className="mt-6 flex flex-col sm:flex-row gap-3">
           {isHost ? (
+            <div className="flex-1 flex flex-col gap-1">
+              <button
+                type="button"
+                onClick={handleStart}
+                disabled={!canStart || busy}
+                className="btn-primary w-full !py-3.5 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                data-testid="lobby-start-button"
+                title={canStart ? "Başlat" : (filledCount < 2 ? "En az 2 oyuncu gerekli" : "Tüm oyuncuların HAZIR vermesi gerekli")}
+              >
+                <Play size={18} />
+                {busy ? "BAŞLATILIYOR..." : "BAŞLAT"}
+              </button>
+              {filledCount >= 2 && !allGuestsReady && (
+                <div className="text-center text-[10px] font-mono tracking-widest text-white/45" data-testid="lobby-waiting-ready">
+                  DİĞER OYUNCULAR HAZIR VERMEYİ BEKLİYOR
+                </div>
+              )}
+              {filledCount < 2 && (
+                <div className="text-center text-[10px] font-mono tracking-widest text-white/45">
+                  EN AZ 2 OYUNCU GEREKLİ
+                </div>
+              )}
+            </div>
+          ) : (
             <button
               type="button"
-              onClick={handleStart}
-              disabled={!canStart || busy}
-              className="btn-primary w-full !py-3.5 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              data-testid="lobby-start-button"
-              title={canStart ? "Başlat" : "En az 2 oyuncu gerekli"}
+              onClick={handleToggleReady}
+              disabled={busy}
+              className={`flex-1 !py-3.5 rounded-lg font-display text-lg tracking-widest flex items-center justify-center gap-2 border transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
+                iAmReady
+                  ? "bg-emerald-500/20 border-emerald-400/50 text-emerald-200 hover:bg-emerald-500/25"
+                  : "btn-primary !border-transparent"
+              }`}
+              data-testid="lobby-ready-button"
             >
-              <Play size={18} />
-              {busy ? "BAŞLATILIYOR..." : "BAŞLAT"}
+              <Check size={18} />
+              {iAmReady ? "HAZIRSIN — İPTAL ET" : "HAZIRIM"}
             </button>
-          ) : (
-            <div className="w-full rounded-lg border border-white/10 bg-white/[0.03] px-4 py-3 text-center text-sm font-mono tracking-widest text-white/60" data-testid="lobby-waiting-host">
-              EV SAHİBİ BAŞLATANA KADAR BEKLENİYOR...
-            </div>
           )}
           <button
             type="button"
@@ -277,7 +317,7 @@ const QuickAction = ({ icon, label, onClick, testid }) => (
   </button>
 );
 
-const PlayerRow = ({ index, nickname, isHost, connected, isMe }) => (
+const PlayerRow = ({ index, nickname, isHost, connected, ready, isMe }) => (
   <div className="flex items-center gap-3 px-4 py-3" data-testid={`lobby-player-row-${index}`}>
     <span className="font-mono text-[11px] tracking-wider text-white/40 w-4">{index}</span>
     <Circle size={8} className={connected ? "text-emerald-400 fill-emerald-400" : "text-white/25 fill-white/25"} />
@@ -285,11 +325,29 @@ const PlayerRow = ({ index, nickname, isHost, connected, isMe }) => (
       {nickname}
       {isMe && <span className="ml-1.5 text-[10px] font-mono text-white/40 tracking-widest">(SEN)</span>}
     </span>
-    {isHost && (
-      <span className="ml-auto flex items-center gap-1 text-[10px] font-mono tracking-widest text-amber-300">
-        <Crown size={12} /> EV SAHİBİ
-      </span>
-    )}
+    <div className="ml-auto flex items-center gap-2">
+      {ready && !isHost && (
+        <span
+          className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/40 text-[10px] font-mono tracking-widest text-emerald-300"
+          data-testid={`lobby-player-ready-${index}`}
+        >
+          <Check size={11} /> HAZIR
+        </span>
+      )}
+      {!ready && !isHost && (
+        <span
+          className="flex items-center px-2 py-0.5 rounded-full bg-white/5 border border-white/10 text-[10px] font-mono tracking-widest text-white/40"
+          data-testid={`lobby-player-notready-${index}`}
+        >
+          BEKLIYOR
+        </span>
+      )}
+      {isHost && (
+        <span className="flex items-center gap-1 text-[10px] font-mono tracking-widest text-amber-300">
+          <Crown size={12} /> EV SAHİBİ
+        </span>
+      )}
+    </div>
   </div>
 );
 
