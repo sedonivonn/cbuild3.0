@@ -47,7 +47,8 @@ frontend hook + API client structure is portable.
 | DELETE | `/api/online/rooms/{code}/players/{player_id}`          | Leave (host leave = close room)  |
 | WS     | `/api/online/ws/{code}?player_id=…`                     | Real-time state feed             |
 
-## What's implemented (2026-07-05)
+## What's implemented
+### 2026-07-05 (v1)
 - Backend router `/app/backend/routers/online.py` with REST + WS,
   `ConnectionManager` for fan-out, MongoDB persistence, and full input
   validation (nickname 2–16, max_players 2–8, mode ∈ {group,league}).
@@ -63,7 +64,23 @@ frontend hook + API client structure is portable.
 - `App.js` — new `online` and `online_lobby` screens, `?room=CODE`
   URL detection on load, cleanup on leave.
 - `HomeScreen.jsx` — activated the previously-disabled ONLINE button.
-- Tested: 21/21 backend cases, 100% frontend flows via testing agent.
+- Tested: 21/21 backend cases, 100% frontend flows.
+
+### 2026-07-05 (v2 — this iteration)
+- **Per-pick timer**: `CreateRoomBody.pick_seconds` (∈ {15, 30, 45})
+  replaces old `duration_sec`. UI: new "OYUNCU BAŞINA SÜRE" selector
+  in `OnlineScreen`. Lobby SÜRE pill now reflects the chosen value.
+- **Ready-check flow**: `PlayerSlot.ready` flag; new endpoint
+  `POST /rooms/{code}/ready`. Host is force-ready. `POST /start` now
+  returns 409 unless every player has `ready=true`. Guests see a
+  big "HAZIRIM" toggle button in place of the passive waiting block;
+  host BAŞLAT is disabled with a "DİĞER OYUNCULAR HAZIR VERMEYİ
+  BEKLİYOR" hint until all guests are ready.
+- **Quick-join via URL**: opening `?room=CODE` no longer lands on the
+  config screen. Instead a compact `quickjoin-form` shows the code +
+  a single nickname field. If a nickname is saved in localStorage
+  the join fires automatically on mount — one click to lobby.
+- Tested: 29/29 backend cases, 100% frontend flows.
 
 ## Backlog / P1
 - Fully synchronized per-pick draft over WebSocket (currently BAŞLAT
