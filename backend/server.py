@@ -88,9 +88,10 @@ async def index() -> dict:
     return {"service": "championsbuild-api", "docs": "/docs"}
 
 
-# --- Socket.IO ASGI wrapper (mounted at /api/socket.io) -----------------
-# `app` becomes the composite ASGI callable: HTTP routes fall through to
-# FastAPI, WebSocket + long-poll transports at /api/socket.io/* are handled
-# by python-socketio. Uvicorn imports `server:app` from supervisor.
-from sio_server import make_asgi_app  # noqa: E402
-app = make_asgi_app(app)
+# --- Socket.IO Yerel FastAPI Bağlantısı (Mount) -----------------
+import socketio
+from sio_server import sio
+
+# socketio_path="" bırakıyoruz çünkü yönlendirmeyi zaten FastAPI üstlenecek
+sio_asgi_app = socketio.ASGIApp(socketio_server=sio, socketio_path="")
+app.mount("/api/socket.io", sio_asgi_app)
