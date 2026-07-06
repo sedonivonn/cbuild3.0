@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, FastAPI
-from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.cors import CORSMiddleware as StarletteCORSMiddleware
 
 from auth.router import router as auth_router
 from config import settings
@@ -28,15 +28,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="championsbuild-api", version="1.0.0")
-
-# --- CORS ---
-app.add_middleware(
-    CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=settings.cors_origins or ["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 # --- Startup: initialize Firebase (best-effort) ---
 @app.on_event("startup")
@@ -97,38 +88,32 @@ sio_asgi_app = socketio.ASGIApp(socketio_server=sio, socketio_path="")
 app.mount("/api/socket.io", sio_asgi_app)
 
 
-# --- MUTLAK ÇÖZÜM: En Dış Katman Çift CORS Temizleyici (ASGI) ---
-class CleanCORSMiddleware:
-    def __init__(self, inner_app):
+# --- KESİN ÇÖZÜM: Yol Seçici (Selective) CORS Yönetimi ---
+# Bu bağımsız katman, normal REST isteklerine standart CORS uygularken, 
+# Socket.IO /api/socket.io isteklerini bu süzgeçten tamamen muaf tutar. 
+# Böylece iki tarafın başlıkları birbirine asla karışamaz.
+
+base_cors = StarletteCORSMiddleware(
+    app=app,
+    allow_origins=settings.cors_origins or ["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class SelectiveCORSMiddleware:
+    def __init__(self, inner_app, cors_middleware):
         self.inner_app = inner_app
+        self.cors_middleware = cors_middleware
 
     async def __call__(self, scope, receive, send):
-        # Sadece HTTP ve Polling el sıkışma isteklerini filtrele
-        if scope["type"] != "http":
+        path = scope.get("path", "")
+        if scope["type"] in ("http", "websocket") and path.startswith("/api/socket.io"):
+            # İstek Socket.IO adresi ise CORS süzgecine uğramadan doğrudan uygulamaya gönder
             await self.inner_app(scope, receive, send)
-            return
+        else:
+            # Geri kalan tüm normal API isteklerini güvenli standart CORS süzgecine sok
+            await self.cors_middleware(scope, receive, send)
 
-        async def send_wrapper(message):
-            if message["type"] == "http.response.start":
-                headers = message.get("headers", [])
-                new_headers = []
-                origin_seen = False
-                
-                for key, value in headers:
-                    if key.lower() == b"access-control-allow-origin":
-                        if not origin_seen:
-                            # Virgülle birleşmiş çift değerleri temizle
-                            if b"," in value:
-                                value = value.split(b",")[0].strip()
-                            new_headers.append((key, value))
-                            origin_seen = True
-                        # İkinci kez eklenen CORS başlığı varsa pas geç, ekleme!
-                    else:
-                        new_headers.append((key, value))
-                message["headers"] = new_headers
-            await send(message)
-
-        await self.inner_app(scope, receive, send_wrapper)
-
-# Tüm uygulamayı bu zırhla kaplıyoruz
-app = CleanCORSMiddleware(app)
+# Ana uygulamayı bu akıllı seçici zırhla sarmalıyoruz
+app = SelectiveCORSMiddleware(app, base_cors)
