@@ -37,10 +37,12 @@ export function useRoomSocket(code, playerId, onState, onMessage) {
     // `path` must match the server-side `socketio_path` in sio_server.py.
     // frontend/src/hooks/useRoomSocket.js içinde bulun ve değiştirin:
 
+// frontend/src/hooks/useRoomSocket.js içinde bulun ve değiştirin:
+
 const socket = io(BASE || undefined, {
   path: "/api/socket.io",
-  // Sıralamayı polling ilk olacak şekilde değiştirdik:
-  transports: ["polling", "websocket"], 
+  // Sadece ve doğrudan websocket kullanmasını söylüyoruz (Sıfır Gecikme):
+  transports: ["websocket"], 
   reconnection: true,
   reconnectionAttempts: Infinity,
   reconnectionDelay: 500,
