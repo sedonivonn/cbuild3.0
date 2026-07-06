@@ -38,16 +38,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Çift CORS Başlığını Temizleme Filtresi ---
-@app.middleware("http")
-async def clear_duplicate_cors(request, call_next):
-    response = await call_next(request)
-    allow_origin = response.headers.get("access-control-allow-origin")
-    if allow_origin and "," in allow_origin:
-        # Eğer iki defa eklendiyse virgülle ayrılmıştır, sadece ilkini tutup temizliyoruz
-        response.headers["access-control-allow-origin"] = allow_origin.split(",")[0].strip()
-    return response
-
 # --- Startup: initialize Firebase (best-effort) ---
 @app.on_event("startup")
 async def on_startup() -> None:
@@ -105,3 +95,40 @@ from sio_server import sio
 # socketio_path="" bırakıyoruz çünkü yönlendirmeyi zaten FastAPI üstlenecek
 sio_asgi_app = socketio.ASGIApp(socketio_server=sio, socketio_path="")
 app.mount("/api/socket.io", sio_asgi_app)
+
+
+# --- MUTLAK ÇÖZÜM: En Dış Katman Çift CORS Temizleyici (ASGI) ---
+class CleanCORSMiddleware:
+    def __init__(self, inner_app):
+        self.inner_app = inner_app
+
+    async def __call__(self, scope, receive, send):
+        # Sadece HTTP ve Polling el sıkışma isteklerini filtrele
+        if scope["type"] != "http":
+            await self.inner_app(scope, receive, send)
+            return
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                headers = message.get("headers", [])
+                new_headers = []
+                origin_seen = False
+                
+                for key, value in headers:
+                    if key.lower() == b"access-control-allow-origin":
+                        if not origin_seen:
+                            # Virgülle birleşmiş çift değerleri temizle
+                            if b"," in value:
+                                value = value.split(b",")[0].strip()
+                            new_headers.append((key, value))
+                            origin_seen = True
+                        # İkinci kez eklenen CORS başlığı varsa pas geç, ekleme!
+                    else:
+                        new_headers.append((key, value))
+                message["headers"] = new_headers
+            await send(message)
+
+        await self.inner_app(scope, receive, send_wrapper)
+
+# Tüm uygulamayı bu zırhla kaplıyoruz
+app = CleanCORSMiddleware(app)
