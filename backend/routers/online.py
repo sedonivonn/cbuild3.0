@@ -1,25 +1,24 @@
 """Online multiplayer room router.
 
-Provides REST endpoints for room CRUD and a WebSocket endpoint for real-time
-lobby state synchronization. Storage: MongoDB collection `online_rooms`.
+Provides REST endpoints for room CRUD; real-time fan-out to clients now
+goes through Socket.IO (see `sio_server.py`). Storage: MongoDB collection
+`online_rooms`.
 
 Design notes:
-- Rooms live in MongoDB so they survive backend restarts, but the *live*
-  socket fan-out uses a small in-memory registry (`ConnectionManager`).
-- Every mutation goes through `_update_and_broadcast` so REST callers and
-  WS clients see identical state.
+- Rooms live in MongoDB so they survive backend restarts.
+- Every mutation goes through `_broadcast_state` so REST callers and
+  connected socket clients see identical state.
 - Room code is a 5-char uppercase alphanumeric string, easy to type/share.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import secrets
 import string
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException
 from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorCollection
 from pydantic import BaseModel, Field, field_validator
 
@@ -168,55 +167,18 @@ async def _find_unique_code() -> str:
 
 
 # ---------------------------------------------------------------------------
-# WebSocket connection manager
+# Real-time fan-out — delegated to Socket.IO (`sio_server`)
 # ---------------------------------------------------------------------------
-class ConnectionManager:
-    """Tracks live WebSocket clients per room code.
-
-    Kept in-process (single-worker deployment). For multi-worker scaling swap
-    with Redis pub/sub — the API surface below is small enough to make that
-    change trivial.
-    """
-
-    def __init__(self) -> None:
-        # code -> { player_id -> websocket }
-        self._rooms: Dict[str, Dict[str, WebSocket]] = {}
-        self._lock = asyncio.Lock()
-
-    async def connect(self, code: str, player_id: str, ws: WebSocket) -> None:
-        async with self._lock:
-            self._rooms.setdefault(code, {})[player_id] = ws
-
-    async def disconnect(self, code: str, player_id: str) -> None:
-        async with self._lock:
-            bucket = self._rooms.get(code)
-            if bucket and player_id in bucket:
-                bucket.pop(player_id, None)
-                if not bucket:
-                    self._rooms.pop(code, None)
-
-    async def broadcast(self, code: str, payload: Dict[str, Any]) -> None:
-        async with self._lock:
-            targets = list(self._rooms.get(code, {}).items())
-        dead: List[str] = []
-        for pid, ws in targets:
-            try:
-                await ws.send_json(payload)
-            except Exception:  # pragma: no cover - network flakiness
-                dead.append(pid)
-        for pid in dead:
-            await self.disconnect(code, pid)
-
-
-manager = ConnectionManager()
-
-
 async def _broadcast_state(code: str) -> Optional[Dict[str, Any]]:
-    room = await _get_room(code)
-    if not room:
-        return None
-    await manager.broadcast(code, {"type": "state", "room": room})
-    return room
+    """Fetch the current room state and push it via Socket.IO."""
+    # Local import to avoid a circular dep at module import time.
+    from sio_server import broadcast_state  # noqa: WPS433
+    return await broadcast_state(code)
+
+
+async def _broadcast_closed(code: str) -> None:
+    from sio_server import broadcast_closed  # noqa: WPS433
+    await broadcast_closed(code)
 
 
 # ---------------------------------------------------------------------------
@@ -560,7 +522,7 @@ async def leave_room(code: str, player_id: str) -> Dict[str, Any]:
             {"code": code},
             {"$set": {"status": "closed", "updated_at": _now_iso()}},
         )
-        await manager.broadcast(code, {"type": "closed"})
+        await _broadcast_closed(code)
         return {"closed": True}
 
     await _rooms().update_one(
@@ -572,50 +534,6 @@ async def leave_room(code: str, player_id: str) -> Dict[str, Any]:
     return {"left": True}
 
 
-# ---------------------------------------------------------------------------
-# WebSocket endpoint
-# ---------------------------------------------------------------------------
-@router.websocket("/ws/{code}")
-async def ws_room(websocket: WebSocket, code: str, player_id: str) -> None:
-    """Live lobby feed. Query params: `player_id`.
-
-    On connect: marks the player as connected and pushes the current state.
-    On disconnect: marks the player as disconnected (does NOT auto-remove
-    them so page-refresh reconnects work; host must explicitly leave).
-    Incoming client messages: `{ "type": "ping" }` for keepalive.
-    """
-    code = code.upper()
-    await websocket.accept()
-    room = await _get_room(code)
-    if not room:
-        await websocket.send_json({"type": "error", "message": "Room not found"})
-        await websocket.close(code=4404)
-        return
-    if not any(p["id"] == player_id for p in room["players"]):
-        await websocket.send_json({"type": "error", "message": "Not a member"})
-        await websocket.close(code=4403)
-        return
-
-    await manager.connect(code, player_id, websocket)
-    await _rooms().update_one(
-        {"code": code, "players.id": player_id},
-        {"$set": {"players.$.connected": True, "updated_at": _now_iso()}},
-    )
-    await _broadcast_state(code)
-
-    try:
-        while True:
-            msg = await websocket.receive_json()
-            if isinstance(msg, dict) and msg.get("type") == "ping":
-                await websocket.send_json({"type": "pong"})
-    except WebSocketDisconnect:
-        pass
-    except Exception as e:  # pragma: no cover
-        logger.warning("WS error in room %s: %s", code, e)
-    finally:
-        await manager.disconnect(code, player_id)
-        await _rooms().update_one(
-            {"code": code, "players.id": player_id},
-            {"$set": {"players.$.connected": False, "updated_at": _now_iso()}},
-        )
-        await _broadcast_state(code)
+# Note: real-time client connections are now handled by python-socketio.
+# See `sio_server.py` for join/leave/disconnect event handlers and the
+# ASGI mount at `/api/socket.io`.

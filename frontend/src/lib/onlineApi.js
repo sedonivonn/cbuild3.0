@@ -102,8 +102,5 @@ export function leaveRoom(code, playerId) {
 }
 
 // Build the WebSocket URL from REACT_APP_BACKEND_URL (http[s] -> ws[s]).
-export function buildWsUrl(code, playerId) {
-  const base = BASE || window.location.origin;
-  const wsBase = base.replace(/^http/i, "ws");
-  return `${wsBase}/api/online/ws/${encodeURIComponent(code)}?player_id=${encodeURIComponent(playerId)}`;
-}
+// (Kept as a no-op export for backwards compatibility — Socket.IO is now
+// used for real-time transport via `useRoomSocket`.)

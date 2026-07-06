@@ -86,3 +86,11 @@ app.include_router(api_router)
 async def index() -> dict:
     """Non-API root, useful when hitting the Cloud Run URL directly."""
     return {"service": "championsbuild-api", "docs": "/docs"}
+
+
+# --- Socket.IO ASGI wrapper (mounted at /api/socket.io) -----------------
+# `app` becomes the composite ASGI callable: HTTP routes fall through to
+# FastAPI, WebSocket + long-poll transports at /api/socket.io/* are handled
+# by python-socketio. Uvicorn imports `server:app` from supervisor.
+from sio_server import make_asgi_app  # noqa: E402
+app = make_asgi_app(app)
