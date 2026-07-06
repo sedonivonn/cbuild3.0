@@ -35,16 +35,19 @@ export function useRoomSocket(code, playerId, onState, onMessage) {
 
     setStatus("connecting");
     // `path` must match the server-side `socketio_path` in sio_server.py.
-    const socket = io(BASE || undefined, {
-      path: "/api/socket.io",
-      transports: ["websocket", "polling"],
-      reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 500,
-      reconnectionDelayMax: 4000,
-      timeout: 20000,
-      autoConnect: true,
-    });
+    // frontend/src/hooks/useRoomSocket.js içinde bulun ve değiştirin:
+
+const socket = io(BASE || undefined, {
+  path: "/api/socket.io",
+  // Sıralamayı polling ilk olacak şekilde değiştirdik:
+  transports: ["polling", "websocket"], 
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 500,
+  reconnectionDelayMax: 4000,
+  timeout: 20000,
+  autoConnect: true,
+});
     socketRef.current = socket;
 
     const handleConnect = () => {
