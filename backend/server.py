@@ -38,6 +38,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# --- Çift CORS Başlığını Temizleme Filtresi ---
+@app.middleware("http")
+async def clear_duplicate_cors(request, call_next):
+    response = await call_next(request)
+    allow_origin = response.headers.get("access-control-allow-origin")
+    if allow_origin and "," in allow_origin:
+        # Eğer iki defa eklendiyse virgülle ayrılmıştır, sadece ilkini tutup temizliyoruz
+        response.headers["access-control-allow-origin"] = allow_origin.split(",")[0].strip()
+    return response
+
 # --- Startup: initialize Firebase (best-effort) ---
 @app.on_event("startup")
 async def on_startup() -> None:
