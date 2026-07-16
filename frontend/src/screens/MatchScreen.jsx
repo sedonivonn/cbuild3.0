@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { sound } from "../engine/sounds";
 import { Gauge, FastForward, Zap, Pause } from "lucide-react";
+import { FORMATIONS } from "../data/formations";
 
 // Sim speed: ms delay between events
 const SPEEDS = [
@@ -17,16 +18,62 @@ function loadSpeed() {
   try { return localStorage.getItem(SPEED_KEY) || "normal"; } catch (_) { return "normal"; }
 }
 function saveSpeed(k) {
-  try { localStorage.setItem(SPEED_KEY, k); } catch (_) {}
+  try { localStorage.setItem(SPEED_KEY, k); } catch (_) { /* ignore */ }
+}
+
+// -----------------------------------------------------------------------------
+// Opponent XI → formation mapping (opponents don't carry a formation, only a
+// top-11 sorted by rating). We drop the sorted list into a 4-3-3 template using
+// each player's primary position and fall back to the raw order if the mapping
+// can't fill a slot.
+// -----------------------------------------------------------------------------
+const DEFAULT_OPP_FORMATION = "4-3-3";
+
+function buildOpponentXi(players) {
+  if (!players || players.length === 0) return { formationId: DEFAULT_OPP_FORMATION, xi: [] };
+  const formation = FORMATIONS[DEFAULT_OPP_FORMATION];
+  const slots = formation.slots;
+  const pool = players.slice(0, 11);
+  const xi = new Array(slots.length).fill(null);
+  const used = new Set();
+
+  const matches = (slotPos, p) => p && (p.primary === slotPos || p.secondary === slotPos);
+  const familyMatch = (slotPos, p) => {
+    if (!p) return false;
+    const wide = new Set(["LW", "RW", "LM", "RM"]);
+    if (wide.has(slotPos) && (wide.has(p.primary) || wide.has(p.secondary))) return true;
+    return false;
+  };
+
+  // Pass 1: exact primary/secondary match
+  slots.forEach((slot, i) => {
+    if (xi[i]) return;
+    const found = pool.findIndex((p, pi) => !used.has(pi) && matches(slot.pos, p));
+    if (found !== -1) { xi[i] = pool[found]; used.add(found); }
+  });
+  // Pass 2: wing family match
+  slots.forEach((slot, i) => {
+    if (xi[i]) return;
+    const found = pool.findIndex((p, pi) => !used.has(pi) && familyMatch(slot.pos, p));
+    if (found !== -1) { xi[i] = pool[found]; used.add(found); }
+  });
+  // Pass 3: leftovers in order
+  slots.forEach((slot, i) => {
+    if (xi[i]) return;
+    const found = pool.findIndex((_, pi) => !used.has(pi));
+    if (found !== -1) { xi[i] = pool[found]; used.add(found); }
+  });
+  return { formationId: DEFAULT_OPP_FORMATION, xi };
 }
 
 export const MatchScreen = ({ match, onClose }) => {
   const [visibleIdx, setVisibleIdx] = useState(0);
-  const [phase, setPhase] = useState("kickoff"); // kickoff -> playing -> et_confirm -> playing_et -> penalties -> done -> finished
+  const [phase, setPhase] = useState("prematch"); // prematch -> kickoff -> playing -> et_confirm -> playing_et -> penalties -> done
   const [legIdx, setLegIdx] = useState(0);
   const [speedKey, setSpeedKey] = useState(loadSpeed());
   const [penShotIdx, setPenShotIdx] = useState(0);
   const [etVisibleIdx, setEtVisibleIdx] = useState(0);
+  const [shotAnim, setShotAnim] = useState(null); // { type: "GOAL"|"SAVE", side: "home"|"away", minute }
   const finishedRef = useRef(false);
 
   const speed = SPEEDS.find((s) => s.key === speedKey) || SPEEDS[1];
@@ -38,7 +85,6 @@ export const MatchScreen = ({ match, onClose }) => {
     return [match.knockout.tie.match];
   }, [match, isKnockout]);
 
-  // True per-leg home/away: in leg 2 of a 2-leg tie, pair.away hosts.
   const isSecondLeg = isKnockout && legs.length === 2 && legIdx === 1;
   const homeRef = isKnockout
     ? (isSecondLeg ? match.knockout.away : match.knockout.home)
@@ -58,38 +104,62 @@ export const MatchScreen = ({ match, onClose }) => {
   const hasPenalties = isKnockout && tie?.penalties;
   const hasExtraTime = isKnockout && isLastLeg && (!!tie?.et || tie?.decidedBy === "extra_time" || tie?.decidedBy === "penalties");
 
-  // Which side is the user on for THIS leg? Used to colour goal events:
-  // user goals stay amber/yellow, opponent goals become a neutral white.
   const userSide = useMemo(() => {
     if (homeRef?.isUser) return "home";
     if (awayRef?.isUser) return "away";
     return null;
   }, [homeRef, awayRef]);
 
-  // Classify a single event for ticker styling.
-  // GOAL → user team = amber + pulse, opponent = white (no pulse, easier on eyes).
-  // SAVE → emerald. Everything else → muted white.
+  // Resolve XI + formation for both sides. User side uses `match.userXi` /
+  // `match.userFormationId`; opponents use their top-11 mapped into 4-3-3.
+  const homeLineup = useMemo(() => {
+    if (homeRef?.isUser) return { formationId: match.userFormationId || DEFAULT_OPP_FORMATION, xi: match.userXi || [] };
+    return buildOpponentXi(homeRef?.players);
+  }, [homeRef, match.userXi, match.userFormationId]);
+  const awayLineup = useMemo(() => {
+    if (awayRef?.isUser) return { formationId: match.userFormationId || DEFAULT_OPP_FORMATION, xi: match.userXi || [] };
+    return buildOpponentXi(awayRef?.players);
+  }, [awayRef, match.userXi, match.userFormationId]);
+
+  // Event styling used by the ticker. Home events sit on the left, away on the right.
   const eventClass = (e) => {
     if (e.type === "GOAL") {
       const isUserGoal = userSide && e.side === userSide;
-      return isUserGoal
-        ? "text-amber-300 goal-pulse rounded"
-        : "text-white font-semibold";
+      return isUserGoal ? "text-amber-300 font-semibold" : "text-white font-semibold";
     }
     if (e.type === "SAVE") return "text-emerald-300";
     return "text-white/60";
   };
 
+  // Reset per leg (excluding prematch which only fires on the first leg entry).
   useEffect(() => {
-    sound.whistleStart();
-    setPhase("kickoff");
     setVisibleIdx(0);
     setEtVisibleIdx(0);
     setPenShotIdx(0);
+    setShotAnim(null);
     finishedRef.current = false;
+    if (legIdx === 0) return; // first leg is handled by prematch → start button
+    sound.whistleStart();
+    setPhase("kickoff");
     const k = setTimeout(() => setPhase("playing"), 800);
     return () => clearTimeout(k);
   }, [legIdx]);
+
+  const startMatch = () => {
+    sound.whistleStart();
+    setPhase("kickoff");
+    setTimeout(() => setPhase("playing"), 800);
+  };
+
+  // Should we run the ball-flight animation before revealing this event?
+  const isShotEvent = (e) => e && (e.type === "GOAL" || e.type === "SAVE");
+  const shouldAnimateShot = (e) => isShotEvent(e) && speedKey !== "ultra";
+  const shotAnimDuration = () => {
+    // Slow=1200ms, normal=700ms, fast=380ms. Scales with delay but capped.
+    if (speedKey === "slow") return 1200;
+    if (speedKey === "fast") return 380;
+    return 700;
+  };
 
   // Regulation event ticker (minutes 1-90)
   useEffect(() => {
@@ -97,24 +167,29 @@ export const MatchScreen = ({ match, onClose }) => {
     if (visibleIdx >= regulationEvents.length) {
       const t = setTimeout(() => {
         sound.whistleEnd();
-        if (isLastLeg && hasExtraTime) {
-          // Pause and ask user whether to play extra time
-          setPhase("et_confirm");
-        } else if (isLastLeg && hasPenalties && !hasExtraTime) {
-          setPhase("penalties");
-        } else {
-          setPhase("done");
-        }
+        if (isLastLeg && hasExtraTime) setPhase("et_confirm");
+        else if (isLastLeg && hasPenalties && !hasExtraTime) setPhase("penalties");
+        else setPhase("done");
       }, 400);
       return () => clearTimeout(t);
     }
     const e = regulationEvents[visibleIdx];
+    if (shouldAnimateShot(e)) {
+      setShotAnim({ type: e.type, side: e.side, minute: e.minute });
+      const dur = shotAnimDuration();
+      const t = setTimeout(() => {
+        if (e.type === "GOAL") sound.goal();
+        setShotAnim(null);
+        setVisibleIdx((i) => i + 1);
+      }, dur);
+      return () => clearTimeout(t);
+    }
     const t = setTimeout(() => {
       if (e.type === "GOAL") sound.goal();
-      setVisibleIdx(visibleIdx + 1);
+      setVisibleIdx((i) => i + 1);
     }, speed.delay);
     return () => clearTimeout(t);
-  }, [phase, visibleIdx, regulationEvents, speed.delay, isLastLeg, hasExtraTime, hasPenalties]);
+  }, [phase, visibleIdx, regulationEvents, speed.delay, isLastLeg, hasExtraTime, hasPenalties, speedKey]);
 
   // Extra-time event ticker (minutes 91-120)
   useEffect(() => {
@@ -122,21 +197,28 @@ export const MatchScreen = ({ match, onClose }) => {
     if (etVisibleIdx >= extraTimeEvents.length) {
       const t = setTimeout(() => {
         sound.whistleEnd();
-        if (hasPenalties) {
-          setPhase("penalties");
-        } else {
-          setPhase("done");
-        }
+        if (hasPenalties) setPhase("penalties");
+        else setPhase("done");
       }, 400);
       return () => clearTimeout(t);
     }
     const e = extraTimeEvents[etVisibleIdx];
+    if (shouldAnimateShot(e)) {
+      setShotAnim({ type: e.type, side: e.side, minute: e.minute });
+      const dur = shotAnimDuration();
+      const t = setTimeout(() => {
+        if (e.type === "GOAL") sound.goal();
+        setShotAnim(null);
+        setEtVisibleIdx((i) => i + 1);
+      }, dur);
+      return () => clearTimeout(t);
+    }
     const t = setTimeout(() => {
       if (e.type === "GOAL") sound.goal();
-      setEtVisibleIdx(etVisibleIdx + 1);
+      setEtVisibleIdx((i) => i + 1);
     }, speed.delay);
     return () => clearTimeout(t);
-  }, [phase, etVisibleIdx, extraTimeEvents, speed.delay, hasPenalties]);
+  }, [phase, etVisibleIdx, extraTimeEvents, speed.delay, hasPenalties, speedKey]);
 
   // Penalty reveal (slow, suspense)
   useEffect(() => {
@@ -146,18 +228,15 @@ export const MatchScreen = ({ match, onClose }) => {
       const t = setTimeout(() => setPhase("done"), 800);
       return () => clearTimeout(t);
     }
-    // Each penalty shot reveals with slower delay (suspense). Speed scales but capped slow.
     const baseDelay = Math.max(550, speed.delay * 2);
     const t = setTimeout(() => {
       const s = shots[penShotIdx];
-      if (s.scored) sound.goal();
-      else sound.error();
+      if (s.scored) sound.goal(); else sound.error();
       setPenShotIdx(penShotIdx + 1);
     }, baseDelay);
     return () => clearTimeout(t);
   }, [phase, penShotIdx, tie, speed.delay]);
 
-  // Trigger trophy on close handled by parent via match.userWon + match.stage === "Final"
   const handleClose = () => {
     if (finishedRef.current) return;
     finishedRef.current = true;
@@ -165,26 +244,20 @@ export const MatchScreen = ({ match, onClose }) => {
   };
 
   const nextLeg = () => {
-    if (legIdx + 1 < legs.length) {
-      setLegIdx(legIdx + 1);
-    } else {
-      handleClose();
-    }
+    if (legIdx + 1 < legs.length) setLegIdx(legIdx + 1);
+    else handleClose();
   };
 
-  // Confirm to continue into extra time
   const startExtraTime = () => {
     sound.whistleStart();
     setPhase("playing_et");
   };
 
-  // Score accumulation (regulation only while playing; full once ET starts/finishes)
+  // Score accumulation
   const goalsSoFar = useMemo(() => {
     let h = 0, a = 0;
     regulationEvents.slice(0, visibleIdx).forEach((e) => {
-      if (e.type === "GOAL") {
-        if (e.side === "home") h++; else a++;
-      }
+      if (e.type === "GOAL") { if (e.side === "home") h++; else a++; }
     });
     return { h, a };
   }, [regulationEvents, visibleIdx]);
@@ -192,25 +265,17 @@ export const MatchScreen = ({ match, onClose }) => {
   const etGoalsSoFar = useMemo(() => {
     let h = 0, a = 0;
     extraTimeEvents.slice(0, etVisibleIdx).forEach((e) => {
-      if (e.type === "GOAL") {
-        if (e.side === "home") h++; else a++;
-      }
+      if (e.type === "GOAL") { if (e.side === "home") h++; else a++; }
     });
     return { h, a };
   }, [extraTimeEvents, etVisibleIdx]);
 
-  // Display score logic:
-  //  - playing (regulation): live count of regulation goals only
-  //  - et_confirm: regulation-only goals (held)
-  //  - playing_et: regulation + live ET goals
-  //  - penalties / done / finished: full leg score
   let displayedHomeScore;
   let displayedAwayScore;
-  if (phase === "playing" || phase === "kickoff") {
+  if (phase === "prematch" || phase === "playing" || phase === "kickoff") {
     displayedHomeScore = goalsSoFar.h;
     displayedAwayScore = goalsSoFar.a;
   } else if (phase === "et_confirm") {
-    // Final regulation goals (ignore ET)
     displayedHomeScore = regulationEvents.reduce((s, e) => s + (e.type === "GOAL" && e.side === "home" ? 1 : 0), 0);
     displayedAwayScore = regulationEvents.reduce((s, e) => s + (e.type === "GOAL" && e.side === "away" ? 1 : 0), 0);
   } else if (phase === "playing_et") {
@@ -223,10 +288,8 @@ export const MatchScreen = ({ match, onClose }) => {
     displayedAwayScore = currentLeg.away.score;
   }
 
-  // Penalty progress display
   const penShots = tie?.penalties?.shots || [];
   const penShown = penShots.slice(0, penShotIdx);
-  // For penalties we always present pair.home left, pair.away right (consistent)
   const penPairHomeName = (match.knockout?.home?.label) || homeName;
   const penPairAwayName = (match.knockout?.away?.label) || awayName;
   const penHomeScored = penShown.filter((s) => s.side === "home" && s.scored).length;
@@ -234,12 +297,31 @@ export const MatchScreen = ({ match, onClose }) => {
 
   const showAggregateBlock = phase === "done" && isKnockout && isLastLeg;
 
+  // Current minute in play — used for the OSM-style live clock badge.
+  const liveMinute = useMemo(() => {
+    if (phase === "playing" && visibleIdx > 0) {
+      return regulationEvents[Math.min(visibleIdx - 1, regulationEvents.length - 1)]?.minute ?? 0;
+    }
+    if (phase === "playing_et" && etVisibleIdx > 0) {
+      return extraTimeEvents[Math.min(etVisibleIdx - 1, extraTimeEvents.length - 1)]?.minute ?? 90;
+    }
+    return null;
+  }, [phase, visibleIdx, etVisibleIdx, regulationEvents, extraTimeEvents]);
+
+  // Combined visible events (regulation + ET) for the interleaved ticker.
+  const shownEvents = useMemo(() => {
+    const arr = regulationEvents.slice(0, visibleIdx).map((e, i) => ({ ...e, _k: `reg-${i}` }));
+    const etCount = (phase === "playing_et") ? etVisibleIdx : ((phase === "done" || phase === "finished") ? extraTimeEvents.length : 0);
+    for (let i = 0; i < etCount; i++) arr.push({ ...extraTimeEvents[i], _k: `et-${i}` });
+    return arr;
+  }, [regulationEvents, visibleIdx, extraTimeEvents, etVisibleIdx, phase]);
+
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center px-4 bg-black/85 backdrop-blur-md" data-testid="match-modal">
+    <div className="fixed inset-0 z-40 flex items-center justify-center px-4 py-6 bg-black/85 backdrop-blur-md overflow-y-auto" data-testid="match-modal">
       <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
-        className="glass rounded-2xl max-w-3xl w-full p-6 md:p-8"
+        className={`glass rounded-2xl w-full ${phase === "prematch" ? "max-w-5xl" : "max-w-3xl"} p-5 md:p-7`}
       >
         <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
           <div className="font-mono text-xs tracking-widest text-amber-300">
@@ -248,70 +330,93 @@ export const MatchScreen = ({ match, onClose }) => {
           <SpeedPicker speedKey={speedKey} onChange={(k) => { setSpeedKey(k); saveSpeed(k); }} />
         </div>
 
-        {/* Scoreboard */}
-        <div className="grid grid-cols-3 items-center gap-4 mb-3">
-          <div className="text-right">
-            <div className="font-display text-lg md:text-2xl tracking-tight truncate" data-testid="home-name">{homeName}</div>
-            <div className="text-[10px] text-white/40 font-mono tracking-widest">{isKnockout ? "EV SAHİBİ" : ""}</div>
-          </div>
-          <div className="text-center">
-            <motion.div
-              key={`${displayedHomeScore}-${displayedAwayScore}-${legIdx}`}
-              initial={{ scale: 1 }}
-              animate={{ scale: [1.0, 1.18, 1.0] }}
-              transition={{ duration: 0.5 }}
-              className="font-display text-5xl md:text-6xl text-amber-300"
-              data-testid="scoreboard"
-            >
-              {displayedHomeScore} <span className="text-white/30">·</span> {displayedAwayScore}
-            </motion.div>
-          </div>
-          <div>
-            <div className="font-display text-lg md:text-2xl tracking-tight truncate" data-testid="away-name">{awayName}</div>
-            <div className="text-[10px] text-white/40 font-mono tracking-widest">{isKnockout ? "DEPLASMAN" : ""}</div>
-          </div>
-        </div>
+        {/* --- PRE-MATCH: side-by-side lineups + pitches ------------------ */}
+        {phase === "prematch" && (
+          <PreMatchLineups
+            homeName={homeName}
+            awayName={awayName}
+            homeRef={homeRef}
+            awayRef={awayRef}
+            homeLineup={homeLineup}
+            awayLineup={awayLineup}
+            onStart={startMatch}
+          />
+        )}
 
-        {/* Ticker */}
-        {phase !== "penalties" && (
-          <div className="bg-black/40 rounded-xl p-4 max-h-56 overflow-y-auto border border-white/5">
-            <AnimatePresence>
-              {regulationEvents.slice(0, visibleIdx).map((e, i) => (
-                <motion.div
-                  key={`reg-${i}`}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className={`flex items-center gap-3 py-1 text-sm ${eventClass(e)}`}
-                  data-testid={`match-event-${i}`}
-                >
-                  <span className="font-mono text-xs w-10">{e.minute}'</span>
-                  <span className="flex-1">{e.text}</span>
-                </motion.div>
-              ))}
-              {(phase === "playing_et" || phase === "done" || phase === "finished") && extraTimeEvents.slice(0, phase === "playing_et" ? etVisibleIdx : extraTimeEvents.length).map((e, i) => (
-                <motion.div
-                  key={`et-${i}`}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className={`flex items-center gap-3 py-1 text-sm ${eventClass(e)}`}
-                  data-testid={`match-event-et-${i}`}
-                >
-                  <span className="font-mono text-xs w-10">{e.minute}'</span>
-                  <span className="flex-1">{e.text}</span>
-                </motion.div>
-              ))}
-              {phase === "kickoff" && (
-                <div className="text-center text-white/40 font-display text-lg tracking-widest py-4">KICK-OFF</div>
-              )}
-              {phase === "playing" && visibleIdx === 0 && (
-                <div className="text-white/40 text-sm text-center py-4">Maç başladı...</div>
-              )}
-              {phase === "playing_et" && etVisibleIdx === 0 && (
-                <div className="text-center text-amber-300 font-display text-base tracking-widest py-3 border-t border-amber-300/30 mt-2">
-                  UZATMA BAŞLADI
+        {/* --- SCOREBOARD (visible during play/done, not in prematch) ----- */}
+        {phase !== "prematch" && (
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 mb-3">
+            <div className="text-right min-w-0">
+              <div className="font-display text-lg md:text-2xl tracking-tight truncate" data-testid="home-name">{homeName}</div>
+              <div className="text-[10px] text-white/40 font-mono tracking-widest">{isKnockout ? "EV SAHİBİ" : ""}</div>
+            </div>
+            <div className="text-center flex flex-col items-center">
+              <motion.div
+                key={`${displayedHomeScore}-${displayedAwayScore}-${legIdx}`}
+                initial={{ scale: 1 }}
+                animate={{ scale: [1.0, 1.18, 1.0] }}
+                transition={{ duration: 0.5 }}
+                className="font-display text-5xl md:text-6xl text-amber-300 leading-none"
+                data-testid="scoreboard"
+              >
+                {displayedHomeScore} <span className="text-white/30">·</span> {displayedAwayScore}
+              </motion.div>
+              {liveMinute !== null && (
+                <div className="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-white/10 text-white/80 font-mono text-[10px] tracking-widest" data-testid="live-minute">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+                  {`${liveMinute}'`}
                 </div>
               )}
+            </div>
+            <div className="min-w-0">
+              <div className="font-display text-lg md:text-2xl tracking-tight truncate" data-testid="away-name">{awayName}</div>
+              <div className="text-[10px] text-white/40 font-mono tracking-widest">{isKnockout ? "DEPLASMAN" : ""}</div>
+            </div>
+          </div>
+        )}
+
+        {/* --- SHOT ANIMATION (over ticker while a chance unfolds) -------- */}
+        {phase !== "penalties" && phase !== "prematch" && (
+          <div className="relative">
+            <AnimatePresence>
+              {shotAnim && (
+                <ShotAnimation
+                  key={`${shotAnim.type}-${shotAnim.side}-${shotAnim.minute}`}
+                  anim={shotAnim}
+                  userSide={userSide}
+                  homeName={homeName}
+                  awayName={awayName}
+                  duration={shotAnimDuration()}
+                />
+              )}
             </AnimatePresence>
+
+            {/* Ticker (interleaved home-left / away-right OSM-style) */}
+            {!shotAnim && (
+              <div className="bg-black/40 rounded-xl p-3 max-h-64 overflow-y-auto border border-white/5" data-testid="event-ticker">
+                <AnimatePresence>
+                  {shownEvents.map((e, i) => (
+                    <TickerRow
+                      key={e._k}
+                      event={e}
+                      className={eventClass(e)}
+                      index={i}
+                    />
+                  ))}
+                  {phase === "kickoff" && (
+                    <div className="text-center text-white/40 font-display text-lg tracking-widest py-4">KICK-OFF</div>
+                  )}
+                  {phase === "playing" && visibleIdx === 0 && (
+                    <div className="text-white/40 text-sm text-center py-4">Maç başladı...</div>
+                  )}
+                  {phase === "playing_et" && etVisibleIdx === 0 && (
+                    <div className="text-center text-amber-300 font-display text-base tracking-widest py-3 border-t border-amber-300/30 mt-2">
+                      UZATMA BAŞLADI
+                    </div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
           </div>
         )}
 
@@ -326,14 +431,7 @@ export const MatchScreen = ({ match, onClose }) => {
             <div className="font-mono text-[10px] tracking-widest text-amber-300 mb-2">90. DAKİKA</div>
             <div className="font-display text-2xl md:text-3xl text-white mb-2">Maç uzatmalara gidiyor.</div>
             <div className="text-sm text-white/70 mb-4">Devam etmek ister misin? 30 dakikalık uzatma oynanacak, gerekirse penaltılara gidilecek.</div>
-            <button
-              type="button"
-              className="btn-primary"
-              onClick={startExtraTime}
-              data-testid="et-continue-button"
-            >
-              DEVAM ET →
-            </button>
+            <button type="button" className="btn-primary" onClick={startExtraTime} data-testid="et-continue-button">DEVAM ET →</button>
           </motion.div>
         )}
 
@@ -360,9 +458,7 @@ export const MatchScreen = ({ match, onClose }) => {
           </div>
         )}
 
-        {/* Player of the Match — chooses the highest-rated player across BOTH
-            sides. If the opponent dominates, their player wins the trophy.
-            Goalkeeper POTM shows save count instead of goals/assists. */}
+        {/* Player of the Match */}
         {phase === "done" && currentLeg && (() => {
           const homeStats = currentLeg.homePlayerStats || [];
           const awayStats = currentLeg.awayPlayerStats || [];
@@ -374,12 +470,8 @@ export const MatchScreen = ({ match, onClose }) => {
           const potm = [...all].sort((a, b) => b.rating - a.rating)[0];
           if (!potm) return null;
           const isUserPotm = userSide && potm._side === userSide;
-          const saves = (currentLeg.events || []).filter(
-            (e) => e.type === "SAVE" && e.side === potm._side
-          ).length;
+          const saves = (currentLeg.events || []).filter((e) => e.type === "SAVE" && e.side === potm._side).length;
           const isGK = potm.slot === "GK";
-          // Different visual treatment for opponent POTM — keep the gold
-          // accents but use a neutral white frame instead of full amber.
           const containerClass = isUserPotm
             ? "border-amber-300/40 bg-gradient-to-br from-amber-300/10 to-amber-300/0"
             : "border-white/30 bg-gradient-to-br from-white/10 to-white/0";
@@ -405,9 +497,7 @@ export const MatchScreen = ({ match, onClose }) => {
                     </div>
                   )}
                   <div className="text-[11px] font-mono text-white/50 tracking-wider mt-0.5">
-                    {potm.slot} · {potm.season} · {isGK
-                      ? `${saves} KURTARIŞ`
-                      : `${potm.goals} GOL · ${potm.assists} ASİST`}
+                    {potm.slot} · {potm.season} · {isGK ? `${saves} KURTARIŞ` : `${potm.goals} GOL · ${potm.assists} ASİST`}
                   </div>
                 </div>
                 <div className="text-right shrink-0">
@@ -450,6 +540,304 @@ export const MatchScreen = ({ match, onClose }) => {
         </div>
       </motion.div>
     </div>
+  );
+};
+
+// -----------------------------------------------------------------------------
+// PreMatchLineups — two team columns, each with player list and a mini pitch.
+// -----------------------------------------------------------------------------
+const PreMatchLineups = ({ homeName, awayName, homeRef, awayRef, homeLineup, awayLineup, onStart }) => (
+  <div data-testid="prematch-lineups">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+      <TeamLineupPanel
+        name={homeName}
+        subtitle={homeRef?.isUser ? "SENİN TAKIMIN" : (homeRef?.season ? `${homeRef.season} · ${homeRef.club || ""}` : (homeRef?.club || ""))}
+        accent="left"
+        lineup={homeLineup}
+      />
+      <TeamLineupPanel
+        name={awayName}
+        subtitle={awayRef?.isUser ? "SENİN TAKIMIN" : (awayRef?.season ? `${awayRef.season} · ${awayRef.club || ""}` : (awayRef?.club || ""))}
+        accent="right"
+        lineup={awayLineup}
+      />
+    </div>
+    <div className="mt-5 flex justify-center">
+      <button type="button" className="btn-primary" onClick={onStart} data-testid="start-match-button">
+        MAÇI BAŞLAT →
+      </button>
+    </div>
+  </div>
+);
+
+const TeamLineupPanel = ({ name, subtitle, accent, lineup }) => {
+  const players = lineup?.xi || [];
+  const formation = FORMATIONS[lineup?.formationId] || FORMATIONS[DEFAULT_OPP_FORMATION];
+  const barClass = accent === "left"
+    ? "bg-gradient-to-r from-amber-300/25 to-transparent border-l-4 border-amber-300"
+    : "bg-gradient-to-l from-red-400/25 to-transparent border-r-4 border-red-400";
+  return (
+    <div className="rounded-xl overflow-hidden border border-white/10 bg-black/30">
+      <div className={`px-3 py-2 ${barClass}`}>
+        <div className="font-display text-lg md:text-xl tracking-tight truncate">{name}</div>
+        {subtitle && <div className="text-[10px] font-mono tracking-widest text-white/60 truncate">{subtitle}</div>}
+      </div>
+      <div className="grid grid-cols-[1fr_auto] gap-2">
+        {/* Player list */}
+        <ul className="p-2 space-y-1 min-w-0" data-testid={`lineup-list-${accent}`}>
+          {players.slice(0, 11).map((p, i) => {
+            if (!p) {
+              return (
+                <li key={i} className="flex items-center gap-2 text-xs text-white/40">
+                  <span className="font-mono w-5 text-right">{i + 1}.</span>
+                  <span className="italic">— BOŞ SLOT —</span>
+                </li>
+              );
+            }
+            const ovr = p.overall ?? 80;
+            return (
+              <li key={i} className="flex items-center gap-2 text-xs md:text-sm">
+                <span className="font-mono w-5 text-right text-white/50">{i + 1}.</span>
+                <span className="flex-1 truncate">{p.name}</span>
+                <OvrBadge ovr={ovr} />
+              </li>
+            );
+          })}
+        </ul>
+        {/* Mini pitch */}
+        <div className="p-2 pl-0 flex items-center justify-center">
+          <MiniPitch formation={formation} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const OvrBadge = ({ ovr }) => {
+  const bg =
+    ovr >= 99 ? "bg-black text-orange-300 border-orange-400/50" :
+    ovr >= 90 ? "bg-purple-600/30 text-purple-200 border-purple-400/50" :
+    ovr >= 81 ? "bg-amber-500/30 text-amber-200 border-amber-400/60" :
+    ovr >= 70 ? "bg-slate-500/30 text-slate-100 border-slate-400/50" :
+                 "bg-orange-800/30 text-orange-300 border-orange-500/50";
+  return (
+    <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded border ${bg}`}>{ovr}</span>
+  );
+};
+
+// Compact pitch showing 11 position dots — mirrors formation coordinates.
+const MiniPitch = ({ formation }) => {
+  const slots = formation?.slots || [];
+  return (
+    <div
+      className="relative rounded-md shrink-0"
+      style={{
+        width: 110,
+        height: 150,
+        background:
+          "repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0 12px, rgba(255,255,255,0) 12px 24px), radial-gradient(120% 100% at 50% 0%, #145a2c 0%, #0d3f1f 60%, #0a2f18 100%)",
+        border: "1px solid rgba(255,255,255,0.12)",
+      }}
+    >
+      {/* halfway line */}
+      <div className="absolute left-2 right-2 top-1/2 h-px bg-white/25" />
+      {/* center circle */}
+      <div
+        className="absolute rounded-full border border-white/25"
+        style={{ width: 34, height: 34, left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}
+      />
+      {slots.map((slot) => (
+        <div
+          key={slot.id}
+          className="absolute flex items-center justify-center rounded-full bg-white/15 border border-white/40 text-white text-[8px] font-mono tracking-tight"
+          style={{
+            width: 18,
+            height: 18,
+            top: `calc(${slot.top}% - 9px)`,
+            left: `calc(${slot.left}% - 9px)`,
+          }}
+        >
+          {slot.pos}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// -----------------------------------------------------------------------------
+// ShotAnimation — a football glides toward the net. On GOAL, it hits the mesh
+// with a golden flash; on SAVE, a red X stamps over it before it fades.
+// -----------------------------------------------------------------------------
+const ShotAnimation = ({ anim, userSide, homeName, awayName, duration }) => {
+  const isGoal = anim.type === "GOAL";
+  const fromLeft = anim.side === "home"; // home attacks left→right visual
+  const teamName = anim.side === "home" ? homeName : awayName;
+  const isUserSide = userSide && userSide === anim.side;
+  const accent = isGoal
+    ? (isUserSide ? "#f5c542" : "#ffffff")
+    : "#ef4444";
+
+  // Duration split: 65% flight, 35% impact.
+  const flight = Math.round(duration * 0.65) / 1000;
+  const impact = Math.round(duration * 0.35) / 1000;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      className="bg-black/70 rounded-xl border border-white/10 overflow-hidden relative"
+      style={{ height: 240 }}
+      data-testid={`shot-anim-${anim.type.toLowerCase()}`}
+    >
+      {/* Stadium/net backdrop */}
+      <div className="absolute inset-0"
+        style={{
+          background:
+            "radial-gradient(120% 80% at 100% 50%, rgba(220,50,50,0.35) 0%, rgba(20,20,30,0.85) 55%, rgba(0,0,0,1) 100%)",
+        }}
+      />
+      {/* Net (right side) */}
+      <NetSVG side="right" />
+
+      {/* Minute badge */}
+      <div className="absolute top-3 left-3 z-10 inline-flex items-center gap-2 rounded-full px-2.5 py-1 bg-black/60 border border-white/15 text-white/85 font-mono text-[11px] tracking-widest">
+        <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+        {`${anim.minute}'`}
+      </div>
+
+      {/* Team + shot label */}
+      <div className="absolute bottom-3 left-3 right-3 z-10 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <div className="font-mono text-[10px] tracking-widest" style={{ color: accent }}>
+            {isGoal ? (isUserSide ? "MUHTEŞEM GOL!" : "GOL!") : "KAÇAN FIRSAT"}
+          </div>
+          <div className="font-display text-lg md:text-xl truncate">{teamName}</div>
+        </div>
+      </div>
+
+      {/* Ball */}
+      <motion.div
+        className="absolute z-[5]"
+        style={{ top: "50%", marginTop: -22 }}
+        initial={{ left: fromLeft ? "8%" : "8%", scale: 0.55, rotate: 0 }}
+        animate={{
+          left: ["8%", "72%"],
+          scale: [0.55, 1.15],
+          rotate: [0, fromLeft ? 720 : 720],
+        }}
+        transition={{ duration: flight, ease: "easeOut" }}
+      >
+        <BallSVG size={44} />
+      </motion.div>
+
+      {/* Impact overlay: goal flash (gold) or red X for miss */}
+      <motion.div
+        className="absolute inset-0 flex items-center justify-end pr-[10%] z-20 pointer-events-none"
+        initial={{ opacity: 0, scale: 0.4 }}
+        animate={{ opacity: [0, 0, 1], scale: [0.4, 0.4, 1.15] }}
+        transition={{ duration: flight + impact, times: [0, flight / (flight + impact) - 0.01, 1], ease: "easeOut" }}
+      >
+        {isGoal ? (
+          <div className="relative">
+            <div
+              className="absolute -inset-8 rounded-full blur-2xl"
+              style={{ background: `radial-gradient(closest-side, ${accent}55, transparent 70%)` }}
+            />
+            <div
+              className="font-display text-4xl md:text-5xl tracking-tight"
+              style={{ color: accent, textShadow: `0 0 24px ${accent}` }}
+            >
+              GOOOL
+            </div>
+          </div>
+        ) : (
+          <div className="relative">
+            <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
+              <path d="M20 20 L100 100 M100 20 L20 100" stroke="#ef4444" strokeWidth="14" strokeLinecap="round" />
+            </svg>
+          </div>
+        )}
+      </motion.div>
+    </motion.div>
+  );
+};
+
+const BallSVG = ({ size = 44 }) => (
+  <svg width={size} height={size} viewBox="0 0 64 64" fill="none" style={{ filter: "drop-shadow(0 6px 10px rgba(0,0,0,0.55))" }}>
+    <circle cx="32" cy="32" r="30" fill="#ffffff" stroke="#0b0b0b" strokeWidth="1.5" />
+    {/* classic pentagon pattern hint */}
+    <polygon points="32,14 40,20 37,30 27,30 24,20" fill="#0b0b0b" />
+    <polygon points="16,28 22,32 20,40 12,38 12,32" fill="#0b0b0b" opacity="0.85" />
+    <polygon points="48,28 52,32 52,38 44,40 42,32" fill="#0b0b0b" opacity="0.85" />
+    <polygon points="24,42 32,38 40,42 36,50 28,50" fill="#0b0b0b" opacity="0.85" />
+  </svg>
+);
+
+// A subtle mesh drawn as diagonal cross-hatch on the goal-side of the frame.
+const NetSVG = ({ side = "right" }) => {
+  const lines = [];
+  const cols = 22;
+  const rows = 18;
+  for (let i = 0; i <= cols; i++) {
+    const x = (i / cols) * 100;
+    lines.push(<line key={`v-${i}`} x1={x} y1="0" x2={x} y2="100" stroke="rgba(255,255,255,0.28)" strokeWidth="0.25" />);
+  }
+  for (let j = 0; j <= rows; j++) {
+    const y = (j / rows) * 100;
+    lines.push(<line key={`h-${j}`} x1="0" y1={y} x2="100" y2={y} stroke="rgba(255,255,255,0.28)" strokeWidth="0.25" />);
+  }
+  return (
+    <div
+      className="absolute top-0 bottom-0 pointer-events-none"
+      style={{
+        right: 0,
+        width: "58%",
+        maskImage: "linear-gradient(to left, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.75) 55%, rgba(0,0,0,0) 100%)",
+        WebkitMaskImage: "linear-gradient(to left, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.75) 55%, rgba(0,0,0,0) 100%)",
+      }}
+    >
+      <svg
+        width="100%"
+        height="100%"
+        viewBox="0 0 100 100"
+        preserveAspectRatio="none"
+        style={{ transform: `perspective(400px) rotateY(${side === "right" ? "-18deg" : "18deg"})`, transformOrigin: side === "right" ? "left center" : "right center" }}
+      >
+        {lines}
+      </svg>
+    </div>
+  );
+};
+
+// -----------------------------------------------------------------------------
+// TickerRow — home events left, away events right, keeps chronological order.
+// -----------------------------------------------------------------------------
+const TickerRow = ({ event, className, index }) => {
+  const leftSide = event.side === "home";
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="flex items-start gap-3 py-1"
+      data-testid={`match-event-${index}`}
+    >
+      <span className="font-mono text-[10px] w-9 shrink-0 text-white/40 pt-0.5">{`${event.minute}'`}</span>
+      <div className="flex-1 grid grid-cols-2 gap-2 items-start">
+        {leftSide ? (
+          <>
+            <div className={`text-sm md:text-[13px] ${className}`}>{event.text}</div>
+            <div />
+          </>
+        ) : (
+          <>
+            <div />
+            <div className={`text-sm md:text-[13px] text-right ${className}`}>{event.text}</div>
+          </>
+        )}
+      </div>
+    </motion.div>
   );
 };
 

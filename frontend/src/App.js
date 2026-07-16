@@ -205,7 +205,7 @@ function App() {
         />
       )}
 
-      {activeMatch && <MatchScreen match={activeMatch} onClose={() => {
+      {activeMatch && <MatchScreen match={{ ...activeMatch, userXi: xi, userFormationId: formationId, userTeamName: displayedTeamName }} onClose={() => {
         const m = activeMatch;
         setActiveMatch(null);
         if (m && m.stage === "Final" && m.userWon && m.championRef) {

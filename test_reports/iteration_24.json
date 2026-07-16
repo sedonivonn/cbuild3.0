@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 24 — Full frontend verification of the OSM-style MatchScreen redesign. All 7 acceptance criteria from the review request PASS. HomeScreen regression: online-button confirmed absent; start-draft-button + start-draft-league-button (+ optional continue-button) are the only entry points. MatchScreen prematch phase: match-modal opens with prematch-lineups block BEFORE any events tick; lineup-list-left and lineup-list-right each render 11 <li> rows (jersey number + name + OVR badge); each column shows a mini-pitch with 11 position dots (GK/LB/CB/CB/RB/CM/CM/CM/LW/ST/RW visible in screenshot); start-match-button renders with text 'MAÇI BAŞLAT →'; scoreboard + event-ticker are NOT rendered while phase==prematch. Kickoff: after clicking start-match-button the scoreboard (with home-name='2009 Manchester United', away-name='TEST AJAX') and event-ticker mount, and the interleaved home-left / away-right ticker fills over ~30s at NORMAL speed. Shot animation: during NORMAL sim, BOTH shot-anim-goal (golden GOOOL flash with ball flight) and shot-anim-save (red X) overlays fired at least once, and the event-ticker was hidden while the overlay was on-screen (per JSX guard `{!shotAnim && …}`). ULTRA mode: switching to speed-ultra before start-match-button causes the whole match to complete in ~12s and NEITHER shot-anim-goal NOR shot-anim-save appears — confirming the `shouldAnimateShot` guard (`speedKey !== 'ultra'`). Match end: close-match-button appears after group-stage MD completes (user-result is knockout-only which is expected by design). Seeded a valid single-player save (Ajax 1995 XI, 4-3-3, tiki_taka) via localStorage so the tournament was reachable without the 11-slot dice/place flow — no code changes needed to make the flow testable.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_features": [
+    "HomeScreen shows only start-draft-button (GRUP FORMATI) + start-draft-league-button (LİG FORMATI); online-button is fully removed (regression #7).",
+    "Seeded save → TournamentScreen renders play-matchday-button (group-stage MD1).",
+    "Clicking play-matchday-button opens match-modal with phase='prematch' (no auto-start).",
+    "prematch-lineups block renders two TeamLineupPanel columns: lineup-list-left (home) and lineup-list-right (away), each with 11 <li> rows containing jersey number + player name + OVR badge.",
+    "Each panel renders a MiniPitch (110x150) with 11 position dots derived from FORMATIONS[formationId].slots — GK/LB/CB/CB/RB/CM/CM/CM/LW/ST/RW visible for user's 4-3-3, and 4-3-3 template mapping for opponent's top-11.",
+    "start-match-button visible with text 'MAÇI BAŞLAT →'. scoreboard + event-ticker are NOT rendered while phase==prematch (confirmed absent).",
+    "After start-match-button click, phase→kickoff→playing: scoreboard mounts (home-name/away-name/live-minute), event-ticker mounts and receives interleaved home-left/away-right TickerRow entries.",
+    "SpeedPicker (data-testid speed-picker) has 4 buttons speed-slow/normal/fast/ultra; clicking speed-ultra applies red/amber active state and reduces per-tick delay to 25ms.",
+    "During NORMAL speed simulation: shot-anim-goal overlay renders on GOAL events (ball flight + golden GOOOL flash) and shot-anim-save overlay renders on SAVE events (ball flight + red X). Event-ticker is hidden while overlay is up (JSX guard `!shotAnim && <ticker/>`).",
+    "During ULTRA speed simulation: NO shot-anim-goal or shot-anim-save renders and match completes in ~12s. Confirms shouldAnimateShot returns false when speedKey==='ultra'.",
+    "End of group-MD match: close-match-button renders in the footer (user-result block is guarded by `showAggregateBlock` which is knockout-only — matches design intent)."
+  ],
+  "test_report_links": [
+    "/app/tests/matchscreen_osm_test.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "MatchScreen.jsx:79 speed = SPEEDS.find(...) recomputes on every render — negligible cost but could be memoized.",
+    "MatchScreen.jsx:157-162 shotAnimDuration() is not memoized and is invoked inside timeout callbacks — harmless but changing speedKey mid-animation won't affect an in-flight shot's timer (only next shot). Acceptable UX-wise.",
+    "MatchScreen.jsx:301-309 liveMinute uses regulationEvents[Math.min(visibleIdx-1, len-1)] — safe, but the fallback of 90 for playing_et when etVisibleIdx==0 could show '90' briefly before first ET event; minor cosmetic.",
+    "MatchScreen.jsx:557-563 The 'left' vs 'right' accent bar color is hardcoded amber vs red; if user is the AWAY side (in a knockout 2nd leg), user's panel becomes RED rather than the golden 'SENİN TAKIMIN' color. Consider tying the amber accent to userSide rather than physical column.",
+    "MatchScreen.jsx:588 lineup-list uses `key={i}` on player <li>, which is fine because the order is stable within a formation but would misbehave if slots reordered — low risk.",
+    "ShotAnimation.jsx (inline, line 671): the ball always animates left→right regardless of `fromLeft` value (both branches set left:['8%','72%']). This means home and away shots both fly toward the right net. Not a bug per the spec (single-net design), but the `fromLeft` variable is dead code."
+  ],
+  "updated_files": [
+    "/app/tests/matchscreen_osm_test.py (NEW — seed fixture + acceptance-criteria checklist)"
+  ],
+  "success_rate": {"backend": "N/A (frontend-only per request)", "frontend": "100% (7/7 acceptance criteria)"},
+  "test_credentials": "N/A — no auth in this feature.",
+  "seed_data_creation": "Seeded localStorage key 'ucl_draft_save_v1' via page.evaluate to bypass the 11-slot dice/place draft flow. XI = Ajax 1995 11-player template (Van der Sar / Rijkaard / Seedorf / Overmars / Kluivert / etc.), formation 4-3-3, tactic tiki_taka, screen='tournament', tournamentMode='group'. Fixture reused for the ULTRA-mode second matchday.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "OSM-style MatchScreen redesign verified end-to-end. Key testids in play: match-modal, prematch-lineups, lineup-list-left/right, start-match-button, scoreboard, home-name, away-name, live-minute, event-ticker, shot-anim-goal, shot-anim-save, speed-picker, speed-slow/normal/fast/ultra, close-match-button, next-leg-button. Fastest way to get to MatchScreen without going through 11-slot draft: seed `ucl_draft_save_v1` in localStorage with formationId=4-3-3, tactic set, xi filled with 11 real player objects each carrying {name, primary, secondary, overall, _season, _club, _crest, _country, _slot}, then reload and click play-matchday-button. Full seed dict lives in /app/tests/matchscreen_osm_test.py. Knockout-stage assertions (aggregate-result / user-result / next-leg-button / penalty-block / et-confirm-modal) were NOT re-verified in this iteration — main agent's previous work covers them and no relevant code changed in that path.",
+  "rca of the issue": "N/A — feature verification, no bugs found."
+}
