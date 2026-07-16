@@ -670,7 +670,8 @@ const MiniPitch = ({ formation }) => {
 // -----------------------------------------------------------------------------
 const ShotAnimation = ({ anim, userSide, homeName, awayName, duration }) => {
   const isGoal = anim.type === "GOAL";
-  const fromLeft = anim.side === "home"; // home attacks left→right visual
+  // Home attacks toward the right net; away attacks toward the left net.
+  const shootsRight = anim.side === "home";
   const teamName = anim.side === "home" ? homeName : awayName;
   const isUserSide = userSide && userSide === anim.side;
   const accent = isGoal
@@ -691,15 +692,17 @@ const ShotAnimation = ({ anim, userSide, homeName, awayName, duration }) => {
       style={{ height: 240 }}
       data-testid={`shot-anim-${anim.type.toLowerCase()}`}
     >
-      {/* Stadium/net backdrop */}
+      {/* Stadium/net backdrop — glow sits on the target side. */}
       <div className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(120% 80% at 100% 50%, rgba(220,50,50,0.35) 0%, rgba(20,20,30,0.85) 55%, rgba(0,0,0,1) 100%)",
+            shootsRight
+              ? "radial-gradient(120% 80% at 100% 50%, rgba(220,50,50,0.35) 0%, rgba(20,20,30,0.85) 55%, rgba(0,0,0,1) 100%)"
+              : "radial-gradient(120% 80% at 0% 50%, rgba(220,50,50,0.35) 0%, rgba(20,20,30,0.85) 55%, rgba(0,0,0,1) 100%)",
         }}
       />
-      {/* Net (right side) */}
-      <NetSVG side="right" />
+      {/* Net on the target side */}
+      <NetSVG side={shootsRight ? "right" : "left"} />
 
       {/* Minute badge */}
       <div className="absolute top-3 left-3 z-10 inline-flex items-center gap-2 rounded-full px-2.5 py-1 bg-black/60 border border-white/15 text-white/85 font-mono text-[11px] tracking-widest">
@@ -707,8 +710,8 @@ const ShotAnimation = ({ anim, userSide, homeName, awayName, duration }) => {
         {`${anim.minute}'`}
       </div>
 
-      {/* Team + shot label */}
-      <div className="absolute bottom-3 left-3 right-3 z-10 flex items-end justify-between gap-3">
+      {/* Team + shot label — sits on the attacking side */}
+      <div className={`absolute bottom-3 z-10 flex items-end gap-3 ${shootsRight ? "left-3" : "right-3 text-right"}`}>
         <div className="min-w-0">
           <div className="font-mono text-[10px] tracking-widest" style={{ color: accent }}>
             {isGoal ? (isUserSide ? "MUHTEŞEM GOL!" : "GOL!") : "KAÇAN FIRSAT"}
@@ -717,24 +720,24 @@ const ShotAnimation = ({ anim, userSide, homeName, awayName, duration }) => {
         </div>
       </div>
 
-      {/* Ball */}
+      {/* Ball — starts on the attacker's side, glides toward the target net. */}
       <motion.div
         className="absolute z-[5]"
         style={{ top: "50%", marginTop: -22 }}
-        initial={{ left: fromLeft ? "8%" : "8%", scale: 0.55, rotate: 0 }}
+        initial={{ left: shootsRight ? "8%" : "84%", scale: 0.55, rotate: 0 }}
         animate={{
-          left: ["8%", "72%"],
+          left: shootsRight ? ["8%", "72%"] : ["84%", "20%"],
           scale: [0.55, 1.15],
-          rotate: [0, fromLeft ? 720 : 720],
+          rotate: [0, shootsRight ? 720 : -720],
         }}
         transition={{ duration: flight, ease: "easeOut" }}
       >
         <BallSVG size={44} />
       </motion.div>
 
-      {/* Impact overlay: goal flash (gold) or red X for miss */}
+      {/* Impact overlay: goal flash (gold) or red X for miss — appears on target side */}
       <motion.div
-        className="absolute inset-0 flex items-center justify-end pr-[10%] z-20 pointer-events-none"
+        className={`absolute inset-0 flex items-center z-20 pointer-events-none ${shootsRight ? "justify-end pr-[10%]" : "justify-start pl-[10%]"}`}
         initial={{ opacity: 0, scale: 0.4 }}
         animate={{ opacity: [0, 0, 1], scale: [0.4, 0.4, 1.15] }}
         transition={{ duration: flight + impact, times: [0, flight / (flight + impact) - 0.01, 1], ease: "easeOut" }}
@@ -788,14 +791,19 @@ const NetSVG = ({ side = "right" }) => {
     const y = (j / rows) * 100;
     lines.push(<line key={`h-${j}`} x1="0" y1={y} x2="100" y2={y} stroke="rgba(255,255,255,0.28)" strokeWidth="0.25" />);
   }
+  const isRight = side === "right";
   return (
     <div
       className="absolute top-0 bottom-0 pointer-events-none"
       style={{
-        right: 0,
+        [isRight ? "right" : "left"]: 0,
         width: "58%",
-        maskImage: "linear-gradient(to left, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.75) 55%, rgba(0,0,0,0) 100%)",
-        WebkitMaskImage: "linear-gradient(to left, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.75) 55%, rgba(0,0,0,0) 100%)",
+        maskImage: isRight
+          ? "linear-gradient(to left,  rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.75) 55%, rgba(0,0,0,0) 100%)"
+          : "linear-gradient(to right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.75) 55%, rgba(0,0,0,0) 100%)",
+        WebkitMaskImage: isRight
+          ? "linear-gradient(to left,  rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.75) 55%, rgba(0,0,0,0) 100%)"
+          : "linear-gradient(to right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.75) 55%, rgba(0,0,0,0) 100%)",
       }}
     >
       <svg
@@ -803,7 +811,7 @@ const NetSVG = ({ side = "right" }) => {
         height="100%"
         viewBox="0 0 100 100"
         preserveAspectRatio="none"
-        style={{ transform: `perspective(400px) rotateY(${side === "right" ? "-18deg" : "18deg"})`, transformOrigin: side === "right" ? "left center" : "right center" }}
+        style={{ transform: `perspective(400px) rotateY(${isRight ? "-18deg" : "18deg"})`, transformOrigin: isRight ? "left center" : "right center" }}
       >
         {lines}
       </svg>

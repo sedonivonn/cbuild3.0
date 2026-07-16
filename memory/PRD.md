@@ -58,3 +58,30 @@ lobby, then real-time draft. No leftover assumptions from the removed code.
 - `GET /api/health` → `{status: ok}` (backend clean start, no socketio import)
 - Home page renders with only GRUP/LİG buttons — no ONLİNE button
 - No frontend imports or references to removed modules (grep clean)
+
+## 2026-07-16 UPDATE — OSM-style match simulation
+Redesigned `/app/frontend/src/screens/MatchScreen.jsx` to feel like the OSM
+match view without changing the underlying simulation engine.
+
+New building blocks (all in `MatchScreen.jsx`):
+- `phase === "prematch"` — first phase now. `PreMatchLineups` renders two
+  `TeamLineupPanel` columns (home / away) side-by-side. Each panel shows
+  name + subtitle, an 11-row player list (jersey #, name, OVR badge) and a
+  `MiniPitch` with 11 position dots derived from `FORMATIONS[formationId]`.
+  Opponent XI → 4-3-3 template via `buildOpponentXi()` (matches primary/
+  secondary positions with wing-family fallback).
+- User must click `start-match-button` ("MAÇI BAŞLAT") to kick off. Speed
+  picker retained (`YAVAŞ / NORMAL / HIZLI / ULTRA`) with the same testids.
+- OSM-style ticker: home events left-aligned, away events right-aligned
+  (`TickerRow`). Interleaved chronologically (regulation → ET).
+- `ShotAnimation` overlay plays before every GOAL/SAVE event (except in
+  ULTRA speed). A football glides toward the target net (right net for
+  home, left net for away). On GOAL: golden "GOOOL" flash + accent glow.
+  On SAVE: red X stamped on the net. Duration scales with speed
+  (slow=1200ms / normal=700ms / fast=380ms). Testids: `shot-anim-goal`,
+  `shot-anim-save`.
+- App.js passes `userXi`, `userFormationId`, `userTeamName` into the match
+  prop so `PreMatchLineups` can render the user side.
+
+Verified by testing_agent_v3 (iteration 24): 7/7 acceptance criteria pass,
+including regression that HomeScreen has no online button.
