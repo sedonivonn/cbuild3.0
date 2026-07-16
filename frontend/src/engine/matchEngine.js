@@ -146,15 +146,15 @@ export function simulateMatch({ home, away, homeTacticId, awayTacticId, neutral 
       if (onTarget) bOnTarget++;
     }
     const goal = onTarget && rng() < xg / Math.max(0.05, xg + 0.18);
+    const shootingPlayers = sh.side === "home" ? homePlayers : awayPlayers;
     if (goal) {
       if (sh.side === "home") aScore++;
       else bScore++;
       // Attribute scorer/assist when the scoring side has a known XI (the user side).
-      const scoringPlayers = sh.side === "home" ? homePlayers : awayPlayers;
       let scorerName = null;
       let assistName = null;
-      if (scoringPlayers && scoringPlayers.length > 0) {
-        const { scorer, assist } = pickScorerAndAssist(scoringPlayers);
+      if (shootingPlayers && shootingPlayers.length > 0) {
+        const { scorer, assist } = pickScorerAndAssist(shootingPlayers);
         if (scorer) scorerName = scorer.name;
         if (assist) assistName = assist.name;
       }
@@ -162,11 +162,41 @@ export function simulateMatch({ home, away, homeTacticId, awayTacticId, neutral 
       const goalText = scorerName
         ? `${sh.minute}' GOL! ${scorerName} (${teamName}) ${aScore}-${bScore}${assistName ? ` · asist: ${assistName}` : ""}`
         : `${sh.minute}' GOL! ${teamName} ${aScore}-${bScore}`;
-      events.push({ minute: sh.minute, side: sh.side, type: "GOAL", text: goalText, scorer: scorerName, assist: assistName });
+      events.push({
+        minute: sh.minute, side: sh.side, type: "GOAL", text: goalText,
+        scorer: scorerName, assist: assistName, critical: true,
+      });
     } else if (onTarget) {
-      events.push({ minute: sh.minute, side: sh.side, type: "SAVE", text: `${sh.minute}' Müthiş kurtarış! ${sh.side === "home" ? home.name : away.name} pozisyondan dönüyor.` });
+      // Attribute a shooter (weighted by scoring tendency × OVR) for the animation panel.
+      let shooterName = null;
+      if (shootingPlayers && shootingPlayers.length > 0) {
+        const pick = pickScorerAndAssist(shootingPlayers);
+        if (pick.scorer) shooterName = pick.scorer.name;
+      }
+      // ~40% of saves are marked "critical" → drive the shot-flight animation.
+      const isCritical = rng() < 0.40;
+      const teamName = sh.side === "home" ? home.name : away.name;
+      const text = shooterName
+        ? `${sh.minute}' Kaçan fırsat: ${shooterName} (${teamName}) — kaleci kurtardı.`
+        : `${sh.minute}' Müthiş kurtarış! ${teamName} pozisyondan dönüyor.`;
+      events.push({
+        minute: sh.minute, side: sh.side, type: "SAVE", text,
+        shooter: shooterName, critical: isCritical,
+      });
     } else if (rng() < 0.55) {
-      events.push({ minute: sh.minute, side: sh.side, type: "SHOT", text: `${sh.minute}' Şut auta gitti — ${sh.side === "home" ? home.name : away.name}.` });
+      let shooterName = null;
+      if (shootingPlayers && shootingPlayers.length > 0) {
+        const pick = pickScorerAndAssist(shootingPlayers);
+        if (pick.scorer) shooterName = pick.scorer.name;
+      }
+      const teamName = sh.side === "home" ? home.name : away.name;
+      const text = shooterName
+        ? `${sh.minute}' Şut auta gitti — ${shooterName} (${teamName}).`
+        : `${sh.minute}' Şut auta gitti — ${teamName}.`;
+      events.push({
+        minute: sh.minute, side: sh.side, type: "SHOT", text,
+        shooter: shooterName, critical: false,
+      });
     }
   }
 
@@ -282,9 +312,26 @@ function simulateExtraTime({ home, away, homeTacticId, awayTacticId, homeIsUser 
       const goalText = scorerName
         ? `${sh.minute}' UZATMADA GOL! ${scorerName} (${teamName})${assistName ? ` · asist: ${assistName}` : ""}`
         : `${sh.minute}' UZATMADA GOL! ${teamName}`;
-      events.push({ minute: sh.minute, side: sh.side, type: "GOAL", text: goalText, scorer: scorerName, assist: assistName });
+      events.push({
+        minute: sh.minute, side: sh.side, type: "GOAL", text: goalText,
+        scorer: scorerName, assist: assistName, critical: true,
+      });
     } else if (Math.random() < 0.4) {
-      events.push({ minute: sh.minute, side: sh.side, type: "SAVE", text: `${sh.minute}' UZATMA kurtarış!` });
+      // Attribute a shooter for the animation panel; ~45% of ET saves are critical.
+      const shootingPlayers = sh.side === "home" ? homePlayers : awayPlayers;
+      let shooterName = null;
+      if (shootingPlayers && shootingPlayers.length > 0) {
+        const pick = pickScorerAndAssist(shootingPlayers);
+        if (pick.scorer) shooterName = pick.scorer.name;
+      }
+      const teamName = sh.side === "home" ? home.name : away.name;
+      const text = shooterName
+        ? `${sh.minute}' UZATMA: ${shooterName} (${teamName}) — kaleci kurtardı.`
+        : `${sh.minute}' UZATMA kurtarış!`;
+      events.push({
+        minute: sh.minute, side: sh.side, type: "SAVE", text,
+        shooter: shooterName, critical: Math.random() < 0.45,
+      });
     }
   }
   return { home: aGoals, away: bGoals, events };

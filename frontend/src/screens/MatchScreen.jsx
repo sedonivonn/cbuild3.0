@@ -152,14 +152,15 @@ export const MatchScreen = ({ match, onClose }) => {
   };
 
   // Should we run the ball-flight animation before revealing this event?
-  const isShotEvent = (e) => e && (e.type === "GOAL" || e.type === "SAVE");
-  const shouldAnimateShot = (e) => isShotEvent(e) && speedKey !== "ultra";
-  const shotAnimDuration = () => {
-    // Slow=1200ms, normal=700ms, fast=380ms. Scales with delay but capped.
-    if (speedKey === "slow") return 1200;
-    if (speedKey === "fast") return 380;
-    return 700;
-  };
+  // Rule: only "critical" events (all goals + a subset of saves — flagged by
+  // matchEngine) trigger the animation, so it stays a rare highlight instead
+  // of firing on every shot.
+  const isCriticalShot = (e) =>
+    e && (e.type === "GOAL" || e.type === "SAVE") && e.critical === true;
+  const shouldAnimateShot = (e) => isCriticalShot(e);
+  // Fixed cinematic duration regardless of sim speed — even in ULTRA the
+  // highlight plays at the same dramatic pace so the moment always lands.
+  const SHOT_ANIM_MS = 2400;
 
   // Regulation event ticker (minutes 1-90)
   useEffect(() => {
@@ -175,13 +176,12 @@ export const MatchScreen = ({ match, onClose }) => {
     }
     const e = regulationEvents[visibleIdx];
     if (shouldAnimateShot(e)) {
-      setShotAnim({ type: e.type, side: e.side, minute: e.minute });
-      const dur = shotAnimDuration();
+      setShotAnim({ type: e.type, side: e.side, minute: e.minute, scorer: e.scorer, assist: e.assist, shooter: e.shooter });
       const t = setTimeout(() => {
         if (e.type === "GOAL") sound.goal();
         setShotAnim(null);
         setVisibleIdx((i) => i + 1);
-      }, dur);
+      }, SHOT_ANIM_MS);
       return () => clearTimeout(t);
     }
     const t = setTimeout(() => {
@@ -204,13 +204,12 @@ export const MatchScreen = ({ match, onClose }) => {
     }
     const e = extraTimeEvents[etVisibleIdx];
     if (shouldAnimateShot(e)) {
-      setShotAnim({ type: e.type, side: e.side, minute: e.minute });
-      const dur = shotAnimDuration();
+      setShotAnim({ type: e.type, side: e.side, minute: e.minute, scorer: e.scorer, assist: e.assist, shooter: e.shooter });
       const t = setTimeout(() => {
         if (e.type === "GOAL") sound.goal();
         setShotAnim(null);
         setEtVisibleIdx((i) => i + 1);
-      }, dur);
+      }, SHOT_ANIM_MS);
       return () => clearTimeout(t);
     }
     const t = setTimeout(() => {
@@ -386,7 +385,7 @@ export const MatchScreen = ({ match, onClose }) => {
                   userSide={userSide}
                   homeName={homeName}
                   awayName={awayName}
-                  duration={shotAnimDuration()}
+                  duration={SHOT_ANIM_MS}
                 />
               )}
             </AnimatePresence>
@@ -577,37 +576,35 @@ const TeamLineupPanel = ({ name, subtitle, accent, lineup }) => {
     ? "bg-gradient-to-r from-amber-300/25 to-transparent border-l-4 border-amber-300"
     : "bg-gradient-to-l from-red-400/25 to-transparent border-r-4 border-red-400";
   return (
-    <div className="rounded-xl overflow-hidden border border-white/10 bg-black/30">
+    <div className="rounded-xl overflow-hidden border border-white/10 bg-black/30 flex flex-col">
       <div className={`px-3 py-2 ${barClass}`}>
         <div className="font-display text-lg md:text-xl tracking-tight truncate">{name}</div>
         {subtitle && <div className="text-[10px] font-mono tracking-widest text-white/60 truncate">{subtitle}</div>}
       </div>
-      <div className="grid grid-cols-[1fr_auto] gap-2">
-        {/* Player list */}
-        <ul className="p-2 space-y-1 min-w-0" data-testid={`lineup-list-${accent}`}>
-          {players.slice(0, 11).map((p, i) => {
-            if (!p) {
-              return (
-                <li key={i} className="flex items-center gap-2 text-xs text-white/40">
-                  <span className="font-mono w-5 text-right">{i + 1}.</span>
-                  <span className="italic">— BOŞ SLOT —</span>
-                </li>
-              );
-            }
-            const ovr = p.overall ?? 80;
+      {/* Player list */}
+      <ul className="p-3 space-y-1 min-w-0" data-testid={`lineup-list-${accent}`}>
+        {players.slice(0, 11).map((p, i) => {
+          if (!p) {
             return (
-              <li key={i} className="flex items-center gap-2 text-xs md:text-sm">
-                <span className="font-mono w-5 text-right text-white/50">{i + 1}.</span>
-                <span className="flex-1 truncate">{p.name}</span>
-                <OvrBadge ovr={ovr} />
+              <li key={i} className="flex items-center gap-2 text-xs text-white/40">
+                <span className="font-mono w-5 text-right">{i + 1}.</span>
+                <span className="italic">— BOŞ SLOT —</span>
               </li>
             );
-          })}
-        </ul>
-        {/* Mini pitch */}
-        <div className="p-2 pl-0 flex items-center justify-center">
-          <MiniPitch formation={formation} />
-        </div>
+          }
+          const ovr = p.overall ?? 80;
+          return (
+            <li key={i} className="flex items-center gap-2 text-xs md:text-sm">
+              <span className="font-mono w-5 text-right text-white/50">{i + 1}.</span>
+              <span className="flex-1 truncate">{p.name}</span>
+              <OvrBadge ovr={ovr} />
+            </li>
+          );
+        })}
+      </ul>
+      {/* Bigger mini pitch, showing jersey number + last name under each dot */}
+      <div className="px-3 pb-3 pt-1">
+        <MiniPitch formation={formation} players={players.slice(0, 11)} />
       </div>
     </div>
   );
@@ -625,41 +622,81 @@ const OvrBadge = ({ ovr }) => {
   );
 };
 
-// Compact pitch showing 11 position dots — mirrors formation coordinates.
-const MiniPitch = ({ formation }) => {
+// Pitch under each team panel. Shows every slot with jersey number in the dot
+// and the player's short last-name below. Position label sits above the dot.
+const MiniPitch = ({ formation, players = [] }) => {
   const slots = formation?.slots || [];
+  const shortName = (fullName) => {
+    if (!fullName) return "";
+    // Last space-separated token — good enough for "Cristiano Ronaldo" → "Ronaldo".
+    // For single-token names ("Xavi", "Pelé") returns them as-is.
+    const parts = String(fullName).trim().split(/\s+/);
+    return parts[parts.length - 1];
+  };
   return (
     <div
-      className="relative rounded-md shrink-0"
+      className="relative rounded-lg w-full"
       style={{
-        width: 110,
-        height: 150,
+        aspectRatio: "0.72 / 1",
+        maxWidth: 300,
+        margin: "0 auto",
         background:
-          "repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0 12px, rgba(255,255,255,0) 12px 24px), radial-gradient(120% 100% at 50% 0%, #145a2c 0%, #0d3f1f 60%, #0a2f18 100%)",
-        border: "1px solid rgba(255,255,255,0.12)",
+          "repeating-linear-gradient(0deg, rgba(255,255,255,0.04) 0 16px, rgba(255,255,255,0) 16px 32px), radial-gradient(120% 100% at 50% 0%, #17693a 0%, #0f4c26 60%, #0a331a 100%)",
+        border: "1px solid rgba(255,255,255,0.14)",
       }}
+      data-testid="mini-pitch"
     >
       {/* halfway line */}
-      <div className="absolute left-2 right-2 top-1/2 h-px bg-white/25" />
+      <div className="absolute left-3 right-3 top-1/2 h-px bg-white/25" />
       {/* center circle */}
       <div
         className="absolute rounded-full border border-white/25"
-        style={{ width: 34, height: 34, left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}
+        style={{ width: "22%", aspectRatio: "1 / 1", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}
       />
-      {slots.map((slot) => (
-        <div
-          key={slot.id}
-          className="absolute flex items-center justify-center rounded-full bg-white/15 border border-white/40 text-white text-[8px] font-mono tracking-tight"
-          style={{
-            width: 18,
-            height: 18,
-            top: `calc(${slot.top}% - 9px)`,
-            left: `calc(${slot.left}% - 9px)`,
-          }}
-        >
-          {slot.pos}
-        </div>
-      ))}
+      {/* penalty boxes (top & bottom) */}
+      <div className="absolute left-1/2 -translate-x-1/2 border border-white/20"
+           style={{ top: 4, width: "60%", height: "12%" }} />
+      <div className="absolute left-1/2 -translate-x-1/2 border border-white/20"
+           style={{ bottom: 4, width: "60%", height: "12%" }} />
+
+      {slots.map((slot, i) => {
+        const p = players[i];
+        const jersey = i + 1;
+        const last = p ? shortName(p.name) : "";
+        return (
+          <div
+            key={slot.id}
+            className="absolute flex flex-col items-center"
+            style={{
+              top: `${slot.top}%`,
+              left: `${slot.left}%`,
+              transform: "translate(-50%, -50%)",
+              width: 74,
+            }}
+          >
+            <div className="text-[9px] font-mono tracking-widest text-white/70 mb-0.5" style={{ textShadow: "0 1px 2px rgba(0,0,0,0.7)" }}>
+              {slot.pos}
+            </div>
+            <div
+              className="flex items-center justify-center rounded-full bg-white text-black font-display leading-none"
+              style={{
+                width: 26,
+                height: 26,
+                fontSize: 13,
+                boxShadow: "0 2px 6px rgba(0,0,0,0.55)",
+              }}
+            >
+              {jersey}
+            </div>
+            <div
+              className="mt-1 text-[9px] md:text-[10px] font-mono tracking-tight text-white text-center truncate w-full"
+              style={{ textShadow: "0 1px 2px rgba(0,0,0,0.9)" }}
+            >
+              {last || "—"}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -678,134 +715,271 @@ const ShotAnimation = ({ anim, userSide, homeName, awayName, duration }) => {
     ? (isUserSide ? "#f5c542" : "#ffffff")
     : "#ef4444";
 
-  // Duration split: 65% flight, 35% impact.
-  const flight = Math.round(duration * 0.65) / 1000;
-  const impact = Math.round(duration * 0.35) / 1000;
+  // Fixed cinematic timeline (in seconds), independent of the sim speed.
+  // 0.00–0.45  banner slide-in ("KRİTİK ATAK")
+  // 0.45–1.90  ball flight (ease-out, slows dramatically near the goal)
+  // 1.90–2.10  impact (goal flash / net ripple  OR  red X)
+  // 2.10–2.40  hold & fade
+  const total = duration / 1000; // ~2.4s
+  const bannerT = 0.55;
+  const flightStart = 0.55;
+  const flightEnd = 1.95;
+  const impactT = 1.95;
+  const holdEnd = total;
+  const flightDur = flightEnd - flightStart;
+
+  // Player card copy — scorer/assist for goals, shooter for saves.
+  const isKnown = !!(anim.scorer || anim.shooter);
+  const headline = isGoal
+    ? (isUserSide ? "MUHTEŞEM GOL!" : "GOL!")
+    : "KAÇAN FIRSAT";
+  const playerLine = isGoal ? (anim.scorer || null) : (anim.shooter || null);
+  const assistLine = isGoal && anim.assist ? `Asist: ${anim.assist}` : null;
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      transition={{ duration: 0.15 }}
+      transition={{ duration: 0.18 }}
       className="bg-black/70 rounded-xl border border-white/10 overflow-hidden relative"
-      style={{ height: 240 }}
+      style={{ height: 280 }}
       data-testid={`shot-anim-${anim.type.toLowerCase()}`}
     >
-      {/* Stadium/net backdrop — glow sits on the target side. */}
+      {/* Stadium/pitch backdrop — glow sits on the target side. */}
       <div className="absolute inset-0"
         style={{
           background:
             shootsRight
-              ? "radial-gradient(120% 80% at 100% 50%, rgba(220,50,50,0.35) 0%, rgba(20,20,30,0.85) 55%, rgba(0,0,0,1) 100%)"
-              : "radial-gradient(120% 80% at 0% 50%, rgba(220,50,50,0.35) 0%, rgba(20,20,30,0.85) 55%, rgba(0,0,0,1) 100%)",
+              ? "radial-gradient(120% 80% at 100% 50%, rgba(60,140,220,0.35) 0%, rgba(15,25,40,0.9) 55%, rgba(6,10,18,1) 100%)"
+              : "radial-gradient(120% 80% at 0% 50%, rgba(60,140,220,0.35) 0%, rgba(15,25,40,0.9) 55%, rgba(6,10,18,1) 100%)",
         }}
       />
-      {/* Net on the target side */}
-      <NetSVG side={shootsRight ? "right" : "left"} />
 
-      {/* Minute badge */}
-      <div className="absolute top-3 left-3 z-10 inline-flex items-center gap-2 rounded-full px-2.5 py-1 bg-black/60 border border-white/15 text-white/85 font-mono text-[11px] tracking-widest">
+      {/* Net on the target side (bright white) */}
+      <NetSVG side={shootsRight ? "right" : "left"} isGoal={isGoal} impactAt={impactT} totalDur={holdEnd} />
+
+      {/* Minute badge (top-left, always) */}
+      <div className="absolute top-3 left-3 z-30 inline-flex items-center gap-2 rounded-full px-2.5 py-1 bg-black/60 border border-white/15 text-white/85 font-mono text-[11px] tracking-widest">
         <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
         {`${anim.minute}'`}
       </div>
 
-      {/* Team + shot label — sits on the attacking side */}
-      <div className={`absolute bottom-3 z-10 flex items-end gap-3 ${shootsRight ? "left-3" : "right-3 text-right"}`}>
-        <div className="min-w-0">
-          <div className="font-mono text-[10px] tracking-widest" style={{ color: accent }}>
-            {isGoal ? (isUserSide ? "MUHTEŞEM GOL!" : "GOL!") : "KAÇAN FIRSAT"}
-          </div>
-          <div className="font-display text-lg md:text-xl truncate">{teamName}</div>
-        </div>
-      </div>
-
-      {/* Ball — starts on the attacker's side, glides toward the target net. */}
+      {/* KRİTİK ATAK banner — slides in from top, out after the flight starts. */}
       <motion.div
-        className="absolute z-[5]"
-        style={{ top: "50%", marginTop: -22 }}
-        initial={{ left: shootsRight ? "8%" : "84%", scale: 0.55, rotate: 0 }}
+        className="absolute left-1/2 top-3 z-30 -translate-x-1/2"
+        initial={{ y: -30, opacity: 0 }}
         animate={{
-          left: shootsRight ? ["8%", "72%"] : ["84%", "20%"],
-          scale: [0.55, 1.15],
-          rotate: [0, shootsRight ? 720 : -720],
+          y: [-30, 0, 0, -30],
+          opacity: [0, 1, 1, 0],
         }}
-        transition={{ duration: flight, ease: "easeOut" }}
+        transition={{
+          duration: bannerT + 0.35,
+          times: [0, 0.25, 0.75, 1],
+          ease: "easeOut",
+        }}
       >
-        <BallSVG size={44} />
+        <div
+          className="px-3 py-1 rounded-full font-mono text-[11px] tracking-[0.25em] uppercase"
+          style={{
+            background: `linear-gradient(90deg, ${isUserSide ? "#f5c54233" : "#ffffff22"} 0%, transparent 100%)`,
+            border: `1px solid ${accent}66`,
+            color: accent,
+            boxShadow: `0 0 16px ${accent}55`,
+          }}
+        >
+          KRİTİK ATAK · {teamName}
+        </div>
       </motion.div>
 
-      {/* Impact overlay: goal flash (gold) or red X for miss — appears on target side */}
+      {/* Ball — starts on attacker's side, slows near the goal, and grows. */}
       <motion.div
-        className={`absolute inset-0 flex items-center z-20 pointer-events-none ${shootsRight ? "justify-end pr-[10%]" : "justify-start pl-[10%]"}`}
+        className="absolute z-[8]"
+        style={{ top: "50%" }}
+        initial={{
+          left: shootsRight ? "10%" : "82%",
+          y: "-50%",
+          scale: 0.55,
+          rotate: 0,
+          opacity: 0,
+        }}
+        animate={{
+          left: shootsRight ? ["10%", "10%", "70%", "78%"] : ["82%", "82%", "22%", "14%"],
+          y: ["-50%", "-50%", "-52%", "-52%"],
+          scale: [0.55, 0.55, 1.15, 1.5],
+          rotate: [0, 0, shootsRight ? 900 : -900, shootsRight ? 1080 : -1080],
+          opacity: [0, 1, 1, 1],
+        }}
+        transition={{
+          duration: impactT,
+          // times chart: 0 (hidden), banner-in visible pre-flight, mid-flight,
+          // arrival at net. The last leg from 0.85→1.0 is where the ball slows
+          // dramatically thanks to `cubic-bezier(0.15, 0.85, 0.25, 1)`.
+          times: [0, flightStart / impactT, (flightStart + flightDur * 0.7) / impactT, 1],
+          ease: [0.15, 0.85, 0.25, 1],
+        }}
+      >
+        <BallSVG size={64} />
+      </motion.div>
+
+      {/* Impact overlay — golden GOOOL burst OR big red X. Appears at 1.95s. */}
+      <motion.div
+        className={`absolute inset-0 flex items-center z-30 pointer-events-none ${shootsRight ? "justify-end pr-[8%]" : "justify-start pl-[8%]"}`}
         initial={{ opacity: 0, scale: 0.4 }}
-        animate={{ opacity: [0, 0, 1], scale: [0.4, 0.4, 1.15] }}
-        transition={{ duration: flight + impact, times: [0, flight / (flight + impact) - 0.01, 1], ease: "easeOut" }}
+        animate={{
+          opacity: [0, 0, 1, 1, 1],
+          scale: [0.4, 0.4, 1.15, 1.05, 1.05],
+        }}
+        transition={{
+          duration: holdEnd,
+          times: [0, impactT / holdEnd - 0.001, impactT / holdEnd, (impactT + 0.15) / holdEnd, 1],
+          ease: "easeOut",
+        }}
       >
         {isGoal ? (
           <div className="relative">
             <div
-              className="absolute -inset-8 rounded-full blur-2xl"
-              style={{ background: `radial-gradient(closest-side, ${accent}55, transparent 70%)` }}
+              className="absolute -inset-10 rounded-full blur-2xl"
+              style={{ background: `radial-gradient(closest-side, ${accent}77, transparent 70%)` }}
             />
             <div
-              className="font-display text-4xl md:text-5xl tracking-tight"
-              style={{ color: accent, textShadow: `0 0 24px ${accent}` }}
+              className="font-display text-5xl md:text-6xl tracking-tight"
+              style={{ color: accent, textShadow: `0 0 28px ${accent}` }}
             >
               GOOOL
             </div>
           </div>
         ) : (
           <div className="relative">
-            <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
-              <path d="M20 20 L100 100 M100 20 L20 100" stroke="#ef4444" strokeWidth="14" strokeLinecap="round" />
+            <svg width="140" height="140" viewBox="0 0 120 120" fill="none" style={{ filter: `drop-shadow(0 0 16px #ef4444aa)` }}>
+              <path d="M20 20 L100 100 M100 20 L20 100" stroke="#ef4444" strokeWidth="16" strokeLinecap="round" />
             </svg>
           </div>
         )}
+      </motion.div>
+
+      {/* Player info card — slides in from the attacking side during flight, holds. */}
+      <motion.div
+        className={`absolute bottom-3 z-30 max-w-[70%] ${shootsRight ? "left-3" : "right-3 text-right"}`}
+        initial={{ opacity: 0, x: shootsRight ? -20 : 20 }}
+        animate={{
+          opacity: [0, 0, 1, 1],
+          x: [shootsRight ? -20 : 20, shootsRight ? -20 : 20, 0, 0],
+        }}
+        transition={{
+          duration: holdEnd,
+          times: [0, (flightStart + 0.35) / holdEnd, (flightStart + 0.75) / holdEnd, 1],
+          ease: "easeOut",
+        }}
+      >
+        <div className="rounded-lg bg-black/55 border border-white/15 backdrop-blur-sm px-3 py-2 inline-block">
+          <div className="font-mono text-[10px] tracking-widest" style={{ color: accent }}>
+            {headline}
+          </div>
+          {isKnown ? (
+            <>
+              <div className="font-display text-xl md:text-2xl tracking-tight leading-tight">{playerLine}</div>
+              {assistLine && (
+                <div className="text-[11px] font-mono tracking-wider text-white/70 mt-0.5">{assistLine}</div>
+              )}
+              <div className="text-[10px] font-mono tracking-widest text-white/50 uppercase truncate">{teamName}</div>
+            </>
+          ) : (
+            <div className="font-display text-xl md:text-2xl tracking-tight truncate">{teamName}</div>
+          )}
+        </div>
       </motion.div>
     </motion.div>
   );
 };
 
-const BallSVG = ({ size = 44 }) => (
-  <svg width={size} height={size} viewBox="0 0 64 64" fill="none" style={{ filter: "drop-shadow(0 6px 10px rgba(0,0,0,0.55))" }}>
-    <circle cx="32" cy="32" r="30" fill="#ffffff" stroke="#0b0b0b" strokeWidth="1.5" />
-    {/* classic pentagon pattern hint */}
-    <polygon points="32,14 40,20 37,30 27,30 24,20" fill="#0b0b0b" />
-    <polygon points="16,28 22,32 20,40 12,38 12,32" fill="#0b0b0b" opacity="0.85" />
-    <polygon points="48,28 52,32 52,38 44,40 42,32" fill="#0b0b0b" opacity="0.85" />
-    <polygon points="24,42 32,38 40,42 36,50 28,50" fill="#0b0b0b" opacity="0.85" />
+// Classic black-and-white football with proper pentagon/hexagon panels.
+const BallSVG = ({ size = 64 }) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" style={{ filter: "drop-shadow(0 8px 14px rgba(0,0,0,0.6))" }}>
+    {/* white ball body */}
+    <circle cx="50" cy="50" r="46" fill="#ffffff" stroke="#0b0b0b" strokeWidth="2" />
+    {/* central pentagon (top) */}
+    <polygon points="50,20 66,32 60,52 40,52 34,32" fill="#0b0b0b" />
+    {/* five surrounding pentagons/patches to hint the classic pattern */}
+    <polygon points="18,42 30,32 34,44 26,58 14,54" fill="#0b0b0b" opacity="0.9" />
+    <polygon points="82,42 86,54 74,58 66,44 70,32" fill="#0b0b0b" opacity="0.9" />
+    <polygon points="30,74 42,66 50,74 44,86 30,84" fill="#0b0b0b" opacity="0.9" />
+    <polygon points="70,74 70,84 56,86 50,74 58,66" fill="#0b0b0b" opacity="0.9" />
+    {/* connecting seams */}
+    <path d="M50 20 L50 8 M18 42 L4 44 M82 42 L96 44 M30 74 L18 88 M70 74 L82 88 M40 52 L30 60 M60 52 L70 60 M50 74 L50 62" stroke="#0b0b0b" strokeWidth="1.2" />
+    {/* subtle highlight */}
+    <ellipse cx="38" cy="30" rx="14" ry="6" fill="#ffffff" opacity="0.5" />
   </svg>
 );
 
-// A subtle mesh drawn as diagonal cross-hatch on the goal-side of the frame.
-const NetSVG = ({ side = "right" }) => {
+// White net with a light ripple animation on goals.
+const NetSVG = ({ side = "right", isGoal = false, impactAt = 2, totalDur = 2.4 }) => {
   const lines = [];
-  const cols = 22;
-  const rows = 18;
+  const cols = 24;
+  const rows = 20;
   for (let i = 0; i <= cols; i++) {
     const x = (i / cols) * 100;
-    lines.push(<line key={`v-${i}`} x1={x} y1="0" x2={x} y2="100" stroke="rgba(255,255,255,0.28)" strokeWidth="0.25" />);
+    lines.push(<line key={`v-${i}`} x1={x} y1="0" x2={x} y2="100" stroke="rgba(255,255,255,0.75)" strokeWidth="0.4" />);
   }
   for (let j = 0; j <= rows; j++) {
     const y = (j / rows) * 100;
-    lines.push(<line key={`h-${j}`} x1="0" y1={y} x2="100" y2={y} stroke="rgba(255,255,255,0.28)" strokeWidth="0.25" />);
+    lines.push(<line key={`h-${j}`} x1="0" y1={y} x2="100" y2={y} stroke="rgba(255,255,255,0.75)" strokeWidth="0.4" />);
   }
   const isRight = side === "right";
+  // Ripple animation timings — goal only. Pushes the net "inward" briefly.
+  const rippleTimes = [
+    0,
+    Math.max(0, (impactAt - 0.01) / totalDur),
+    impactAt / totalDur,
+    (impactAt + 0.18) / totalDur,
+    (impactAt + 0.36) / totalDur,
+    1,
+  ];
+  const rippleScaleX = isGoal ? [1, 1, isRight ? 1.10 : 1.10, 1.03, 1.005, 1.0] : [1, 1, 1, 1, 1, 1];
+  const rippleScaleY = isGoal ? [1, 1, 1.08, 1.02, 1.005, 1.0] : [1, 1, 1, 1, 1, 1];
+  const rippleTranslate = isGoal ? [0, 0, isRight ? 6 : -6, isRight ? 2 : -2, 0, 0] : [0, 0, 0, 0, 0, 0];
+
   return (
-    <div
+    <motion.div
       className="absolute top-0 bottom-0 pointer-events-none"
       style={{
         [isRight ? "right" : "left"]: 0,
         width: "58%",
         maskImage: isRight
-          ? "linear-gradient(to left,  rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.75) 55%, rgba(0,0,0,0) 100%)"
-          : "linear-gradient(to right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.75) 55%, rgba(0,0,0,0) 100%)",
+          ? "linear-gradient(to left,  rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0) 100%)"
+          : "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0) 100%)",
         WebkitMaskImage: isRight
-          ? "linear-gradient(to left,  rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.75) 55%, rgba(0,0,0,0) 100%)"
-          : "linear-gradient(to right, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.75) 55%, rgba(0,0,0,0) 100%)",
+          ? "linear-gradient(to left,  rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0) 100%)"
+          : "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0) 100%)",
+        transformOrigin: isRight ? "right center" : "left center",
       }}
+      initial={{ scaleX: 1, scaleY: 1, x: 0 }}
+      animate={{ scaleX: rippleScaleX, scaleY: rippleScaleY, x: rippleTranslate }}
+      transition={{ duration: totalDur, times: rippleTimes, ease: "easeOut" }}
     >
+      {/* Goal frame (bright white posts) */}
+      <div
+        className="absolute inset-y-2"
+        style={{
+          [isRight ? "left" : "right"]: "6%",
+          width: 3,
+          background: "linear-gradient(180deg, #ffffff 0%, #ffffff 80%, #e5e7eb 100%)",
+          boxShadow: "0 0 12px rgba(255,255,255,0.7)",
+          borderRadius: 2,
+        }}
+      />
+      <div
+        className="absolute"
+        style={{
+          top: 8,
+          [isRight ? "left" : "right"]: "6%",
+          [isRight ? "right" : "left"]: "6%",
+          height: 3,
+          background: "linear-gradient(90deg, #ffffff 0%, #ffffff 80%, #e5e7eb 100%)",
+          boxShadow: "0 0 12px rgba(255,255,255,0.7)",
+          borderRadius: 2,
+        }}
+      />
       <svg
         width="100%"
         height="100%"
@@ -815,7 +989,7 @@ const NetSVG = ({ side = "right" }) => {
       >
         {lines}
       </svg>
-    </div>
+    </motion.div>
   );
 };
 

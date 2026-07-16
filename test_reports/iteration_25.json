@@ -1,0 +1,48 @@
+{
+  "summary": "Iteration 25 — Full frontend verification of the OSM-style MatchScreen 'cinematic shot animation' redesign. ALL 8 acceptance criteria from the review request PASS. Findings: (1) Prematch MiniPitch is now ~296px wide with aspect ratio ~0.72 (≤300 max), and each of the 11 dots correctly shows position label (GK/LB/CB/CB/RB/CM/CM/CM/LW/ST/RW) above, jersey number (1-11) inside a white circle, and player short last-name below (Neuer, Alaba, Boateng, ... / Sar, Bogarde, Rijkaard, ...). Both lineup-list-left and lineup-list-right still render 11 <li> rows with jersey + full name + OVR badge. (2) Shot animation is now filtered to `critical:true` events only — in the NORMAL match 3 anims fired but 2 non-critical saves ('Kaçan fırsat: Marc Overmars', 'Kaçan fırsat: Patrick Kluivert') scrolled by in the event-ticker WITHOUT triggering an overlay, exactly as designed. (3) REGRESSION FIX CONFIRMED: at ULTRA speed the shot animation NOW PLAYS (previously skipped in iteration 24). 4 animations fired in the ULTRA run (2 GOAL + 2 SAVE), duration measurements were 2794ms / 2002ms / 12399ms* / 2399ms — three clean measurements all clustered around the 2400ms SHOT_ANIM_MS constant (the 12399 outlier is a polling artifact from two back-to-back anims chaining without a detected gap between them; setTimeout in the source is a hard-coded 2400ms regardless of speedKey). NORMAL run: 2743/2698/5535ms* — same pattern, 2/3 clean measurements ~2400ms. (4) Animation CONTENT is complete: KRİTİK ATAK · <team> banner slides in at top, classic black+white BallSVG with pentagon panels grows from ~0.55x to 1.5x scale (verified in source, motion.div `scale: [0.55, 0.55, 1.15, 1.5]`), bright white NetSVG with visible goal-frame posts on the target side, golden 'GOOOL' text (for goals) or big red X (for saves), player card at bottom showing 'MUHTEŞEM GOL!' or 'GOL!' headline + scorer name + 'Asist: <name>' line (e.g. GOAL card read 'KRİTİK ATAK · TEST AJAX · GOOOL · MUHTEŞEM GOL! · Marc Overmars · Asist: Finidi George · TEST AJAX'), SAVE card read 'KAÇAN FIRSAT · Patrick Kluivert · TEST AJAX'. (5) Net ripple on GOAL is implemented via motion.div scale/translate transform on NetSVG wrapper (source line 943-958, `rippleScaleX: [1, 1, 1.10, 1.03, 1.005, 1.0]` peaking at impactT=1.95s); SAVE anim uses flat [1,1,1,1,1,1] so no ripple. Verified in source; visual verification is impractical at 200ms polling but the transform styles are present in-DOM. (6) BOTH SIDES trigger animations: ULTRA run contained user attacks ('KRİTİK ATAK · TEST AJAX') AND opponent attack ('KRİTİK ATAK · 2008 CHELSEA'); NORMAL run showed opponent Barcelona/Bayern Munich attacks with proper 'GOL! Franck Ribéry (2015 Bayern Munich) 2-0 · asist: Arjen Robben' text. (7) Ticker content includes shooter attribution: non-animated SAVE events render as 'Kaçan fırsat: <name> (<team>) — kaleci kurtardı.'; GOAL events render as 'GOL! <scorer> (<team>) X-Y · asist: <assist>'. (8) Regression sanity: online-button confirmed absent on HomeScreen, prematch-lineups still requires start-match-button click, scoreboard/event-ticker only mount after start (not in prematch), SpeedPicker 4 buttons visible and functional (ULTRA vs NORMAL visibly changes non-critical event pacing — ULTRA match ~20.6s vs NORMAL ~13.7s but note NORMAL match happened to be shorter because it had fewer events; ticker cadence itself is faster on ULTRA as expected).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_features": [
+    "MiniPitch: bbox 296x411px (aspect 0.720), <=300 max width, aspect ~0.72:1. Two mini-pitch elements (home + away).",
+    "MiniPitch: each of 11 dots shows [POS, jersey#, last-name] — verified for both pitches ('GK', '1', 'Neuer' / 'GK', '1', 'Sar' etc.).",
+    "lineup-list-left & lineup-list-right: 11 <li> rows each with jersey + full name + OVR badge.",
+    "shouldAnimateShot filter: NORMAL run had 3 animations trigger but ~2 SAVE ticker rows appeared WITHOUT animation (non-critical saves scroll by).",
+    "ULTRA regression FIXED: 4 animations fired at ULTRA speed (previously 0 in iteration 24).",
+    "Fixed duration SHOT_ANIM_MS=2400ms: clean single-anim measurements at ULTRA (2794, 2002, 2399) and NORMAL (2743, 2698) all within 2.0-2.8s range.",
+    "KRİTİK ATAK · <team> banner rendered inside every animation overlay.",
+    "Classic B+W BallSVG with pentagon panels grows from 0.55x → 1.5x scale along a cubic-bezier flight easing.",
+    "NetSVG: bright white grid lines (rgba(255,255,255,0.75)) + white goal-frame posts with white glow shadow.",
+    "GOAL overlay: golden GOOOL text with glow; SAVE overlay: large red X SVG.",
+    "Player card: GOAL shows scorer + 'Asist: <name>' + team; SAVE shows shooter + team.",
+    "Net ripple on GOAL only: source rippleScaleX peaks at 1.10 near impact; SAVE keeps [1,1,1,1,1,1] (flat).",
+    "Both home/user AND away/opponent trigger animations (confirmed with KRİTİK ATAK · TEST AJAX + KRİTİK ATAK · 2008 CHELSEA in the same match).",
+    "Ticker shooter attribution: 'Kaçan fırsat: Marc Overmars (TEST AJAX) — kaleci kurtardı.' + 'GOL! Franck Ribéry (2015 Bayern Munich) 2-0 · asist: Arjen Robben'.",
+    "Regression: HomeScreen has NO online-button; start-draft-button + start-draft-league-button remain.",
+    "Regression: match modal opens in prematch phase; scoreboard/event-ticker only mount after start-match-button click.",
+    "Regression: SpeedPicker (speed-slow/normal/fast/ultra) all present and clickable."
+  ],
+  "test_report_links": [
+    "/app/tests/matchscreen_osm_test.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "MatchScreen.jsx:163 SHOT_ANIM_MS is a local const inside the component — fine, but re-declared on every render (~micro-cost). Could hoist outside the component.",
+    "MatchScreen.jsx:940 NetSVG rippleTranslate uses raw px values [0,0,6,2,0,0] applied as `x`. On very small screens the 6px offset is barely visible; consider percentage-based translate for scale-independence.",
+    "MatchScreen.jsx:807-810 The ball animation uses fixed 'left' percentages ['10%','10%','70%','78%'] for home and mirror for away — works but the numbers are hard-coded twice. A single directional constant + arithmetic would be cleaner (minor DRY).",
+    "MatchScreen.jsx:679-696 MiniPitch: each dot is a 74px-wide div positioned absolute — on very narrow devices (<300px), 74px dots may collide near the corners (e.g. LB/RB on a narrow pitch). Consider clamping dot width to a percentage of pitch width.",
+    "matchEngine.js:177 ~40% of saves flagged critical via `rng() < 0.40` — depending on shot volume, some matches may have 0 critical saves in regulation (extra-time uses 45%). Not a bug but low-shot matches could occasionally show no SAVE anims; the review request already acknowledges this.",
+    "MatchScreen.jsx:709 `shootsRight = anim.side === 'home'` — assumes home always attacks right regardless of leg. In 2-leg knockouts where the home/away labels swap on leg 2 (see line 89-94 isSecondLeg), this still correctly reflects the on-screen home name because homeRef is remapped. Confirmed correct."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only per request)", "frontend": "100% (8/8 acceptance criteria)"},
+  "test_credentials": "N/A — no auth in this feature.",
+  "seed_data_creation": "Re-used the iteration-24 seed: localStorage key 'ucl_draft_save_v1' with formationId=4-3-3, tactic=tiki_taka, xi=Ajax 1995 XI (Van der Sar, Bogarde, Rijkaard, Blind, Reiziger, De Boer, Davids, Seedorf, Overmars, Kluivert, Finidi), screen='tournament'. Also set 'ucl_match_speed_v1' to force initial speedKey per run. Full seed dict in /app/tests/matchscreen_osm_test.py.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 25 shot-animation rework verified live. New/changed testids: shot-anim-goal / shot-anim-save overlays now include a KRİTİK ATAK banner (rendered as a rounded pill near the top), a BallSVG with pentagon panels, a NetSVG with bright white grid + goal-frame posts, and a bottom player card with scorer/assist (GOAL) or shooter (SAVE). SHOT_ANIM_MS is a hard-coded 2400ms constant in MatchScreen.jsx line 163 — do NOT tie animation timers to speedKey.delay again (that was the iter24 regression that ULTRA-skipped animations). matchEngine.js now flags critical:true on all goals and ~40% of regulation saves (~45% of ET saves) + carries a `shooter` field on SAVE/SHOT events. Non-critical saves render in the ticker WITHOUT overlay. Polling-based duration measurement is unreliable when two anims chain within 100ms (shows as one long anim in the report); trust the source-of-truth 2400ms timeout in setTimeout. To measure precisely, use Playwright's page.evaluate on performance.now() around AnimatePresence mount/unmount.",
+  "rca of the issue": "N/A — feature verification, no bugs found."
+}
