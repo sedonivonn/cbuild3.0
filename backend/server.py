@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, FastAPI
-from starlette.middleware.cors import CORSMiddleware as StarletteCORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 
 from auth.router import router as auth_router
 from config import settings
@@ -18,7 +18,6 @@ from firebase_admin_init import (
     init_firebase,
     is_firebase_ready,
 )
-from routers.online import router as online_router
 from routers.status import router as status_router
 
 logging.basicConfig(
@@ -55,7 +54,6 @@ async def on_shutdown() -> None:
 api_router = APIRouter(prefix="/api")
 api_router.include_router(status_router)
 api_router.include_router(auth_router)
-api_router.include_router(online_router)
 
 
 @api_router.get("/health")
@@ -79,41 +77,11 @@ async def index() -> dict:
     return {"service": "championsbuild-api", "docs": "/docs"}
 
 
-# --- Socket.IO Yerel FastAPI Bağlantısı (Mount) -----------------
-import socketio
-from sio_server import sio
-
-# socketio_path="" bırakıyoruz çünkü yönlendirmeyi zaten FastAPI üstlenecek
-sio_asgi_app = socketio.ASGIApp(socketio_server=sio, socketio_path="")
-app.mount("/api/socket.io", sio_asgi_app)
-
-
-# --- KESİN ÇÖZÜM: Yol Seçici (Selective) CORS Yönetimi ---
-# Bu bağımsız katman, normal REST isteklerine standart CORS uygularken, 
-# Socket.IO /api/socket.io isteklerini bu süzgeçten tamamen muaf tutar. 
-# Böylece iki tarafın başlıkları birbirine asla karışamaz.
-
-base_cors = StarletteCORSMiddleware(
-    app=app,
+# --- CORS ---
+app.add_middleware(
+    CORSMiddleware,
     allow_origins=settings.cors_origins or ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-class SelectiveCORSMiddleware:
-    def __init__(self, inner_app, cors_middleware):
-        self.inner_app = inner_app
-        self.cors_middleware = cors_middleware
-
-    async def __call__(self, scope, receive, send):
-        path = scope.get("path", "")
-        if scope["type"] in ("http", "websocket") and path.startswith("/api/socket.io"):
-            # İstek Socket.IO adresi ise CORS süzgecine uğramadan doğrudan uygulamaya gönder
-            await self.inner_app(scope, receive, send)
-        else:
-            # Geri kalan tüm normal API isteklerini güvenli standart CORS süzgecine sok
-            await self.cors_middleware(scope, receive, send)
-
-# Ana uygulamayı bu akıllı seçici zırhla sarmalıyoruz
-app = SelectiveCORSMiddleware(app, base_cors)

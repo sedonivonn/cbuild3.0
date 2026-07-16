@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
-import { Trophy, Shuffle, Swords, Wifi } from "lucide-react";
+import { Trophy, Shuffle, Swords } from "lucide-react";
 import { getAllTrophies, getTopTrophies } from "../engine/hallOfFame";
 import { effOverall } from "../data/ballonDor";
 
@@ -12,7 +12,7 @@ function tierBg(ovr) {
   return "linear-gradient(135deg, #5a3818 0%, #b07333 100%)";
 }
 
-export const HomeScreen = ({ onStart, onStartLeague, hasSave, onContinue, onHallOfFame, onOnline }) => {
+export const HomeScreen = ({ onStart, onStartLeague, hasSave, onContinue, onHallOfFame }) => {
   const trophies = useMemo(() => getAllTrophies(), []);
   const topThree = useMemo(() => getTopTrophies(3), []);
   const hasTrophies = trophies.length > 0;
@@ -57,19 +57,6 @@ export const HomeScreen = ({ onStart, onStartLeague, hasSave, onContinue, onHall
           </button>
           <button type="button" onClick={onStartLeague} className="btn-primary" data-testid="start-draft-league-button">
             LİG FORMATI
-          </button>
-          <button
-            type="button"
-            onClick={onOnline}
-            className="btn-ghost flex items-center gap-2 hover:!border-[#ff3b30]/50 hover:!bg-[#ff3b30]/10 transition"
-            title="Online Kapışma"
-            data-testid="online-button"
-          >
-            <Wifi size={16} className="text-[#ff3b30]" />
-            ONLİNE
-            <span className="ml-1 px-1.5 py-0.5 rounded bg-[#ff3b30]/20 text-[#ff3b30] text-[9px] font-mono tracking-wider">
-              CANLI
-            </span>
           </button>
           {hasSave && (
             <button type="button" onClick={onContinue} className="btn-ghost" data-testid="continue-button">

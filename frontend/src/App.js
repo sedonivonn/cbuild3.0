@@ -9,9 +9,6 @@ import { LeagueTournamentScreen } from "./screens/LeagueTournamentScreen";
 import { MatchScreen } from "./screens/MatchScreen";
 import { TrophyScreen } from "./screens/TrophyScreen";
 import { HallOfFameScreen } from "./screens/HallOfFameScreen";
-import { OnlineScreen } from "./screens/OnlineScreen";
-import { OnlineLobbyScreen } from "./screens/OnlineLobbyScreen";
-import { OnlineDraftScreen } from "./screens/OnlineDraftScreen";
 import { TopBar } from "./components/TopBar";
 import { sound } from "./engine/sounds";
 import { FORMATIONS } from "./data/formations";
@@ -50,25 +47,6 @@ function App() {
   const [trophyTeam, setTrophyTeam] = useState(null);
   const [soundOn, setSoundOn] = useState(sound.isEnabled());
   const [authOpen, setAuthOpen] = useState(false);
-
-  // Online multiplayer state (kept out of the persisted save on purpose —
-  // sessions are ephemeral and depend on server-side room lifecycle).
-  const [onlineMe, setOnlineMe] = useState(null);       // { id, nickname, is_host }
-  const [onlineCode, setOnlineCode] = useState(null);
-  const [onlinePrefill, setOnlinePrefill] = useState(null);
-
-  // Detect `?room=CODE` on initial load and route to the Online KATIL tab.
-  useEffect(() => {
-    try {
-      const params = new URLSearchParams(window.location.search);
-      const roomFromUrl = params.get("room");
-      if (roomFromUrl) {
-        setOnlinePrefill(roomFromUrl.toUpperCase());
-        setScreen("online");
-      }
-    } catch (_) { /* ignore */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Read shared draft from URL hash on first mount
   useEffect(() => {
@@ -176,55 +154,7 @@ function App() {
   return (
     <div className="min-h-screen text-white">
       <TopBar onSoundToggle={handleSoundToggle} soundOn={soundOn} onReset={handleReset} onLogoClick={() => setScreen("home")} onOpenAuth={() => setAuthOpen(true)} />
-      {screen === "home" && <HomeScreen onStart={handleStart} onStartLeague={handleStartLeague} hasSave={hasSave} onContinue={handleContinue} onHallOfFame={() => setScreen("hall_of_fame")} onOnline={() => { setOnlinePrefill(null); setScreen("online"); }} />}
-      {screen === "online" && !onlineCode && (
-        <OnlineScreen
-          prefillCode={onlinePrefill}
-          onBack={() => { setOnlinePrefill(null); setScreen("home"); try { const u = new URL(window.location.href); u.searchParams.delete("room"); window.history.replaceState({}, "", u); } catch (_) { /* noop */ } }}
-          onEnterLobby={({ code, you }) => { setOnlineMe(you); setOnlineCode(code); setScreen("online_lobby"); }}
-        />
-      )}
-      {screen === "online_lobby" && onlineCode && onlineMe && (
-        <OnlineLobbyScreen
-          code={onlineCode}
-          me={onlineMe}
-          onLeave={() => { setOnlineCode(null); setOnlineMe(null); setOnlinePrefill(null); setScreen("home"); try { const u = new URL(window.location.href); u.searchParams.delete("room"); window.history.replaceState({}, "", u); } catch (_) { /* noop */ } }}
-          onStarted={() => {
-            // Server has flipped the room to `started`. Every client (host
-            // and guests) now transitions to the online draft view. The
-            // draft screen re-reads state via WebSocket, so it's safe to
-            // enter here without any additional payload.
-            sound.click();
-            setScreen("online_draft");
-          }}
-        />
-      )}
-      {screen === "online_draft" && onlineCode && onlineMe && (
-        <OnlineDraftScreen
-          code={onlineCode}
-          me={onlineMe}
-          onLeave={() => { setOnlineCode(null); setOnlineMe(null); setOnlinePrefill(null); setScreen("home"); try { const u = new URL(window.location.href); u.searchParams.delete("room"); window.history.replaceState({}, "", u); } catch (_) { /* noop */ } }}
-          onTournamentStart={(r) => {
-            // Phase 1: server-authoritative tournament sim is not yet
-            // implemented. When the host clicks TURNUVAYA BAŞLA we drop
-            // each client into their local tournament using their
-            // server-drafted squad. Phase 2 will replace this with a
-            // synchronized server sim.
-            const mine = r?.game?.drafts?.[onlineMe.id];
-            if (!mine) return;
-            const formationSlots = FORMATIONS[mine.formation_id]?.slots || FORMATIONS["4-3-3"].slots;
-            setFormationId(mine.formation_id || "4-3-3");
-            setXi(mine.xi && mine.xi.length === formationSlots.length ? mine.xi : (new Array(formationSlots.length).fill(null)));
-            setTactic(mine.tactic_id || "GEGENPRESS");
-            setTeamName(mine.team_name || onlineMe.nickname);
-            setChanges({ remaining: 0, luckyRemaining: 0 });
-            setTournament(null);
-            setTournamentMode(r?.mode === "league" ? "league" : "group");
-            setOnlineCode(null); setOnlineMe(null); setOnlinePrefill(null);
-            setScreen("tournament");
-          }}
-        />
-      )}
+      {screen === "home" && <HomeScreen onStart={handleStart} onStartLeague={handleStartLeague} hasSave={hasSave} onContinue={handleContinue} onHallOfFame={() => setScreen("hall_of_fame")} />}
       {screen === "draft" && formationId && (
         <DraftScreen
           formationId={formationId}
