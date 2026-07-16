@@ -85,3 +85,45 @@ New building blocks (all in `MatchScreen.jsx`):
 
 Verified by testing_agent_v3 (iteration 24): 7/7 acceptance criteria pass,
 including regression that HomeScreen has no online button.
+
+## 2026-07-16 UPDATE — Cinematic shot animation + bigger prematch pitch
+Follow-up polish on the OSM match view based on user feedback:
+
+MatchScreen (`/app/frontend/src/screens/MatchScreen.jsx`)
+- **Prematch MiniPitch** now stacks under each team's player list, spans full
+  panel width (aspect ratio 0.72:1, max 300px). Each of the 11 dots shows:
+  position label above the dot, jersey number inside a white circle, player's
+  short last-name below. Penalty boxes drawn on both ends.
+- **Shot animation trigger** narrowed to `critical` events only. In
+  `matchEngine.js`, all GOAL events carry `critical:true` and ~40% of
+  regulation saves (~45% of ET saves) are randomly marked critical, so the
+  animation feels like a rare highlight instead of firing on every shot.
+  Non-critical saves render only in the ticker.
+- **Animation duration is now a fixed 2400ms** (`SHOT_ANIM_MS`) regardless of
+  the speed picker — even ULTRA plays the highlight cinematically. Reverts
+  the iter-24 behavior where ULTRA skipped the animation entirely.
+- **New animation timeline**: 0–0.55s "KRİTİK ATAK · <team>" banner slides in
+  and fades out; 0.55–1.95s ball flight (cubic-bezier ease-out slowing near
+  the goal, scaling 0.55→1.5 to convey perspective); 1.95–2.40s impact —
+  golden "GOOOL" burst for goals OR big red X for saves.
+- **Classic B+W ball**: rewrote `BallSVG` with proper pentagon panels and a
+  subtle highlight, drop-shadow.
+- **White net** with visible goal-frame posts (rgba 0.75 grid lines + 3px
+  glowing posts on the target side).
+- **Net ripple on GOAL only**: net wrapper motion animates
+  `scaleX/Y/x` [1,1,1.10,1.03,1.005,1.0] around impact — mimicking the
+  mesh tensioning back after the ball hits.
+- **Player card**: bottom of animation shows scorer + "Asist: <name>" for
+  goals, or shooter for saves; falls back to team name when the attacker
+  has no known XI attribution.
+
+matchEngine.js
+- SAVE + SHOT events now carry a `shooter` string field (weighted pick by
+  scoring tendency × OVR from the attacking side's players).
+- Ticker text for saves reads "Kaçan fırsat: <name> (<team>) — kaleci
+  kurtardı." when a shooter is attributed.
+
+Verified by testing_agent_v3 (iteration 25): 8/8 acceptance criteria pass
+including MiniPitch measurements, fixed 2400ms duration at ULTRA, critical
+filter, KRİTİK ATAK banner, both-sides triggers, ticker shooter attribution,
+ripple-on-goal-only, regression of online-removal + prematch-gate.
