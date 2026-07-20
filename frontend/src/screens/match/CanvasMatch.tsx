@@ -1,41 +1,24 @@
 /**
  * CanvasMatch — 2D top-down HTML5 Canvas match simulation.
  *
- * Visual layer only. The authoritative match result (goals, scorer/assist,
- * saves, minute timeline) is still produced by `matchEngine.js` and drip-fed
- * from the parent (MatchScreen) via props. This component reacts:
- *   - score prop bumps → green goal-zone flash on the scoring side
- *   - each new event → commentary log line + occasional visual shot cue
- *   - speed picker  → dt multiplier for the AI simulation
+ * Iteration 28 rewrite: richer AI (pass buildup, defensive shifts, keeper
+ * dives), goal celebrations with kickoff resets, single "MAÇI ATLA" skip
+ * button (all speed multipliers removed by request), and calmer ball
+ * physics so every attack is legible frame-by-frame.
  *
- * Between engine events the 22 discs free-play a haxball-flavoured AI:
- *   - Possessing team's carrier drifts toward opponent goal
- *   - Teammates spread into passing lanes
- *   - Nearest defenders press the carrier
- *   - Carrier passes to the best-placed teammate every ~1.5s
- *   - Occasional cosmetic shots
+ * Visual layer only — `matchEngine.js` still owns goals/scorer/assist/
+ * minute. When an engine event arrives via `latestEvent`, the canvas
+ * queues a "pending shot" and plays 2-3 seconds of buildup passes on
+ * the shooting side before executing the visual shot with proper
+ * keeper reaction. This kills the old "santra→gol" feel.
  */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Gauge, FastForward, Zap, Pause } from "lucide-react";
+import { SkipForward } from "lucide-react";
 
 // ---------------------------------------------------------------------------
-// Types & constants
+// Types
 // ---------------------------------------------------------------------------
-type SpeedKey = "slow" | "normal" | "fast" | "ultra";
-const SPEED_MULT: Record<SpeedKey, number> = {
-  slow: 1,
-  normal: 2,
-  fast: 4,
-  ultra: 8,
-};
-const SPEEDS: { key: SpeedKey; label: string; icon: any }[] = [
-  { key: "slow",   label: "YAVAŞ",  icon: Pause },
-  { key: "normal", label: "NORMAL", icon: Gauge },
-  { key: "fast",   label: "HIZLI",  icon: FastForward },
-  { key: "ultra",  label: "ULTRA",  icon: Zap },
-];
-
 export type MatchEventLite = {
   minute: number;
   side: "home" | "away";
@@ -54,67 +37,86 @@ type CanvasMatchProps = {
   homeScore: number;
   awayScore: number;
   liveMinute: number | null;
-  events: MatchEventLite[];        // events revealed so far
+  events: MatchEventLite[];
   latestEvent: MatchEventLite | null;
-  speedKey: SpeedKey;
-  onSpeedChange: (k: SpeedKey) => void;
+  onSkip: () => void;
 };
 
-// World coordinates: 0..PITCH_W × 0..PITCH_H (rendered onto whatever
-// canvas.clientWidth/Height gives us).
+// ---------------------------------------------------------------------------
+// World constants
+// ---------------------------------------------------------------------------
 const PITCH_W = 100;
 const PITCH_H = 60;
-const GOAL_TOP = 25;   // goal spans y=25..35 (world units)
+const GOAL_TOP = 25;
 const GOAL_BOT = 35;
-const PEN_BOX = 16;    // penalty box depth in world units
-const PEN_HEIGHT = 34; // penalty box height y ~ (13..47)
+const PEN_BOX = 16;
 const PEN_TOP = 13;
 const PEN_BOT = 47;
-
-// Player disc radius in world units
 const R = 1.35;
 const BALL_R = 0.65;
 
-// Base 4-3-3 formation for HOME (attacking → right).
-// Away is a mirror across x = PITCH_W/2.
 const HOME_FORMATION: [number, number][] = [
-  [ 6, 30],  // GK
-  [18,  8], [18, 22], [18, 38], [18, 52],   // back 4
-  [32, 18], [32, 30], [32, 42],              // mid 3
-  [46,  9], [50, 30], [46, 51],              // front 3
+  [ 6, 30],
+  [18,  8], [18, 22], [18, 38], [18, 52],
+  [32, 18], [32, 30], [32, 42],
+  [46,  9], [50, 30], [46, 51],
 ];
 const mirror = (p: [number, number]): [number, number] => [PITCH_W - p[0], p[1]];
 const AWAY_FORMATION: [number, number][] = HOME_FORMATION.map(mirror) as any;
 
-// Colour palette
 const COL = {
   turfDark:  "#0d5f2b",
   turfLight: "#118a3f",
   line:      "#ffffff",
-  homeFill:  "#1e3a8a",  // dark blue
+  homeFill:  "#1e3a8a",
   homeBord:  "#ffffff",
   homeTxt:   "#ffffff",
-  awayFill:  "#f5f5f5",  // near white
-  awayBord:  "#374151",  // dark gray
+  awayFill:  "#f5f5f5",
+  awayBord:  "#374151",
   awayTxt:   "#111827",
   ball:      "#ffffff",
-  ballShadow:"#000000",
   goalGlow:  "#22ff77",
 };
 
-// ---------------------------------------------------------------------------
-// Filler-commentary strings that the canvas AI generates for "between-goal"
-// atmosphere so the log never stalls.
-// ---------------------------------------------------------------------------
-const FILLER_PASS   = ["Pas.", "Kısa pas.", "Uzun top.", "Kanattan orta.", "Topla oynuyor."];
-const FILLER_PRESS  = ["Baskı.", "Yüksek baskı!", "Sıkı takip.", "Faul yaptırıyor."];
-const FILLER_CORNER = ["Korner kullanılıyor.", "Köşe vuruşu."];
-const FILLER_THROW  = ["Taç atışı.", "Yan atışı."];
+// Filler commentary buckets — organised so the log reads like a broadcast.
+const FILLER_BUILDUP = [
+  "Kısa pas alışverişi.",
+  "Topla oynuyorlar.",
+  "Kanattan orta bekleniyor.",
+  "Uzun pas denemesi.",
+  "Geri pas — kaleye emanet.",
+  "Orta sahada dolaşıyorlar.",
+];
+const FILLER_PRESS = [
+  "Yüksek baskı!",
+  "Rakip topu geri kazandı.",
+  "Defans oyuncusu top kesti.",
+  "Sıkı takip.",
+  "Faul yaptırıyor.",
+];
+const FILLER_ATTACK = [
+  "Ceza sahasına giriş.",
+  "Kanattan atak!",
+  "Merkezden hızlı hücum.",
+  "Ceza yayı önünde tehlike.",
+];
+const FILLER_KEEPER = [
+  "Kaleci topu ayakla oynatıyor.",
+  "Kaleci topla oyunu başlatıyor.",
+  "Kaleciden uzun vuruş.",
+];
+const FILLER_RESTART = [
+  "Korner kullanılıyor.",
+  "Taç atışı.",
+  "Serbest vuruş.",
+];
 
 const pick = <T,>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
 
 // ---------------------------------------------------------------------------
-// Player + Ball state
+// State types (kept in a ref so the RAF effect never restarts on rerender)
 // ---------------------------------------------------------------------------
 type Disc = {
   side: "home" | "away";
@@ -122,17 +124,36 @@ type Disc = {
   isGK: boolean;
   x: number; y: number;
   vx: number; vy: number;
-  home: [number, number]; // base formation coord
+  home: [number, number];
 };
 
 type Ball = {
   x: number; y: number;
   vx: number; vy: number;
   trail: { x: number; y: number; a: number }[];
-  ownerIdx: number | null; // index into discs array
+  ownerIdx: number | null;
+  holdTime: number; // seconds carrier has held the ball
 };
 
-const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+type PendingShot = {
+  side: "home" | "away";
+  type: "GOAL" | "SAVE" | "SHOT";
+  buildupLeft: number; // seconds remaining until the shot fires
+  shooterIdx: number | null; // which disc will actually shoot
+  scorer?: string | null;
+  shooter?: string | null;
+} | null;
+
+type SimState = {
+  discs: Disc[];
+  ball: Ball;
+  possession: "home" | "away";
+  sinceLastPass: number;
+  sinceLastFiller: number;
+  pending: PendingShot;
+  celebration: { until: number; text: string; side: "home" | "away" } | null;
+  restartAt: number; // if > 0, wait until performance.now() > restartAt before resuming
+};
 
 // ---------------------------------------------------------------------------
 // Component
@@ -144,35 +165,41 @@ export const CanvasMatch: React.FC<CanvasMatchProps> = ({
   homeScore,
   awayScore,
   liveMinute,
-  events,
+  events, // eslint-disable-line no-unused-vars
   latestEvent,
-  speedKey,
-  onSpeedChange,
+  onSkip,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const lastTsRef = useRef<number>(0);
-  const speedRef = useRef<SpeedKey>(speedKey);
-  useEffect(() => { speedRef.current = speedKey; }, [speedKey]);
 
-  // Goal-flash triggers (green pulse on the scoring side, ~700ms).
   const [homeFlashAt, setHomeFlashAt] = useState<number>(0);
   const [awayFlashAt, setAwayFlashAt] = useState<number>(0);
   const prevHomeScoreRef = useRef<number>(homeScore);
   const prevAwayScoreRef = useRef<number>(awayScore);
-
   useEffect(() => {
-    if (homeScore > prevHomeScoreRef.current) setHomeFlashAt(performance.now());
+    if (homeScore > prevHomeScoreRef.current) {
+      setHomeFlashAt(performance.now());
+      const st = stateRef.current!;
+      st.celebration = { until: performance.now() + 1600, text: "GOL!", side: "home" };
+      // Kick off from centre for the conceding team.
+      resetKickoff(st, "away");
+    }
     prevHomeScoreRef.current = homeScore;
   }, [homeScore]);
   useEffect(() => {
-    if (awayScore > prevAwayScoreRef.current) setAwayFlashAt(performance.now());
+    if (awayScore > prevAwayScoreRef.current) {
+      setAwayFlashAt(performance.now());
+      const st = stateRef.current!;
+      st.celebration = { until: performance.now() + 1600, text: "GOL!", side: "away" };
+      resetKickoff(st, "home");
+    }
     prevAwayScoreRef.current = awayScore;
   }, [awayScore]);
 
-  // ------- Discs + Ball, held in a ref so the RAF loop never restarts.
-  const stateRef = useRef<{ discs: Disc[]; ball: Ball; kickoffSide: "home" | "away"; sinceLastPass: number; sinceLastFiller: number } | null>(null);
+  // Lazy-init the simulation state (discs + ball + phase).
+  const stateRef = useRef<SimState | null>(null);
   if (stateRef.current === null) {
     const discs: Disc[] = [];
     HOME_FORMATION.forEach((p, i) => {
@@ -181,53 +208,71 @@ export const CanvasMatch: React.FC<CanvasMatchProps> = ({
     AWAY_FORMATION.forEach((p, i) => {
       discs.push({ side: "away", number: i + 1, isGK: i === 0, x: p[0], y: p[1], vx: 0, vy: 0, home: p });
     });
-    const ball: Ball = { x: PITCH_W / 2, y: PITCH_H / 2, vx: 0, vy: 0, trail: [], ownerIdx: null };
-    stateRef.current = { discs, ball, kickoffSide: "home", sinceLastPass: 0, sinceLastFiller: 0 };
+    const ball: Ball = { x: PITCH_W / 2, y: PITCH_H / 2, vx: 0, vy: 0, trail: [], ownerIdx: null, holdTime: 0 };
+    stateRef.current = {
+      discs,
+      ball,
+      possession: "home",
+      sinceLastPass: 0,
+      sinceLastFiller: 0,
+      pending: null,
+      celebration: null,
+      restartAt: 0,
+    };
   }
 
-  // ------- Commentary log (fed by props + filler AI)
-  const [log, setLog] = useState<{ text: string; minute: number | null; kind: "goal" | "save" | "shot" | "filler" | "info" }[]>([]);
-  const appendLog = (entry: { text: string; minute: number | null; kind: any }) => {
+  // Commentary log
+  const [log, setLog] = useState<{ text: string; kind: "goal" | "save" | "shot" | "filler" | "info" }[]>([]);
+  const appendLog = (entry: { text: string; kind: any }) => {
     setLog((L) => {
       const next = [...L, entry];
-      // Keep last 40 entries — the UI renders ~7 latest.
-      return next.length > 40 ? next.slice(-40) : next;
+      return next.length > 60 ? next.slice(-60) : next;
     });
   };
   const lastEventKeyRef = useRef<string>("");
+
   useEffect(() => {
     if (!latestEvent) return;
     const key = `${latestEvent.minute}-${latestEvent.type}-${latestEvent.text}`;
     if (key === lastEventKeyRef.current) return;
     lastEventKeyRef.current = key;
     const kind: any = latestEvent.type === "GOAL" ? "goal" : latestEvent.type === "SAVE" ? "save" : "shot";
-    appendLog({ text: latestEvent.text, minute: latestEvent.minute, kind });
-    // Give the canvas a nudge: put ball possession on the shooting team so
-    // the next few seconds feel connected to the commentary line.
+    appendLog({ text: latestEvent.text, kind });
+
+    // Queue a pending shot with buildup — the canvas AI will play 2-3s of
+    // buildup passes on the shooting side before the ball actually flies
+    // toward the goal. This kills the "santra→gol" teleport.
     const st = stateRef.current!;
     const side = latestEvent.side;
-    // Pick a forward-most attacker on that side and hand them the ball.
-    const attackers = st.discs
-      .map((d, i) => ({ d, i }))
-      .filter((o) => o.d.side === side && !o.d.isGK)
-      .sort((a, b) => (side === "home" ? b.d.x - a.d.x : a.d.x - b.d.x));
-    if (attackers.length > 0) {
-      const target = attackers[0];
-      st.ball.x = target.d.x;
-      st.ball.y = target.d.y;
-      st.ball.ownerIdx = target.i;
-      // If it's a shot / save / goal, launch the ball toward the goal.
-      const goalX = side === "home" ? PITCH_W - 0.5 : 0.5;
-      const goalY = 30 + (Math.random() - 0.5) * 6;
-      const dx = goalX - st.ball.x;
-      const dy = goalY - st.ball.y;
-      const dlen = Math.hypot(dx, dy) || 1;
-      const shotSpeed = latestEvent.type === "GOAL" ? 78 : 66;
-      st.ball.vx = (dx / dlen) * shotSpeed;
-      st.ball.vy = (dy / dlen) * shotSpeed;
-      st.ball.ownerIdx = null;
-      st.sinceLastPass = 0;
+    st.possession = side;
+    // Nudge ball toward the attacking half if it isn't already there.
+    const attackingHalf = side === "home"
+      ? st.ball.x > PITCH_W * 0.35
+      : st.ball.x < PITCH_W * 0.65;
+    if (!attackingHalf) {
+      // Hand ball to a mid-line disc on the attacking side.
+      const midfielders = st.discs
+        .map((d, i) => ({ d, i }))
+        .filter((o) => o.d.side === side && !o.d.isGK)
+        .sort((a, b) => Math.abs(PITCH_W / 2 - a.d.x) - Math.abs(PITCH_W / 2 - b.d.x));
+      if (midfielders.length > 0) {
+        const target = midfielders[0];
+        st.ball.x = target.d.x;
+        st.ball.y = target.d.y;
+        st.ball.ownerIdx = target.i;
+        st.ball.vx = 0; st.ball.vy = 0;
+      }
     }
+
+    const buildup = latestEvent.type === "GOAL" ? 2.4 : latestEvent.type === "SAVE" ? 2.0 : 1.6;
+    st.pending = {
+      side,
+      type: latestEvent.type as any,
+      buildupLeft: buildup,
+      shooterIdx: null,
+      scorer: latestEvent.scorer,
+      shooter: latestEvent.shooter,
+    };
   }, [latestEvent]);
 
   // ------- Canvas render + AI game loop -------------------------------------
@@ -238,7 +283,6 @@ export const CanvasMatch: React.FC<CanvasMatchProps> = ({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // Handle high-DPI sizing.
     const dpr = window.devicePixelRatio || 1;
     const fitCanvas = () => {
       const rect = container.getBoundingClientRect();
@@ -255,19 +299,14 @@ export const CanvasMatch: React.FC<CanvasMatchProps> = ({
 
     const loop = (ts: number) => {
       const prev = lastTsRef.current || ts;
-      const rawDt = Math.min(64, ts - prev); // clamp long stalls to 64ms
+      const rawDt = Math.min(64, ts - prev);
       lastTsRef.current = ts;
-      const mult = SPEED_MULT[speedRef.current] || 1;
-      const dt = (rawDt / 1000) * mult; // seconds of "sim time"
+      const dt = rawDt / 1000; // fixed 1x speed — the "hızlı" picker was removed
 
-      stepAI(stateRef.current!, dt, (msg, kind) => {
-        appendLog({ text: msg, minute: null, kind });
+      stepAI(stateRef.current!, dt, ts, (msg, kind) => {
+        appendLog({ text: msg, kind });
       });
-      draw(ctx, canvas, stateRef.current!, {
-        homeFlashAt,
-        awayFlashAt,
-        now: ts,
-      });
+      draw(ctx, canvas, stateRef.current!, { homeFlashAt, awayFlashAt, now: ts });
 
       rafRef.current = requestAnimationFrame(loop);
     };
@@ -277,22 +316,17 @@ export const CanvasMatch: React.FC<CanvasMatchProps> = ({
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       ro.disconnect();
     };
-    // We deliberately keep the effect stable across speed/score changes; the
-    // loop reads those via refs so it never has to restart.
   }, [homeFlashAt, awayFlashAt]);
 
-  // ------- Rendered UI ------------------------------------------------------
-  const renderedLog = useMemo(() => log.slice(-7), [log]);
+  const renderedLog = useMemo(() => log.slice(-8), [log]);
 
   return (
     <div className="w-full" data-testid="canvas-match">
       {/* Integrated scoreboard */}
       <div className="grid grid-cols-3 items-center gap-3 mb-2">
-        {/* Left: stage label */}
         <div className="font-mono text-[10px] md:text-xs tracking-widest text-amber-300 truncate" data-testid="canvas-stage">
           {stageLabel}
         </div>
-        {/* Center: score */}
         <div className="flex items-center justify-center gap-3">
           <div className="text-right font-display text-sm md:text-base tracking-tight truncate max-w-[140px]" data-testid="canvas-home-name">{homeName}</div>
           <div className="font-display text-2xl md:text-3xl text-amber-300 tabular-nums" data-testid="canvas-score">
@@ -306,32 +340,22 @@ export const CanvasMatch: React.FC<CanvasMatchProps> = ({
             </div>
           )}
         </div>
-        {/* Right: speed picker */}
+        {/* Skip button — replaces the old speed picker */}
         <div className="flex justify-end">
-          <div className="inline-flex items-center gap-0.5 bg-white/5 rounded-full p-0.5 border border-white/10" data-testid="canvas-speed-picker">
-            {SPEEDS.map((s) => {
-              const Icon = s.icon;
-              const active = s.key === speedKey;
-              return (
-                <button
-                  key={s.key}
-                  type="button"
-                  onClick={() => onSpeedChange(s.key)}
-                  data-testid={`canvas-speed-${s.key}`}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-mono tracking-wider transition-colors ${
-                    active ? "bg-amber-300 text-black" : "text-white/60 hover:text-white"
-                  }`}
-                >
-                  <Icon size={11} />
-                  <span className="hidden sm:inline">{s.label}</span>
-                </button>
-              );
-            })}
-          </div>
+          <button
+            type="button"
+            onClick={onSkip}
+            data-testid="canvas-skip-button"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/8 hover:bg-amber-300 hover:text-black border border-white/15 text-white/85 font-mono text-[10px] md:text-[11px] tracking-widest transition-colors"
+            title="Simülasyonu atla ve sonuca geç"
+          >
+            <SkipForward size={12} />
+            MAÇI ATLA
+          </button>
         </div>
       </div>
 
-      {/* Pitch container with fixed aspect ratio so canvas scales cleanly. */}
+      {/* Pitch */}
       <div
         ref={containerRef}
         className="relative w-full rounded-lg overflow-hidden border border-white/15 bg-black"
@@ -339,7 +363,7 @@ export const CanvasMatch: React.FC<CanvasMatchProps> = ({
       >
         <canvas ref={canvasRef} className="block w-full h-full" />
 
-        {/* Commentary log overlay (bottom-right) */}
+        {/* Commentary log overlay */}
         <div
           className="absolute right-2 bottom-2 w-[220px] md:w-[260px] max-h-[42%] overflow-hidden pointer-events-none"
           data-testid="canvas-commentary"
@@ -373,10 +397,26 @@ export const CanvasMatch: React.FC<CanvasMatchProps> = ({
 };
 
 // ===========================================================================
-// AI + Physics — pure functions on the ref state
+// Kickoff helper — recentre both teams and hand possession to `side`.
 // ===========================================================================
+function resetKickoff(st: SimState, side: "home" | "away") {
+  st.ball.x = PITCH_W / 2;
+  st.ball.y = PITCH_H / 2;
+  st.ball.vx = 0;
+  st.ball.vy = 0;
+  st.ball.ownerIdx = null;
+  st.ball.holdTime = 0;
+  st.ball.trail.length = 0;
+  st.possession = side;
+  st.sinceLastPass = 0;
+  st.pending = null;
+  // Give discs a moment to trot back to their home positions.
+  st.restartAt = performance.now() + 900;
+}
 
-const dist = (ax: number, ay: number, bx: number, by: number) => Math.hypot(ax - bx, ay - by);
+// ===========================================================================
+// AI + Physics
+// ===========================================================================
 
 function findNearestDisc(state: { discs: Disc[] }, x: number, y: number, side?: "home" | "away") {
   let best = -1;
@@ -390,135 +430,157 @@ function findNearestDisc(state: { discs: Disc[] }, x: number, y: number, side?: 
 }
 
 function stepAI(
-  state: { discs: Disc[]; ball: Ball; kickoffSide: "home" | "away"; sinceLastPass: number; sinceLastFiller: number },
+  st: SimState,
   dt: number,
-  emitFiller: (msg: string, kind: "filler" | "shot" | "save" | "goal" | "info") => void
+  now: number,
+  emit: (msg: string, kind: "filler" | "shot" | "save" | "goal" | "info") => void
 ) {
-  const { discs, ball } = state;
+  const { discs, ball } = st;
+  const inCelebration = st.celebration && now < st.celebration.until;
+  const inRestart = now < st.restartAt;
 
-  // Move ball
+  // 1) Ball physics (drag + edges)
   ball.x += ball.vx * dt;
   ball.y += ball.vy * dt;
-  // Drag
-  const drag = 0.42;
+  const drag = 0.55;
   ball.vx *= Math.exp(-drag * dt);
   ball.vy *= Math.exp(-drag * dt);
-
-  // Trail (positions history for the translucent tail)
   ball.trail.push({ x: ball.x, y: ball.y, a: 1 });
-  if (ball.trail.length > 14) ball.trail.shift();
-  ball.trail.forEach((t) => (t.a *= Math.max(0.85, 1 - 1.6 * dt)));
+  if (ball.trail.length > 16) ball.trail.shift();
+  ball.trail.forEach((t) => (t.a *= Math.max(0.85, 1 - 1.4 * dt)));
 
-  // Bounce off pitch edges (top/bottom) — sides handled by "goal or wide" reset
-  if (ball.y < 1) { ball.y = 1; ball.vy = Math.abs(ball.vy) * 0.6; }
-  if (ball.y > PITCH_H - 1) { ball.y = PITCH_H - 1; ball.vy = -Math.abs(ball.vy) * 0.6; }
+  // Bounce off top/bottom
+  if (ball.y < 1) { ball.y = 1; ball.vy = Math.abs(ball.vy) * 0.55; }
+  if (ball.y > PITCH_H - 1) { ball.y = PITCH_H - 1; ball.vy = -Math.abs(ball.vy) * 0.55; }
 
-  // If ball leaves side lines, reset via goal-kick / throw commentary.
+  // If ball leaves goal lines: throw-in / goal kick reset (unless we're
+  // handling a pending shot outcome).
   if (ball.x < 0 || ball.x > PITCH_W) {
-    // Was it in the goal mouth? If yes, the parent has already updated the
-    // score via the engine; we still just reset play.
-    ball.x = PITCH_W / 2;
-    ball.y = PITCH_H / 2;
-    ball.vx = 0;
-    ball.vy = 0;
-    ball.ownerIdx = null;
-    state.sinceLastPass = 0;
-    emitFiller(pick(FILLER_THROW), "filler");
+    if (!inCelebration) {
+      const isLeft = ball.x < 0;
+      const kickerSide: "home" | "away" = isLeft ? "home" : "away";
+      // Emit atmospheric line and restart from that keeper.
+      const keeper = discs.find((d) => d.isGK && d.side === kickerSide);
+      if (keeper) {
+        ball.x = keeper.x + (kickerSide === "home" ? 3 : -3);
+        ball.y = keeper.y;
+        ball.vx = 0; ball.vy = 0;
+        ball.ownerIdx = discs.indexOf(keeper);
+        ball.holdTime = 0;
+        st.possession = kickerSide;
+        emit(pick(FILLER_KEEPER), "filler");
+      }
+    }
   }
 
-  // Ball possession — if slow enough, nearest disc grabs it.
-  const speed = Math.hypot(ball.vx, ball.vy);
-  if (speed < 6 && ball.ownerIdx === null) {
-    const near = findNearestDisc(state, ball.x, ball.y);
-    if (near.dist < 1.6) {
+  // 2) Possession — nearest disc grabs slow ball
+  const bspeed = Math.hypot(ball.vx, ball.vy);
+  if (bspeed < 4 && ball.ownerIdx === null && !inCelebration) {
+    const near = findNearestDisc(st, ball.x, ball.y);
+    if (near.dist < 1.8) {
       ball.ownerIdx = near.idx;
-      ball.vx = 0;
-      ball.vy = 0;
+      ball.holdTime = 0;
+      ball.vx = 0; ball.vy = 0;
+      const newOwner = discs[near.idx];
+      if (newOwner.side !== st.possession) {
+        // Possession change — a tackle or interception.
+        st.possession = newOwner.side;
+        emit(pick(FILLER_PRESS), "filler");
+      }
     }
-  } else if (ball.ownerIdx !== null) {
-    // Carrier is dragging the ball with them.
+  } else if (ball.ownerIdx !== null && !inCelebration) {
     const owner = discs[ball.ownerIdx];
     ball.x = owner.x + owner.vx * 0.02;
     ball.y = owner.y + owner.vy * 0.02;
+    ball.holdTime += dt;
   }
 
-  // ------ Disc movement rules -------------------------------------------------
-  // Rule per side: carrier attacks; teammates spread ahead of ball; opponents
-  // press ball carrier and mark forwards.
-
+  // 3) Disc movement per role
   const owner = ball.ownerIdx !== null ? discs[ball.ownerIdx] : null;
-  const owningSide: "home" | "away" | null = owner ? owner.side : null;
+  const owningSide = owner ? owner.side : st.possession;
+  const attackingRight = owningSide === "home";
 
   discs.forEach((d, i) => {
+    if (inCelebration || inRestart) {
+      // Trot back to home position during a stoppage.
+      d.vx = (d.home[0] - d.x) * 2.0;
+      d.vy = (d.home[1] - d.y) * 2.0;
+      return;
+    }
+
     if (d.isGK) {
-      // Keeper stays on his goal line and slides toward ball y (clamped).
+      // Keeper: hold goal line, slide toward ball y. On a pending shot,
+      // sprint out toward the ball's trajectory when it's in the box.
       const gx = d.side === "home" ? 5 : PITCH_W - 5;
-      const targetY = clamp(ball.y, 22, 38);
-      const dxk = gx - d.x;
-      const dyk = targetY - d.y;
-      d.vx = dxk * 3.0;
-      d.vy = dyk * 4.5;
+      let targetX = gx;
+      let targetY = clamp(ball.y, 22, 38);
+      const shotIncoming =
+        st.pending &&
+        st.pending.side !== d.side &&
+        Math.abs(ball.vx) > 12 &&
+        ((d.side === "home" && ball.x < 25) || (d.side === "away" && ball.x > PITCH_W - 25));
+      if (shotIncoming) {
+        // Anticipate: intercept along the ball's y trajectory.
+        const tSteps = 0.25; // look-ahead seconds
+        targetX = d.side === "home" ? Math.max(3.5, ball.x - 2) : Math.min(PITCH_W - 3.5, ball.x + 2);
+        targetY = clamp(ball.y + ball.vy * tSteps, GOAL_TOP - 1, GOAL_BOT + 1);
+      }
+      d.vx = (targetX - d.x) * 4.0;
+      d.vy = (targetY - d.y) * 5.5;
     } else if (owner && d === owner) {
-      // Carrier — drift toward opponent goal, avoiding own edges.
-      const goalX = d.side === "home" ? PITCH_W - 8 : 8;
-      const targetY = 30 + (Math.sin((performance.now() / 800) + i) * 8);
-      d.vx = (goalX - d.x) * 0.9;
+      // Carrier — drifts toward opponent goal but slows when defenders close
+      // in, giving the buildup time to breathe.
+      const goalX = attackingRight ? PITCH_W - 8 : 8;
+      const targetY = 30 + (Math.sin((now / 800) + i) * 6);
+      // Slow drift so passes have time to develop.
+      d.vx = (goalX - d.x) * 0.55;
       d.vy = (targetY - d.y) * 0.9;
     } else if (owningSide === d.side) {
-      // Teammate of carrier — move to attacking position (spread across
-      // opponent half), keeping some link to home coord for balance.
-      const attackShift = d.side === "home" ? 12 : -12;
-      const tx = clamp(d.home[0] + attackShift, 6, PITCH_W - 6);
-      const ty = d.home[1];
-      d.vx = (tx - d.x) * 1.4;
-      d.vy = (ty - d.y) * 1.4;
-    } else if (owningSide && owningSide !== d.side) {
-      // Defending team — nearest 2 press ball carrier, others fall back into
-      // their home shape and shift toward ball on the y-axis.
-      const rank = discs
-        .map((o, oi) => ({ o, oi, dd: o.side === d.side && !o.isGK ? dist(o.x, o.y, ball.x, ball.y) : Infinity }))
-        .filter((r) => r.o.side === d.side && !r.o.isGK)
+      // Teammate of carrier — spread into attacking positions but not all
+      // at max shift; keep at least one deeper option for a safe pass.
+      const isForward = d.home[0] >= 40 || d.home[0] <= 60; // rough
+      const shiftBase = d.side === "home" ? 10 : -10;
+      const shift = isForward ? shiftBase * 1.4 : shiftBase * 0.4;
+      const tx = clamp(d.home[0] + shift, 6, PITCH_W - 6);
+      const ty = d.home[1] + Math.sin((now / 1400) + i * 0.7) * 3;
+      d.vx = (tx - d.x) * 1.6;
+      d.vy = (ty - d.y) * 1.6;
+    } else {
+      // Defending team
+      const myRankToBall = discs
+        .map((o, oi) => ({ oi, dd: o.side === d.side && !o.isGK ? dist(o.x, o.y, ball.x, ball.y) : Infinity }))
+        .filter((r) => discs[r.oi].side === d.side && !discs[r.oi].isGK)
         .sort((a, b) => a.dd - b.dd)
         .findIndex((r) => r.oi === i);
-      if (rank >= 0 && rank < 2) {
-        d.vx = (ball.x - d.x) * 3.0;
-        d.vy = (ball.y - d.y) * 3.0;
+      if (myRankToBall >= 0 && myRankToBall < 2) {
+        // Press the ball carrier / loose ball.
+        d.vx = (ball.x - d.x) * 3.4;
+        d.vy = (ball.y - d.y) * 3.4;
       } else {
-        const shiftY = (ball.y - 30) * 0.4;
+        // Zonal shift: track home coord but shifted with ball y and slightly
+        // back-marking the nearest attacker.
+        const shiftY = (ball.y - 30) * 0.35;
         const tx = d.home[0];
         const ty = clamp(d.home[1] + shiftY, 4, PITCH_H - 4);
-        d.vx = (tx - d.x) * 1.3;
-        d.vy = (ty - d.y) * 1.3;
-      }
-    } else {
-      // Loose ball — nearest disc chases, rest hold shape.
-      const near = findNearestDisc(state, ball.x, ball.y, d.side);
-      if (near.idx === i) {
-        d.vx = (ball.x - d.x) * 3.5;
-        d.vy = (ball.y - d.y) * 3.5;
-      } else {
-        d.vx = (d.home[0] - d.x) * 1.2;
-        d.vy = (d.home[1] - d.y) * 1.2;
+        d.vx = (tx - d.x) * 1.4;
+        d.vy = (ty - d.y) * 1.4;
       }
     }
   });
 
-  // Integrate positions with speed cap
-  const MAX_SPD = 22; // world units per second
+  // 4) Integrate + separation
+  const MAX_SPD = 20; // world/s. Slower than v1 for a calmer feel.
   discs.forEach((d) => {
     const s = Math.hypot(d.vx, d.vy);
-    const cap = d.isGK ? MAX_SPD * 0.75 : MAX_SPD;
+    const cap = d.isGK ? MAX_SPD * 0.9 : MAX_SPD;
     if (s > cap) { d.vx = (d.vx / s) * cap; d.vy = (d.vy / s) * cap; }
     d.x = clamp(d.x + d.vx * dt, 1, PITCH_W - 1);
     d.y = clamp(d.y + d.vy * dt, 1, PITCH_H - 1);
   });
-
-  // Simple disc-vs-disc separation so they don't stack.
   for (let a = 0; a < discs.length; a++) {
     for (let b = a + 1; b < discs.length; b++) {
       const A = discs[a], B = discs[b];
-      const dx = B.x - A.x;
-      const dy = B.y - A.y;
+      const dx = B.x - A.x, dy = B.y - A.y;
       const d2 = dx * dx + dy * dy;
       const min = R * 2;
       if (d2 > 0 && d2 < min * min) {
@@ -531,78 +593,152 @@ function stepAI(
     }
   }
 
-  // ------ Carrier logic: pass / shot decisions -------------------------------
-  state.sinceLastPass += dt;
-  if (owner && state.sinceLastPass > 1.2) {
-    // Look for a teammate closer to opponent goal — pick the best-placed one.
-    const goalX = owner.side === "home" ? PITCH_W - 2 : 2;
-    const candidates = discs
-      .map((t, ti) => ({ t, ti }))
-      .filter((c) => c.t.side === owner.side && c.t !== owner && !c.t.isGK)
-      .map((c) => {
-        const toGoal = Math.abs(goalX - c.t.x);
-        const fromCarrier = dist(c.t.x, c.t.y, owner.x, owner.y);
-        // Prefer teammates that are ahead of the carrier and not too far away.
-        const aheadBonus = owner.side === "home"
-          ? Math.max(0, c.t.x - owner.x)
-          : Math.max(0, owner.x - c.t.x);
-        return { c, score: -toGoal + aheadBonus * 1.2 - fromCarrier * 0.15 };
-      })
-      .sort((a, b) => b.score - a.score);
-    const best = candidates[0]?.c;
-    if (best) {
-      // Decide shot vs pass: within 20 units of opponent goal → shoot (visual).
-      const closeToGoal = Math.abs(goalX - owner.x) < 22;
-      const shouldShoot = closeToGoal && Math.random() < 0.28;
-      if (shouldShoot) {
-        const gx = owner.side === "home" ? PITCH_W - 0.5 : 0.5;
-        const gy = 30 + (Math.random() - 0.5) * 12;
-        const dx = gx - ball.x, dy = gy - ball.y;
-        const dlen = Math.hypot(dx, dy) || 1;
-        ball.vx = (dx / dlen) * 55;
-        ball.vy = (dy / dlen) * 55;
-      } else {
-        const dx = best.t.x - ball.x, dy = best.t.y - ball.y;
-        const dlen = Math.hypot(dx, dy) || 1;
-        const passSpd = 24 + Math.random() * 14;
-        ball.vx = (dx / dlen) * passSpd;
-        ball.vy = (dy / dlen) * passSpd;
-      }
-      ball.ownerIdx = null;
-      state.sinceLastPass = 0;
+  // 5) Carrier passing logic — richer variety, slower pace.
+  st.sinceLastPass += dt;
+  if (owner && !inCelebration && !inRestart && st.sinceLastPass > 1.4 && ball.holdTime > 0.9) {
+    // Detect nearest opponent → if very close, pass now.
+    const nearestOpp = findNearestDisc(st, owner.x, owner.y, owner.side === "home" ? "away" : "home");
+    const underPressure = nearestOpp.dist < 3.2;
+    // Only pass if either enough time elapsed OR under pressure.
+    const shouldPass = underPressure || st.sinceLastPass > 2.2 + Math.random() * 0.8;
+    if (shouldPass) {
+      chooseAndKickPass(st, owner, now, emit);
+      st.sinceLastPass = 0;
+      ball.holdTime = 0;
     }
   }
 
-  // Filler commentary trickle. Tuned tight enough to keep the log alive even
-  // in NORMAL/FAST where the full 90' timeline reveals inside ~10s of sim
-  // time — at SLOW it produces ~6-8 lines per match, at ULTRA ~15+.
-  state.sinceLastFiller += dt;
-  if (state.sinceLastFiller > 1.4 + Math.random() * 1.6) {
-    state.sinceLastFiller = 0;
-    if (owner) {
-      const roll = Math.random();
-      const bucket = roll < 0.55 ? FILLER_PASS : roll < 0.85 ? FILLER_PRESS : FILLER_CORNER;
-      emitFiller(pick(bucket), "filler");
-    } else if (Math.hypot(ball.vx, ball.vy) > 30) {
-      emitFiller("Şut denemesi!", "shot");
+  // 6) Pending shot resolution — the buildup timer counts down; when it
+  //    hits zero, whoever currently has the ball fires it at the goal.
+  if (st.pending && !inCelebration && !inRestart) {
+    st.pending.buildupLeft -= dt;
+    if (st.pending.buildupLeft <= 0) {
+      // Force ball onto a shooter (owner if on the right side, else the
+      // most-forward attacker of the shooting side).
+      const shootSide = st.pending.side;
+      let shooter: Disc | null = null;
+      let shooterIdx = -1;
+      if (owner && owner.side === shootSide) {
+        shooter = owner;
+        shooterIdx = ball.ownerIdx!;
+      } else {
+        const attackers = discs
+          .map((d, di) => ({ d, di }))
+          .filter((o) => o.d.side === shootSide && !o.d.isGK)
+          .sort((a, b) => shootSide === "home" ? b.d.x - a.d.x : a.d.x - b.d.x);
+        if (attackers.length > 0) {
+          shooter = attackers[0].d;
+          shooterIdx = attackers[0].di;
+          // Snap ball to shooter.
+          ball.x = shooter.x;
+          ball.y = shooter.y;
+          ball.ownerIdx = shooterIdx;
+        }
+      }
+      if (shooter) {
+        const goalX = shootSide === "home" ? PITCH_W - 0.5 : 0.5;
+        // Where does the shot go?
+        let aimY: number;
+        if (st.pending.type === "GOAL") {
+          // Aim inside posts, away from keeper.
+          const keeper = discs.find((d) => d.isGK && d.side !== shootSide);
+          aimY = keeper
+            ? keeper.y > 30 ? 26 + Math.random() * 3 : 34 - Math.random() * 3
+            : 30;
+        } else if (st.pending.type === "SAVE") {
+          // Aim on target — keeper will intercept.
+          aimY = 26 + Math.random() * 8;
+        } else {
+          // Miss — aim wide.
+          aimY = Math.random() < 0.5 ? GOAL_TOP - 4 - Math.random() * 4 : GOAL_BOT + 4 + Math.random() * 4;
+        }
+        const dx = goalX - ball.x, dy = aimY - ball.y;
+        const dlen = Math.hypot(dx, dy) || 1;
+        const shotSpd = st.pending.type === "GOAL" ? 62 : st.pending.type === "SAVE" ? 55 : 50;
+        ball.vx = (dx / dlen) * shotSpd;
+        ball.vy = (dy / dlen) * shotSpd;
+        ball.ownerIdx = null;
+        // Tell the log.
+        if (st.pending.type === "GOAL") {
+          emit("Şut… " + (st.pending.scorer ? `${st.pending.scorer}!` : "kaleye!"), "goal");
+        } else if (st.pending.type === "SAVE") {
+          emit("Kaleci hazır!", "save");
+        } else {
+          emit("Şut auta gitti!", "shot");
+        }
+      }
+      st.pending = null;
+    } else {
+      // Occasionally emit a buildup filler while the timer counts down.
+      if (Math.random() < dt * 0.9) {
+        emit(pick(FILLER_ATTACK), "filler");
+      }
     }
   }
+
+  // 7) Filler commentary trickle — keeps the log alive between engine events.
+  st.sinceLastFiller += dt;
+  if (!inCelebration && st.sinceLastFiller > 1.5 + Math.random() * 1.5) {
+    st.sinceLastFiller = 0;
+    if (owner) {
+      const roll = Math.random();
+      const bucket = roll < 0.5 ? FILLER_BUILDUP : roll < 0.8 ? FILLER_PRESS : FILLER_RESTART;
+      emit(pick(bucket), "filler");
+    }
+  }
+}
+
+// Pick a pass target for `owner` and kick the ball toward it.
+function chooseAndKickPass(
+  st: SimState,
+  owner: Disc,
+  now: number,
+  emit: (msg: string, kind: any) => void
+) {
+  const { ball, discs } = st;
+  const attackingRight = owner.side === "home";
+  const goalX = attackingRight ? PITCH_W - 2 : 2;
+
+  const teammates = discs
+    .map((t, ti) => ({ t, ti }))
+    .filter((c) => c.t.side === owner.side && c.t !== owner && !c.t.isGK);
+
+  // Score candidates: prefer ahead teammates in space (no defender nearby).
+  const scored = teammates.map((c) => {
+    const opp = findNearestDisc(st, c.t.x, c.t.y, owner.side === "home" ? "away" : "home");
+    const space = opp.dist;
+    const aheadBonus = attackingRight ? c.t.x - owner.x : owner.x - c.t.x;
+    const toGoal = Math.abs(goalX - c.t.x);
+    const distFromCarrier = dist(c.t.x, c.t.y, owner.x, owner.y);
+    // Balance: prefer forward + in space + not too far.
+    const score = aheadBonus * 1.0 + space * 1.4 - toGoal * 0.8 - distFromCarrier * 0.25;
+    return { c, score };
+  }).sort((a, b) => b.score - a.score);
+
+  if (scored.length === 0) return;
+
+  // 20% of the time pick a safer backward option to vary rhythm.
+  const useSafe = Math.random() < 0.22;
+  const chosen = useSafe && scored.length > 3 ? scored[scored.length - 1].c : scored[0].c;
+  const dx = chosen.t.x - ball.x;
+  const dy = chosen.t.y - ball.y;
+  const dlen = Math.hypot(dx, dy) || 1;
+  const passSpd = 16 + Math.random() * 10 + Math.min(10, dlen * 0.15);
+  ball.vx = (dx / dlen) * passSpd;
+  ball.vy = (dy / dlen) * passSpd;
+  ball.ownerIdx = null;
 }
 
 // ===========================================================================
 // Renderer
 // ===========================================================================
 
-type DrawCtx = {
-  homeFlashAt: number;
-  awayFlashAt: number;
-  now: number;
-};
+type DrawCtx = { homeFlashAt: number; awayFlashAt: number; now: number };
 
 function draw(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
-  state: { discs: Disc[]; ball: Ball },
+  st: SimState,
   d: DrawCtx
 ) {
   const W = canvas.clientWidth;
@@ -610,47 +746,33 @@ function draw(
   const sx = W / PITCH_W;
   const sy = H / PITCH_H;
 
-  // ---- Turf ------------------------------------------------------------------
+  // Turf
   const stripes = 16;
   const stripeW = W / stripes;
   for (let i = 0; i < stripes; i++) {
     ctx.fillStyle = i % 2 === 0 ? COL.turfDark : COL.turfLight;
     ctx.fillRect(i * stripeW, 0, stripeW + 1, H);
   }
-  // subtle vignette
   const grad = ctx.createRadialGradient(W / 2, H / 2, W * 0.2, W / 2, H / 2, W * 0.75);
   grad.addColorStop(0, "rgba(0,0,0,0)");
   grad.addColorStop(1, "rgba(0,0,0,0.35)");
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
 
-  // ---- Lines -----------------------------------------------------------------
+  // Lines
   ctx.strokeStyle = COL.line;
   ctx.lineWidth = 2;
-  // outer boundary
   ctx.strokeRect(0.5, 0.5, W - 1, H - 1);
-  // halfway line
-  ctx.beginPath();
-  ctx.moveTo(W / 2, 0);
-  ctx.lineTo(W / 2, H);
-  ctx.stroke();
-  // centre circle
-  ctx.beginPath();
-  ctx.arc(W / 2, H / 2, 9 * sx, 0, Math.PI * 2);
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(W / 2, H / 2, 1.4, 0, Math.PI * 2);
-  ctx.fillStyle = COL.line;
-  ctx.fill();
-  // penalty boxes (left + right)
+  ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke();
+  ctx.beginPath(); ctx.arc(W / 2, H / 2, 9 * sx, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(W / 2, H / 2, 1.4, 0, Math.PI * 2); ctx.fillStyle = COL.line; ctx.fill();
   ctx.strokeStyle = COL.line;
   ctx.strokeRect(0, PEN_TOP * sy, PEN_BOX * sx, (PEN_BOT - PEN_TOP) * sy);
   ctx.strokeRect((PITCH_W - PEN_BOX) * sx, PEN_TOP * sy, PEN_BOX * sx, (PEN_BOT - PEN_TOP) * sy);
-  // small goal area
   ctx.strokeRect(0, (PEN_TOP + 8) * sy, (PEN_BOX / 2) * sx, (PEN_BOT - PEN_TOP - 16) * sy);
   ctx.strokeRect((PITCH_W - PEN_BOX / 2) * sx, (PEN_TOP + 8) * sy, (PEN_BOX / 2) * sx, (PEN_BOT - PEN_TOP - 16) * sy);
 
-  // ---- Goals + optional green glow ------------------------------------------
+  // Goals + flash
   const drawGoal = (isRight: boolean, flashAt: number) => {
     const gx = isRight ? W : 0;
     const gy0 = GOAL_TOP * sy;
@@ -660,27 +782,24 @@ function draw(
     if (age < 900) {
       const t = 1 - age / 900;
       ctx.fillStyle = `rgba(34,255,119,${0.45 * t})`;
-      ctx.fillRect(isRight ? gx - 26 : 0, gy0 - 10, 26, (gy1 - gy0) + 20);
+      ctx.fillRect(isRight ? gx - 30 : 0, gy0 - 12, 30, (gy1 - gy0) + 24);
     }
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(isRight ? gx - width : 0, gy0, width, gy1 - gy0);
   };
-  drawGoal(false, awayFlashSide()); // away flash sits on the left goal (home concedes)
-  drawGoal(true, homeFlashSide());  // home scores → right goal flashes
+  drawGoal(false, d.awayFlashAt);
+  drawGoal(true, d.homeFlashAt);
 
-  function homeFlashSide() { return d.homeFlashAt; }
-  function awayFlashSide() { return d.awayFlashAt; }
-
-  // ---- Ball trail ------------------------------------------------------------
-  state.ball.trail.forEach((t) => {
-    ctx.fillStyle = `rgba(255,255,255,${0.10 * t.a})`;
+  // Ball trail
+  st.ball.trail.forEach((t) => {
+    ctx.fillStyle = `rgba(255,255,255,${0.14 * t.a})`;
     ctx.beginPath();
     ctx.arc(t.x * sx, t.y * sy, BALL_R * sx * 0.9, 0, Math.PI * 2);
     ctx.fill();
   });
 
-  // ---- Discs -----------------------------------------------------------------
-  state.discs.forEach((disc) => {
+  // Discs
+  st.discs.forEach((disc) => {
     const cx = disc.x * sx;
     const cy = disc.y * sy;
     const rPx = R * sx;
@@ -691,7 +810,6 @@ function draw(
     ctx.arc(cx, cy, rPx, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
-    // number
     ctx.fillStyle = disc.side === "home" ? COL.homeTxt : COL.awayTxt;
     ctx.font = `bold ${Math.max(9, Math.floor(rPx * 1.1))}px "Press Start 2P", "Courier New", monospace`;
     ctx.textAlign = "center";
@@ -699,24 +817,31 @@ function draw(
     ctx.fillText(String(disc.number), cx, cy + 1);
   });
 
-  // ---- Ball ------------------------------------------------------------------
-  const bx = state.ball.x * sx;
-  const by = state.ball.y * sy;
+  // Ball
+  const bx = st.ball.x * sx;
+  const by = st.ball.y * sy;
   const bR = BALL_R * sx;
-  // shadow
   ctx.fillStyle = "rgba(0,0,0,0.5)";
-  ctx.beginPath();
-  ctx.arc(bx + 1.5, by + 1.5, bR * 1.15, 0, Math.PI * 2);
-  ctx.fill();
-  // ball body — pixel-cluster feel: main disc + darker centre dot
+  ctx.beginPath(); ctx.arc(bx + 1.5, by + 1.5, bR * 1.15, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = COL.ball;
-  ctx.beginPath();
-  ctx.arc(bx, by, bR * 1.2, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.beginPath(); ctx.arc(bx, by, bR * 1.2, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = "#000000";
-  ctx.beginPath();
-  ctx.arc(bx, by, bR * 0.35, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.beginPath(); ctx.arc(bx, by, bR * 0.35, 0, Math.PI * 2); ctx.fill();
+
+  // Celebration overlay
+  if (st.celebration && d.now < st.celebration.until) {
+    const life = 1 - (st.celebration.until - d.now) / 1600;
+    ctx.fillStyle = `rgba(0,0,0,${0.35 + life * 0.15})`;
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "#f5c542";
+    ctx.font = `bold ${Math.floor(H * 0.28)}px "Press Start 2P", "Courier New", monospace`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = "#f5c542";
+    ctx.shadowBlur = 24;
+    ctx.fillText(st.celebration.text, W / 2, H / 2);
+    ctx.shadowBlur = 0;
+  }
 }
 
 export default CanvasMatch;

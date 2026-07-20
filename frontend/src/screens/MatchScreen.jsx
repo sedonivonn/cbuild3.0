@@ -1,26 +1,13 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { sound } from "../engine/sounds";
-import { Gauge, FastForward, Zap, Pause } from "lucide-react";
 import { FORMATIONS } from "../data/formations";
 import { CanvasMatch } from "./match/CanvasMatch";
 
-// Sim speed: ms delay between events
-const SPEEDS = [
-  { key: "slow",    label: "YAVAŞ",  icon: Pause,       delay: 900 },
-  { key: "normal",  label: "NORMAL", icon: Gauge,       delay: 400 },
-  { key: "fast",    label: "HIZLI",  icon: FastForward, delay: 130 },
-  { key: "ultra",   label: "ULTRA",  icon: Zap,         delay: 25  },
-];
-
-const SPEED_KEY = "ucl_match_speed_v1";
-
-function loadSpeed() {
-  try { return localStorage.getItem(SPEED_KEY) || "normal"; } catch (_) { return "normal"; }
-}
-function saveSpeed(k) {
-  try { localStorage.setItem(SPEED_KEY, k); } catch (_) { /* ignore */ }
-}
+// Single-speed reveal cadence. The speed picker was removed on user request
+// (iter-28) — every match plays at the calm "yavaş" pace now, and users skip
+// the whole simulation via the new MAÇI ATLA button (see `handleSkip`).
+const EVENT_DELAY_MS = 1600;
 
 // -----------------------------------------------------------------------------
 // Opponent XI → formation mapping (opponents don't carry a formation, only a
@@ -71,12 +58,11 @@ export const MatchScreen = ({ match, onClose }) => {
   const [visibleIdx, setVisibleIdx] = useState(0);
   const [phase, setPhase] = useState("prematch"); // prematch -> kickoff -> playing -> et_confirm -> playing_et -> penalties -> done
   const [legIdx, setLegIdx] = useState(0);
-  const [speedKey, setSpeedKey] = useState(loadSpeed());
   const [penShotIdx, setPenShotIdx] = useState(0);
   const [etVisibleIdx, setEtVisibleIdx] = useState(0);
   const finishedRef = useRef(false);
 
-  const speed = SPEEDS.find((s) => s.key === speedKey) || SPEEDS[1];
+  const speed = { delay: EVENT_DELAY_MS };
 
   const isKnockout = !!match.knockout;
   const legs = useMemo(() => {
@@ -205,6 +191,29 @@ export const MatchScreen = ({ match, onClose }) => {
     onClose();
   };
 
+  // Skip the visual playback of the current phase and jump straight to the
+  // outcome. Regulation → et_confirm (or penalties, or done). Extra time →
+  // penalties (or done). Users who don't want to watch the sim can bounce to
+  // the next match with a single tap.
+  const handleSkip = () => {
+    if (phase === "playing") {
+      setVisibleIdx(regulationEvents.length);
+      if (isLastLeg && hasExtraTime) setPhase("et_confirm");
+      else if (isLastLeg && hasPenalties) setPhase("penalties");
+      else setPhase("done");
+    } else if (phase === "playing_et") {
+      setEtVisibleIdx(extraTimeEvents.length);
+      if (hasPenalties) setPhase("penalties");
+      else setPhase("done");
+    } else if (phase === "kickoff") {
+      // Jump past kickoff → skip regulation entirely.
+      setVisibleIdx(regulationEvents.length);
+      if (isLastLeg && hasExtraTime) setPhase("et_confirm");
+      else if (isLastLeg && hasPenalties) setPhase("penalties");
+      else setPhase("done");
+    }
+  };
+
   const nextLeg = () => {
     if (legIdx + 1 < legs.length) setLegIdx(legIdx + 1);
     else handleClose();
@@ -313,7 +322,6 @@ export const MatchScreen = ({ match, onClose }) => {
           <div className="font-mono text-xs tracking-widest text-amber-300">
             {stageLabel}
           </div>
-          <SpeedPicker speedKey={speedKey} onChange={(k) => { setSpeedKey(k); saveSpeed(k); }} />
         </div>
 
         {/* --- PRE-MATCH: side-by-side lineups + pitches ------------------ */}
@@ -341,8 +349,7 @@ export const MatchScreen = ({ match, onClose }) => {
             liveMinute={liveMinute}
             events={shownEvents}
             latestEvent={latestEvent}
-            speedKey={speedKey}
-            onSpeedChange={(k) => { setSpeedKey(k); saveSpeed(k); }}
+            onSkip={handleSkip}
           />
         )}
 
@@ -583,29 +590,6 @@ const OvrBadge = ({ ovr }) => {
 
 
 
-
-const SpeedPicker = ({ speedKey, onChange }) => (
-  <div className="flex items-center gap-1 glass !bg-white/5 rounded-full p-0.5" data-testid="speed-picker">
-    {SPEEDS.map((s) => {
-      const Icon = s.icon;
-      const active = s.key === speedKey;
-      return (
-        <button
-          key={s.key}
-          type="button"
-          onClick={() => onChange(s.key)}
-          data-testid={`speed-${s.key}`}
-          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-mono tracking-wider transition-all ${
-            active ? "bg-amber-300 text-black" : "text-white/60 hover:text-white"
-          }`}
-        >
-          <Icon size={11} />
-          {s.label}
-        </button>
-      );
-    })}
-  </div>
-);
 
 const PenaltyColumn = ({ name, shots, totalScored }) => (
   <div>
