@@ -315,8 +315,26 @@ export const MatchScreen = ({ match, onClose }) => {
     return arr;
   }, [regulationEvents, visibleIdx, extraTimeEvents, etVisibleIdx, phase]);
 
+  // Prematch: allow cancelling by pressing Escape or clicking the backdrop.
+  // We only wire these while the animation hasn't started yet — once the
+  // simulation kicks off, the modal must run to completion so that the
+  // tournament state stays consistent with the (already-applied) result.
+  useEffect(() => {
+    if (phase !== "prematch") return;
+    const onKey = (ev) => { if (ev.key === "Escape") handleClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [phase]);
+
   return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center px-4 py-6 bg-black/85 backdrop-blur-md overflow-y-auto" data-testid="match-modal">
+    <div
+      className="fixed inset-0 z-40 flex items-center justify-center px-4 py-6 bg-black/85 backdrop-blur-md overflow-y-auto"
+      data-testid="match-modal"
+      onClick={(e) => {
+        // Only backdrop clicks close, and only while still in prematch.
+        if (phase === "prematch" && e.target === e.currentTarget) handleClose();
+      }}
+    >
       <motion.div
         initial={{ opacity: 0, y: 20, scale: 0.96 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -339,6 +357,7 @@ export const MatchScreen = ({ match, onClose }) => {
             homeLineup={homeLineup}
             awayLineup={awayLineup}
             onStart={startMatch}
+            onCancel={handleClose}
           />
         )}
 
@@ -545,7 +564,7 @@ export const MatchScreen = ({ match, onClose }) => {
 // -----------------------------------------------------------------------------
 // PreMatchLineups — two team columns, each with player list and a mini pitch.
 // -----------------------------------------------------------------------------
-const PreMatchLineups = ({ homeName, awayName, homeRef, awayRef, homeLineup, awayLineup, onStart }) => (
+const PreMatchLineups = ({ homeName, awayName, homeRef, awayRef, homeLineup, awayLineup, onStart, onCancel }) => (
   <div data-testid="prematch-lineups">
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
       <TeamLineupPanel
@@ -561,17 +580,22 @@ const PreMatchLineups = ({ homeName, awayName, homeRef, awayRef, homeLineup, awa
         lineup={awayLineup}
       />
     </div>
-    <div className="mt-5 flex justify-center">
+    <div className="mt-5 flex items-center justify-center gap-3">
+      <button type="button" className="btn-ghost" onClick={onCancel} data-testid="prematch-cancel-button">
+        ← GERİ
+      </button>
       <button type="button" className="btn-primary" onClick={onStart} data-testid="start-match-button">
         MAÇI BAŞLAT →
       </button>
+    </div>
+    <div className="mt-2 text-center text-[10px] font-mono tracking-widest text-white/40">
+      ESC veya dışarı tıklamak da geri dönüyor
     </div>
   </div>
 );
 
 const TeamLineupPanel = ({ name, subtitle, accent, lineup }) => {
   const players = lineup?.xi || [];
-  const formation = FORMATIONS[lineup?.formationId] || FORMATIONS[DEFAULT_OPP_FORMATION];
   const barClass = accent === "left"
     ? "bg-gradient-to-r from-amber-300/25 to-transparent border-l-4 border-amber-300"
     : "bg-gradient-to-l from-red-400/25 to-transparent border-r-4 border-red-400";
@@ -581,7 +605,8 @@ const TeamLineupPanel = ({ name, subtitle, accent, lineup }) => {
         <div className="font-display text-lg md:text-xl tracking-tight truncate">{name}</div>
         {subtitle && <div className="text-[10px] font-mono tracking-widest text-white/60 truncate">{subtitle}</div>}
       </div>
-      {/* Player list */}
+      {/* Player list only — the mini pitch under the list was removed on user
+          request. Keep the list as the single source of prematch info. */}
       <ul className="p-3 space-y-1 min-w-0" data-testid={`lineup-list-${accent}`}>
         {players.slice(0, 11).map((p, i) => {
           if (!p) {
@@ -602,10 +627,6 @@ const TeamLineupPanel = ({ name, subtitle, accent, lineup }) => {
           );
         })}
       </ul>
-      {/* Bigger mini pitch, showing jersey number + last name under each dot */}
-      <div className="px-3 pb-3 pt-1">
-        <MiniPitch formation={formation} players={players.slice(0, 11)} />
-      </div>
     </div>
   );
 };
@@ -622,84 +643,11 @@ const OvrBadge = ({ ovr }) => {
   );
 };
 
-// Pitch under each team panel. Shows every slot with jersey number in the dot
-// and the player's short last-name below. Position label sits above the dot.
-const MiniPitch = ({ formation, players = [] }) => {
-  const slots = formation?.slots || [];
-  const shortName = (fullName) => {
-    if (!fullName) return "";
-    // Last space-separated token — good enough for "Cristiano Ronaldo" → "Ronaldo".
-    // For single-token names ("Xavi", "Pelé") returns them as-is.
-    const parts = String(fullName).trim().split(/\s+/);
-    return parts[parts.length - 1];
-  };
-  return (
-    <div
-      className="relative rounded-lg w-full"
-      style={{
-        aspectRatio: "0.72 / 1",
-        maxWidth: 300,
-        margin: "0 auto",
-        background:
-          "repeating-linear-gradient(0deg, rgba(255,255,255,0.04) 0 16px, rgba(255,255,255,0) 16px 32px), radial-gradient(120% 100% at 50% 0%, #17693a 0%, #0f4c26 60%, #0a331a 100%)",
-        border: "1px solid rgba(255,255,255,0.14)",
-      }}
-      data-testid="mini-pitch"
-    >
-      {/* halfway line */}
-      <div className="absolute left-3 right-3 top-1/2 h-px bg-white/25" />
-      {/* center circle */}
-      <div
-        className="absolute rounded-full border border-white/25"
-        style={{ width: "22%", aspectRatio: "1 / 1", left: "50%", top: "50%", transform: "translate(-50%, -50%)" }}
-      />
-      {/* penalty boxes (top & bottom) */}
-      <div className="absolute left-1/2 -translate-x-1/2 border border-white/20"
-           style={{ top: 4, width: "60%", height: "12%" }} />
-      <div className="absolute left-1/2 -translate-x-1/2 border border-white/20"
-           style={{ bottom: 4, width: "60%", height: "12%" }} />
+// Pitch under each team panel was removed on user request — MiniPitch
+// deleted. `FORMATIONS[DEFAULT_OPP_FORMATION]` is still used by
+// `buildOpponentXi` above to slot opponents into a 4-3-3 template.
 
-      {slots.map((slot, i) => {
-        const p = players[i];
-        const jersey = i + 1;
-        const last = p ? shortName(p.name) : "";
-        return (
-          <div
-            key={slot.id}
-            className="absolute flex flex-col items-center"
-            style={{
-              top: `${slot.top}%`,
-              left: `${slot.left}%`,
-              transform: "translate(-50%, -50%)",
-              width: 74,
-            }}
-          >
-            <div className="text-[9px] font-mono tracking-widest text-white/70 mb-0.5" style={{ textShadow: "0 1px 2px rgba(0,0,0,0.7)" }}>
-              {slot.pos}
-            </div>
-            <div
-              className="flex items-center justify-center rounded-full bg-white text-black font-display leading-none"
-              style={{
-                width: 26,
-                height: 26,
-                fontSize: 13,
-                boxShadow: "0 2px 6px rgba(0,0,0,0.55)",
-              }}
-            >
-              {jersey}
-            </div>
-            <div
-              className="mt-1 text-[9px] md:text-[10px] font-mono tracking-tight text-white text-center truncate w-full"
-              style={{ textShadow: "0 1px 2px rgba(0,0,0,0.9)" }}
-            >
-              {last || "—"}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-};
+
 
 // -----------------------------------------------------------------------------
 // ShotAnimation — a football glides toward the net. On GOAL, it hits the mesh

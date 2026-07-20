@@ -1,0 +1,21 @@
+{
+  "summary": "Iteration 26 frontend polish verified. All 9 tests passed: (1) no mini-pitch in prematch DOM, (2) '← GERİ' + 'MAÇI BAŞLAT →' both visible/centered, (3) GERİ closes modal, (4) ESC closes modal in prematch, (5) backdrop click closes modal in prematch, (6) inside-card click does NOT close, (7) after start, prematch-cancel-button removed, (8) ESC + backdrop do NOT close post-start, (9) match runs to completion (ULTRA speed reached close-match-button). Ticker shows critical events with shooter attribution ('Kaçan fırsat: <name>'). Lineup lists still render 11 <li> rows each.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/tests/matchscreen_osm_test.py"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "MatchScreen.jsx is ~1026 lines and starting to exceed the recommended 700-line ceiling. Consider extracting PreMatchLineups/TeamLineupPanel, ShotAnimation+NetSVG+BallSVG, TickerRow/PenaltyColumn/StatBar/SpeedPicker into separate files under /screens/match/*.jsx. Purely a maintainability suggestion, not a bug.",
+    "The keydown handler for Escape and the backdrop onClick both correctly gate on phase==='prematch' — verified working. handleClose uses a finishedRef guard so double-fire (ESC + backdrop) is safe."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a", "frontend": "100%"},
+  "seed_data_creation": "Reused iter-24 SEED_SAVE dict (Ajax 1995 XI, 4-3-3, tiki_taka, tournamentMode=group) via localStorage key 'ucl_draft_save_v1'.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 26 polish is fully verified via playwright. Seed strategy identical to iter-24/25. Data-testids of interest: mini-pitch (must remain ABSENT), prematch-cancel-button (only in prematch phase), start-match-button, match-modal, prematch-lineups, lineup-list-left/right, shot-anim-goal, shot-anim-save."
+}
