@@ -573,15 +573,17 @@ function stepAI(
     }
   }
 
-  // Filler commentary trickle (every ~4-6s of sim time), tone-matched to state.
+  // Filler commentary trickle. Tuned tight enough to keep the log alive even
+  // in NORMAL/FAST where the full 90' timeline reveals inside ~10s of sim
+  // time — at SLOW it produces ~6-8 lines per match, at ULTRA ~15+.
   state.sinceLastFiller += dt;
-  if (state.sinceLastFiller > 3.5 + Math.random() * 2.5) {
+  if (state.sinceLastFiller > 1.4 + Math.random() * 1.6) {
     state.sinceLastFiller = 0;
     if (owner) {
-      const bucket = Math.random() < 0.65 ? FILLER_PASS : FILLER_PRESS;
+      const roll = Math.random();
+      const bucket = roll < 0.55 ? FILLER_PASS : roll < 0.85 ? FILLER_PRESS : FILLER_CORNER;
       emitFiller(pick(bucket), "filler");
     } else if (Math.hypot(ball.vx, ball.vy) > 30) {
-      // fast-moving loose ball — probably a shot flying about
       emitFiller("Şut denemesi!", "shot");
     }
   }
