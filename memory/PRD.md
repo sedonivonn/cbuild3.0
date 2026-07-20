@@ -127,3 +127,26 @@ Verified by testing_agent_v3 (iteration 25): 8/8 acceptance criteria pass
 including MiniPitch measurements, fixed 2400ms duration at ULTRA, critical
 filter, KRİTİK ATAK banner, both-sides triggers, ticker shooter attribution,
 ripple-on-goal-only, regression of online-removal + prematch-gate.
+
+## 2026-07-20 UPDATE — Prematch cleanup + cancel routes
+User feedback: mini-pitch under the player list wasn't landing visually — and
+there was no way to back out of the prematch modal once opened.
+
+MatchScreen (`/app/frontend/src/screens/MatchScreen.jsx`)
+- **Removed the `MiniPitch` component entirely** and the render call under
+  each `TeamLineupPanel`. Prematch now only shows the header + 11-row player
+  list per team.
+- **New prematch cancel routes** (only active while `phase === "prematch"`):
+  - `← GERİ` button (`data-testid="prematch-cancel-button"`) placed next to
+    `MAÇI BAŞLAT →`.
+  - Escape key closes the modal.
+  - Backdrop click (outside the modal card) closes the modal.
+  - Once the match starts (phase moves past prematch), all three routes are
+    disabled — the simulation must run to completion so the tournament
+    state stays consistent with the already-applied result.
+- `handleClose` guarded by `finishedRef` so ESC + backdrop double-fire is
+  safe.
+
+Verified by testing_agent_v3 (iteration 26): 9/9 tests pass — no mini-pitch
+in DOM, GERİ button visible & closes modal, ESC closes, backdrop closes,
+inside-card clicks preserved, cancel routes disabled after start.
