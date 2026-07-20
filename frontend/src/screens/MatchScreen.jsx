@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { sound } from "../engine/sounds";
 import { Gauge, FastForward, Zap, Pause } from "lucide-react";
 import { FORMATIONS } from "../data/formations";
+import { CanvasMatch } from "./match/CanvasMatch";
 
 // Sim speed: ms delay between events
 const SPEEDS = [
@@ -73,7 +74,6 @@ export const MatchScreen = ({ match, onClose }) => {
   const [speedKey, setSpeedKey] = useState(loadSpeed());
   const [penShotIdx, setPenShotIdx] = useState(0);
   const [etVisibleIdx, setEtVisibleIdx] = useState(0);
-  const [shotAnim, setShotAnim] = useState(null); // { type: "GOAL"|"SAVE", side: "home"|"away", minute }
   const finishedRef = useRef(false);
 
   const speed = SPEEDS.find((s) => s.key === speedKey) || SPEEDS[1];
@@ -121,22 +121,11 @@ export const MatchScreen = ({ match, onClose }) => {
     return buildOpponentXi(awayRef?.players);
   }, [awayRef, match.userXi, match.userFormationId]);
 
-  // Event styling used by the ticker. Home events sit on the left, away on the right.
-  const eventClass = (e) => {
-    if (e.type === "GOAL") {
-      const isUserGoal = userSide && e.side === userSide;
-      return isUserGoal ? "text-amber-300 font-semibold" : "text-white font-semibold";
-    }
-    if (e.type === "SAVE") return "text-emerald-300";
-    return "text-white/60";
-  };
-
   // Reset per leg (excluding prematch which only fires on the first leg entry).
   useEffect(() => {
     setVisibleIdx(0);
     setEtVisibleIdx(0);
     setPenShotIdx(0);
-    setShotAnim(null);
     finishedRef.current = false;
     if (legIdx === 0) return; // first leg is handled by prematch → start button
     sound.whistleStart();
@@ -151,18 +140,10 @@ export const MatchScreen = ({ match, onClose }) => {
     setTimeout(() => setPhase("playing"), 800);
   };
 
-  // Should we run the ball-flight animation before revealing this event?
-  // Rule: only "critical" events (all goals + a subset of saves — flagged by
-  // matchEngine) trigger the animation, so it stays a rare highlight instead
-  // of firing on every shot.
-  const isCriticalShot = (e) =>
-    e && (e.type === "GOAL" || e.type === "SAVE") && e.critical === true;
-  const shouldAnimateShot = (e) => isCriticalShot(e);
-  // Fixed cinematic duration regardless of sim speed — even in ULTRA the
-  // highlight plays at the same dramatic pace so the moment always lands.
-  const SHOT_ANIM_MS = 2400;
-
-  // Regulation event ticker (minutes 1-90)
+  // Regulation event ticker (minutes 1-90). The old cinematic shot-flight
+  // overlay was retired now that the canvas drives all in-play visuals; here
+  // we simply pace the event reveal so the canvas + commentary receive
+  // consistent updates at the user's chosen speed.
   useEffect(() => {
     if (phase !== "playing") return;
     if (visibleIdx >= regulationEvents.length) {
@@ -175,21 +156,12 @@ export const MatchScreen = ({ match, onClose }) => {
       return () => clearTimeout(t);
     }
     const e = regulationEvents[visibleIdx];
-    if (shouldAnimateShot(e)) {
-      setShotAnim({ type: e.type, side: e.side, minute: e.minute, scorer: e.scorer, assist: e.assist, shooter: e.shooter });
-      const t = setTimeout(() => {
-        if (e.type === "GOAL") sound.goal();
-        setShotAnim(null);
-        setVisibleIdx((i) => i + 1);
-      }, SHOT_ANIM_MS);
-      return () => clearTimeout(t);
-    }
     const t = setTimeout(() => {
       if (e.type === "GOAL") sound.goal();
       setVisibleIdx((i) => i + 1);
     }, speed.delay);
     return () => clearTimeout(t);
-  }, [phase, visibleIdx, regulationEvents, speed.delay, isLastLeg, hasExtraTime, hasPenalties, speedKey]);
+  }, [phase, visibleIdx, regulationEvents, speed.delay, isLastLeg, hasExtraTime, hasPenalties]);
 
   // Extra-time event ticker (minutes 91-120)
   useEffect(() => {
@@ -203,21 +175,12 @@ export const MatchScreen = ({ match, onClose }) => {
       return () => clearTimeout(t);
     }
     const e = extraTimeEvents[etVisibleIdx];
-    if (shouldAnimateShot(e)) {
-      setShotAnim({ type: e.type, side: e.side, minute: e.minute, scorer: e.scorer, assist: e.assist, shooter: e.shooter });
-      const t = setTimeout(() => {
-        if (e.type === "GOAL") sound.goal();
-        setShotAnim(null);
-        setEtVisibleIdx((i) => i + 1);
-      }, SHOT_ANIM_MS);
-      return () => clearTimeout(t);
-    }
     const t = setTimeout(() => {
       if (e.type === "GOAL") sound.goal();
       setEtVisibleIdx((i) => i + 1);
     }, speed.delay);
     return () => clearTimeout(t);
-  }, [phase, etVisibleIdx, extraTimeEvents, speed.delay, hasPenalties, speedKey]);
+  }, [phase, etVisibleIdx, extraTimeEvents, speed.delay, hasPenalties]);
 
   // Penalty reveal (slow, suspense)
   useEffect(() => {
@@ -315,6 +278,12 @@ export const MatchScreen = ({ match, onClose }) => {
     return arr;
   }, [regulationEvents, visibleIdx, extraTimeEvents, etVisibleIdx, phase]);
 
+  // Freshest event, fed to <CanvasMatch> so its commentary log advances.
+  const latestEvent = shownEvents.length > 0 ? shownEvents[shownEvents.length - 1] : null;
+
+  const isCanvasPhase = phase === "playing" || phase === "playing_et" || phase === "kickoff";
+  const stageLabel = `${match.stage ? match.stage : "GRUP AŞAMASI"}${legs.length > 1 ? ` · LEG ${legIdx + 1}/${legs.length} · ${isSecondLeg ? "RÖVANŞ" : "İLK MAÇ"}` : ""}`;
+
   // Prematch: allow cancelling by pressing Escape or clicking the backdrop.
   // We only wire these while the animation hasn't started yet — once the
   // simulation kicks off, the modal must run to completion so that the
@@ -340,9 +309,9 @@ export const MatchScreen = ({ match, onClose }) => {
         animate={{ opacity: 1, y: 0, scale: 1 }}
         className={`glass rounded-2xl w-full ${phase === "prematch" ? "max-w-5xl" : "max-w-3xl"} p-5 md:p-7`}
       >
-        <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
+        <div className={`flex items-center justify-between mb-2 flex-wrap gap-2 ${isCanvasPhase ? "hidden" : ""}`}>
           <div className="font-mono text-xs tracking-widest text-amber-300">
-            {match.stage ? match.stage : "GRUP AŞAMASI"}{legs.length > 1 && ` · LEG ${legIdx + 1}/${legs.length} · ${isSecondLeg ? "RÖVANŞ" : "İLK MAÇ"}`}
+            {stageLabel}
           </div>
           <SpeedPicker speedKey={speedKey} onChange={(k) => { setSpeedKey(k); saveSpeed(k); }} />
         </div>
@@ -361,8 +330,24 @@ export const MatchScreen = ({ match, onClose }) => {
           />
         )}
 
-        {/* --- SCOREBOARD (visible during play/done, not in prematch) ----- */}
-        {phase !== "prematch" && (
+        {/* --- CANVAS MATCH (in-play view: kickoff → playing → playing_et) - */}
+        {isCanvasPhase && (
+          <CanvasMatch
+            stageLabel={stageLabel}
+            homeName={homeName}
+            awayName={awayName}
+            homeScore={displayedHomeScore}
+            awayScore={displayedAwayScore}
+            liveMinute={liveMinute}
+            events={shownEvents}
+            latestEvent={latestEvent}
+            speedKey={speedKey}
+            onSpeedChange={(k) => { setSpeedKey(k); saveSpeed(k); }}
+          />
+        )}
+
+        {/* --- Scoreboard for post-match phases (et_confirm / done) ------- */}
+        {(phase === "et_confirm" || phase === "done") && (
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 mb-3">
             <div className="text-right min-w-0">
               <div className="font-display text-lg md:text-2xl tracking-tight truncate" data-testid="home-name">{homeName}</div>
@@ -379,62 +364,11 @@ export const MatchScreen = ({ match, onClose }) => {
               >
                 {displayedHomeScore} <span className="text-white/30">·</span> {displayedAwayScore}
               </motion.div>
-              {liveMinute !== null && (
-                <div className="mt-1 inline-flex items-center gap-1 rounded-full px-2 py-0.5 bg-white/10 text-white/80 font-mono text-[10px] tracking-widest" data-testid="live-minute">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-                  {`${liveMinute}'`}
-                </div>
-              )}
             </div>
             <div className="min-w-0">
               <div className="font-display text-lg md:text-2xl tracking-tight truncate" data-testid="away-name">{awayName}</div>
               <div className="text-[10px] text-white/40 font-mono tracking-widest">{isKnockout ? "DEPLASMAN" : ""}</div>
             </div>
-          </div>
-        )}
-
-        {/* --- SHOT ANIMATION (over ticker while a chance unfolds) -------- */}
-        {phase !== "penalties" && phase !== "prematch" && (
-          <div className="relative">
-            <AnimatePresence>
-              {shotAnim && (
-                <ShotAnimation
-                  key={`${shotAnim.type}-${shotAnim.side}-${shotAnim.minute}`}
-                  anim={shotAnim}
-                  userSide={userSide}
-                  homeName={homeName}
-                  awayName={awayName}
-                  duration={SHOT_ANIM_MS}
-                />
-              )}
-            </AnimatePresence>
-
-            {/* Ticker (interleaved home-left / away-right OSM-style) */}
-            {!shotAnim && (
-              <div className="bg-black/40 rounded-xl p-3 max-h-64 overflow-y-auto border border-white/5" data-testid="event-ticker">
-                <AnimatePresence>
-                  {shownEvents.map((e, i) => (
-                    <TickerRow
-                      key={e._k}
-                      event={e}
-                      className={eventClass(e)}
-                      index={i}
-                    />
-                  ))}
-                  {phase === "kickoff" && (
-                    <div className="text-center text-white/40 font-display text-lg tracking-widest py-4">KICK-OFF</div>
-                  )}
-                  {phase === "playing" && visibleIdx === 0 && (
-                    <div className="text-white/40 text-sm text-center py-4">Maç başladı...</div>
-                  )}
-                  {phase === "playing_et" && etVisibleIdx === 0 && (
-                    <div className="text-center text-amber-300 font-display text-base tracking-widest py-3 border-t border-amber-300/30 mt-2">
-                      UZATMA BAŞLADI
-                    </div>
-                  )}
-                </AnimatePresence>
-              </div>
-            )}
           </div>
         )}
 
@@ -649,327 +583,6 @@ const OvrBadge = ({ ovr }) => {
 
 
 
-// -----------------------------------------------------------------------------
-// ShotAnimation — a football glides toward the net. On GOAL, it hits the mesh
-// with a golden flash; on SAVE, a red X stamps over it before it fades.
-// -----------------------------------------------------------------------------
-const ShotAnimation = ({ anim, userSide, homeName, awayName, duration }) => {
-  const isGoal = anim.type === "GOAL";
-  // Home attacks toward the right net; away attacks toward the left net.
-  const shootsRight = anim.side === "home";
-  const teamName = anim.side === "home" ? homeName : awayName;
-  const isUserSide = userSide && userSide === anim.side;
-  const accent = isGoal
-    ? (isUserSide ? "#f5c542" : "#ffffff")
-    : "#ef4444";
-
-  // Fixed cinematic timeline (in seconds), independent of the sim speed.
-  // 0.00–0.45  banner slide-in ("KRİTİK ATAK")
-  // 0.45–1.90  ball flight (ease-out, slows dramatically near the goal)
-  // 1.90–2.10  impact (goal flash / net ripple  OR  red X)
-  // 2.10–2.40  hold & fade
-  const total = duration / 1000; // ~2.4s
-  const bannerT = 0.55;
-  const flightStart = 0.55;
-  const flightEnd = 1.95;
-  const impactT = 1.95;
-  const holdEnd = total;
-  const flightDur = flightEnd - flightStart;
-
-  // Player card copy — scorer/assist for goals, shooter for saves.
-  const isKnown = !!(anim.scorer || anim.shooter);
-  const headline = isGoal
-    ? (isUserSide ? "MUHTEŞEM GOL!" : "GOL!")
-    : "KAÇAN FIRSAT";
-  const playerLine = isGoal ? (anim.scorer || null) : (anim.shooter || null);
-  const assistLine = isGoal && anim.assist ? `Asist: ${anim.assist}` : null;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.18 }}
-      className="bg-black/70 rounded-xl border border-white/10 overflow-hidden relative"
-      style={{ height: 280 }}
-      data-testid={`shot-anim-${anim.type.toLowerCase()}`}
-    >
-      {/* Stadium/pitch backdrop — glow sits on the target side. */}
-      <div className="absolute inset-0"
-        style={{
-          background:
-            shootsRight
-              ? "radial-gradient(120% 80% at 100% 50%, rgba(60,140,220,0.35) 0%, rgba(15,25,40,0.9) 55%, rgba(6,10,18,1) 100%)"
-              : "radial-gradient(120% 80% at 0% 50%, rgba(60,140,220,0.35) 0%, rgba(15,25,40,0.9) 55%, rgba(6,10,18,1) 100%)",
-        }}
-      />
-
-      {/* Net on the target side (bright white) */}
-      <NetSVG side={shootsRight ? "right" : "left"} isGoal={isGoal} impactAt={impactT} totalDur={holdEnd} />
-
-      {/* Minute badge (top-left, always) */}
-      <div className="absolute top-3 left-3 z-30 inline-flex items-center gap-2 rounded-full px-2.5 py-1 bg-black/60 border border-white/15 text-white/85 font-mono text-[11px] tracking-widest">
-        <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-        {`${anim.minute}'`}
-      </div>
-
-      {/* KRİTİK ATAK banner — slides in from top, out after the flight starts. */}
-      <motion.div
-        className="absolute left-1/2 top-3 z-30 -translate-x-1/2"
-        initial={{ y: -30, opacity: 0 }}
-        animate={{
-          y: [-30, 0, 0, -30],
-          opacity: [0, 1, 1, 0],
-        }}
-        transition={{
-          duration: bannerT + 0.35,
-          times: [0, 0.25, 0.75, 1],
-          ease: "easeOut",
-        }}
-      >
-        <div
-          className="px-3 py-1 rounded-full font-mono text-[11px] tracking-[0.25em] uppercase"
-          style={{
-            background: `linear-gradient(90deg, ${isUserSide ? "#f5c54233" : "#ffffff22"} 0%, transparent 100%)`,
-            border: `1px solid ${accent}66`,
-            color: accent,
-            boxShadow: `0 0 16px ${accent}55`,
-          }}
-        >
-          KRİTİK ATAK · {teamName}
-        </div>
-      </motion.div>
-
-      {/* Ball — starts on attacker's side, slows near the goal, and grows. */}
-      <motion.div
-        className="absolute z-[8]"
-        style={{ top: "50%" }}
-        initial={{
-          left: shootsRight ? "10%" : "82%",
-          y: "-50%",
-          scale: 0.55,
-          rotate: 0,
-          opacity: 0,
-        }}
-        animate={{
-          left: shootsRight ? ["10%", "10%", "70%", "78%"] : ["82%", "82%", "22%", "14%"],
-          y: ["-50%", "-50%", "-52%", "-52%"],
-          scale: [0.55, 0.55, 1.15, 1.5],
-          rotate: [0, 0, shootsRight ? 900 : -900, shootsRight ? 1080 : -1080],
-          opacity: [0, 1, 1, 1],
-        }}
-        transition={{
-          duration: impactT,
-          // times chart: 0 (hidden), banner-in visible pre-flight, mid-flight,
-          // arrival at net. The last leg from 0.85→1.0 is where the ball slows
-          // dramatically thanks to `cubic-bezier(0.15, 0.85, 0.25, 1)`.
-          times: [0, flightStart / impactT, (flightStart + flightDur * 0.7) / impactT, 1],
-          ease: [0.15, 0.85, 0.25, 1],
-        }}
-      >
-        <BallSVG size={64} />
-      </motion.div>
-
-      {/* Impact overlay — golden GOOOL burst OR big red X. Appears at 1.95s. */}
-      <motion.div
-        className={`absolute inset-0 flex items-center z-30 pointer-events-none ${shootsRight ? "justify-end pr-[8%]" : "justify-start pl-[8%]"}`}
-        initial={{ opacity: 0, scale: 0.4 }}
-        animate={{
-          opacity: [0, 0, 1, 1, 1],
-          scale: [0.4, 0.4, 1.15, 1.05, 1.05],
-        }}
-        transition={{
-          duration: holdEnd,
-          times: [0, impactT / holdEnd - 0.001, impactT / holdEnd, (impactT + 0.15) / holdEnd, 1],
-          ease: "easeOut",
-        }}
-      >
-        {isGoal ? (
-          <div className="relative">
-            <div
-              className="absolute -inset-10 rounded-full blur-2xl"
-              style={{ background: `radial-gradient(closest-side, ${accent}77, transparent 70%)` }}
-            />
-            <div
-              className="font-display text-5xl md:text-6xl tracking-tight"
-              style={{ color: accent, textShadow: `0 0 28px ${accent}` }}
-            >
-              GOOOL
-            </div>
-          </div>
-        ) : (
-          <div className="relative">
-            <svg width="140" height="140" viewBox="0 0 120 120" fill="none" style={{ filter: `drop-shadow(0 0 16px #ef4444aa)` }}>
-              <path d="M20 20 L100 100 M100 20 L20 100" stroke="#ef4444" strokeWidth="16" strokeLinecap="round" />
-            </svg>
-          </div>
-        )}
-      </motion.div>
-
-      {/* Player info card — slides in from the attacking side during flight, holds. */}
-      <motion.div
-        className={`absolute bottom-3 z-30 max-w-[70%] ${shootsRight ? "left-3" : "right-3 text-right"}`}
-        initial={{ opacity: 0, x: shootsRight ? -20 : 20 }}
-        animate={{
-          opacity: [0, 0, 1, 1],
-          x: [shootsRight ? -20 : 20, shootsRight ? -20 : 20, 0, 0],
-        }}
-        transition={{
-          duration: holdEnd,
-          times: [0, (flightStart + 0.35) / holdEnd, (flightStart + 0.75) / holdEnd, 1],
-          ease: "easeOut",
-        }}
-      >
-        <div className="rounded-lg bg-black/55 border border-white/15 backdrop-blur-sm px-3 py-2 inline-block">
-          <div className="font-mono text-[10px] tracking-widest" style={{ color: accent }}>
-            {headline}
-          </div>
-          {isKnown ? (
-            <>
-              <div className="font-display text-xl md:text-2xl tracking-tight leading-tight">{playerLine}</div>
-              {assistLine && (
-                <div className="text-[11px] font-mono tracking-wider text-white/70 mt-0.5">{assistLine}</div>
-              )}
-              <div className="text-[10px] font-mono tracking-widest text-white/50 uppercase truncate">{teamName}</div>
-            </>
-          ) : (
-            <div className="font-display text-xl md:text-2xl tracking-tight truncate">{teamName}</div>
-          )}
-        </div>
-      </motion.div>
-    </motion.div>
-  );
-};
-
-// Classic black-and-white football with proper pentagon/hexagon panels.
-const BallSVG = ({ size = 64 }) => (
-  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" style={{ filter: "drop-shadow(0 8px 14px rgba(0,0,0,0.6))" }}>
-    {/* white ball body */}
-    <circle cx="50" cy="50" r="46" fill="#ffffff" stroke="#0b0b0b" strokeWidth="2" />
-    {/* central pentagon (top) */}
-    <polygon points="50,20 66,32 60,52 40,52 34,32" fill="#0b0b0b" />
-    {/* five surrounding pentagons/patches to hint the classic pattern */}
-    <polygon points="18,42 30,32 34,44 26,58 14,54" fill="#0b0b0b" opacity="0.9" />
-    <polygon points="82,42 86,54 74,58 66,44 70,32" fill="#0b0b0b" opacity="0.9" />
-    <polygon points="30,74 42,66 50,74 44,86 30,84" fill="#0b0b0b" opacity="0.9" />
-    <polygon points="70,74 70,84 56,86 50,74 58,66" fill="#0b0b0b" opacity="0.9" />
-    {/* connecting seams */}
-    <path d="M50 20 L50 8 M18 42 L4 44 M82 42 L96 44 M30 74 L18 88 M70 74 L82 88 M40 52 L30 60 M60 52 L70 60 M50 74 L50 62" stroke="#0b0b0b" strokeWidth="1.2" />
-    {/* subtle highlight */}
-    <ellipse cx="38" cy="30" rx="14" ry="6" fill="#ffffff" opacity="0.5" />
-  </svg>
-);
-
-// White net with a light ripple animation on goals.
-const NetSVG = ({ side = "right", isGoal = false, impactAt = 2, totalDur = 2.4 }) => {
-  const lines = [];
-  const cols = 24;
-  const rows = 20;
-  for (let i = 0; i <= cols; i++) {
-    const x = (i / cols) * 100;
-    lines.push(<line key={`v-${i}`} x1={x} y1="0" x2={x} y2="100" stroke="rgba(255,255,255,0.75)" strokeWidth="0.4" />);
-  }
-  for (let j = 0; j <= rows; j++) {
-    const y = (j / rows) * 100;
-    lines.push(<line key={`h-${j}`} x1="0" y1={y} x2="100" y2={y} stroke="rgba(255,255,255,0.75)" strokeWidth="0.4" />);
-  }
-  const isRight = side === "right";
-  // Ripple animation timings — goal only. Pushes the net "inward" briefly.
-  const rippleTimes = [
-    0,
-    Math.max(0, (impactAt - 0.01) / totalDur),
-    impactAt / totalDur,
-    (impactAt + 0.18) / totalDur,
-    (impactAt + 0.36) / totalDur,
-    1,
-  ];
-  const rippleScaleX = isGoal ? [1, 1, isRight ? 1.10 : 1.10, 1.03, 1.005, 1.0] : [1, 1, 1, 1, 1, 1];
-  const rippleScaleY = isGoal ? [1, 1, 1.08, 1.02, 1.005, 1.0] : [1, 1, 1, 1, 1, 1];
-  const rippleTranslate = isGoal ? [0, 0, isRight ? 6 : -6, isRight ? 2 : -2, 0, 0] : [0, 0, 0, 0, 0, 0];
-
-  return (
-    <motion.div
-      className="absolute top-0 bottom-0 pointer-events-none"
-      style={{
-        [isRight ? "right" : "left"]: 0,
-        width: "58%",
-        maskImage: isRight
-          ? "linear-gradient(to left,  rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0) 100%)"
-          : "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0) 100%)",
-        WebkitMaskImage: isRight
-          ? "linear-gradient(to left,  rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0) 100%)"
-          : "linear-gradient(to right, rgba(0,0,0,1) 0%, rgba(0,0,0,0.85) 55%, rgba(0,0,0,0) 100%)",
-        transformOrigin: isRight ? "right center" : "left center",
-      }}
-      initial={{ scaleX: 1, scaleY: 1, x: 0 }}
-      animate={{ scaleX: rippleScaleX, scaleY: rippleScaleY, x: rippleTranslate }}
-      transition={{ duration: totalDur, times: rippleTimes, ease: "easeOut" }}
-    >
-      {/* Goal frame (bright white posts) */}
-      <div
-        className="absolute inset-y-2"
-        style={{
-          [isRight ? "left" : "right"]: "6%",
-          width: 3,
-          background: "linear-gradient(180deg, #ffffff 0%, #ffffff 80%, #e5e7eb 100%)",
-          boxShadow: "0 0 12px rgba(255,255,255,0.7)",
-          borderRadius: 2,
-        }}
-      />
-      <div
-        className="absolute"
-        style={{
-          top: 8,
-          [isRight ? "left" : "right"]: "6%",
-          [isRight ? "right" : "left"]: "6%",
-          height: 3,
-          background: "linear-gradient(90deg, #ffffff 0%, #ffffff 80%, #e5e7eb 100%)",
-          boxShadow: "0 0 12px rgba(255,255,255,0.7)",
-          borderRadius: 2,
-        }}
-      />
-      <svg
-        width="100%"
-        height="100%"
-        viewBox="0 0 100 100"
-        preserveAspectRatio="none"
-        style={{ transform: `perspective(400px) rotateY(${isRight ? "-18deg" : "18deg"})`, transformOrigin: isRight ? "left center" : "right center" }}
-      >
-        {lines}
-      </svg>
-    </motion.div>
-  );
-};
-
-// -----------------------------------------------------------------------------
-// TickerRow — home events left, away events right, keeps chronological order.
-// -----------------------------------------------------------------------------
-const TickerRow = ({ event, className, index }) => {
-  const leftSide = event.side === "home";
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 4 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="flex items-start gap-3 py-1"
-      data-testid={`match-event-${index}`}
-    >
-      <span className="font-mono text-[10px] w-9 shrink-0 text-white/40 pt-0.5">{`${event.minute}'`}</span>
-      <div className="flex-1 grid grid-cols-2 gap-2 items-start">
-        {leftSide ? (
-          <>
-            <div className={`text-sm md:text-[13px] ${className}`}>{event.text}</div>
-            <div />
-          </>
-        ) : (
-          <>
-            <div />
-            <div className={`text-sm md:text-[13px] text-right ${className}`}>{event.text}</div>
-          </>
-        )}
-      </div>
-    </motion.div>
-  );
-};
 
 const SpeedPicker = ({ speedKey, onChange }) => (
   <div className="flex items-center gap-1 glass !bg-white/5 rounded-full p-0.5" data-testid="speed-picker">
