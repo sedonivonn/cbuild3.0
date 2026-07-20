@@ -208,3 +208,52 @@ white), speed picker persists to localStorage, POTM + close-match-button
 still work post-match. Follow-up: tightened filler-commentary interval
 from `3.5 + rand*2.5` to `1.4 + rand*1.6` seconds and expanded the
 bucket to include corner mentions.
+
+## 2026-07-20 UPDATE — Richer canvas AI + skip button (iter-28)
+User feedback: iter-27 sim was too rushed ("santra → gol"), no visible pass
+buildup, weak defensive shifts, no keeper reaction. Also asked to drop the
+speed picker entirely (only the calm slow pace stays) and replace it with a
+single "MAÇI ATLA" skip button.
+
+CanvasMatch.tsx — full rewrite (~848 lines):
+- New `SimState` fields: `pending` (buildupLeft + type + shooter), `celebration`
+  (until + text + side), `restartAt` (post-goal calm-down window).
+- **Pending-shot buildup**: on latestEvent, canvas queues {2.4s GOAL / 2.0s
+  SAVE / 1.6s SHOT}. During buildup the ball actively passes among the
+  shooting side's attackers. When timer expires, the current owner (or the
+  most-forward attacker on that side) shoots with type-specific aim:
+  GOAL aims away from the keeper, SAVE aims on target (keeper intercepts),
+  SHOT aims wide. Kills the old teleport feel.
+- **Keeper AI upgrade**: keepers now sprint out of their line to intercept
+  along the ball's y-trajectory when a pending shot is in flight inside
+  their box. Otherwise they hold the goal line and slide with `ball.y`.
+- **Slower physics**: drag=0.55 (was 0.42), MAX_SPD=20 (was 22), pass
+  speed 16-26 (was 24-38), shot 50-62 (was 55-78). Every action reads
+  frame-by-frame instead of snapping.
+- **Longer carrier hold**: pass gated by `holdTime > 0.9s` AND either
+  `underPressure` (opponent within 3.2 units) OR `sinceLastPass > 2.2s +
+  jitter`. 22% chance of a backward safety pass to vary rhythm.
+- **Goal celebration**: 1.6s dark overlay + big "GOL!" text (`Press Start
+  2P`, #f5c542, glow). Kickoff resets ball to centre and both teams retreat
+  to home positions during a 900ms `restartAt` window.
+- **Richer filler**: 5 buckets (FILLER_BUILDUP, FILLER_PRESS, FILLER_ATTACK,
+  FILLER_KEEPER, FILLER_RESTART) with ~25 unique lines. Trickled at 1.5-3s.
+- **Skip button** (`data-testid="canvas-skip-button"`, lucide SkipForward
+  icon + "MAÇI ATLA" text) replaces the entire speed picker in the canvas
+  top-right.
+
+MatchScreen.jsx:
+- Removed `SPEEDS`, `SpeedPicker`, `speedKey` state and `loadSpeed`/`saveSpeed`
+  localStorage helpers (no more `ucl_match_speed_v1`).
+- Single hard-coded `EVENT_DELAY_MS = 1600` for the reveal cadence.
+- New `handleSkip()` fast-forwards the current phase's ticker to the end and
+  transitions phase (playing → et_confirm | penalties | done; playing_et →
+  penalties | done). Passed to CanvasMatch as `onSkip`.
+
+Verified by testing_agent_v3 (iteration 28): 10/10 tests pass.
+- Speed picker + all its testids fully absent
+- canvas-skip-button visible + closes canvas within ~333ms → post-match UI
+- EVENT_DELAY_MS=1600 confirmed; 13-event match ran ~21s naturally
+- Celebration overlay detected via centre-pixel sampling after score bump
+- Log richness: 35 distinct entries in 21s across all 5 filler buckets
+- Keeper AI dive verified, RAF still alive, prematch cancel routes intact
