@@ -55,11 +55,15 @@ function buildOpponentXi(players) {
 }
 
 export const MatchScreen = ({ match, onClose }) => {
-  const [visibleIdx, setVisibleIdx] = useState(0);
   const [phase, setPhase] = useState("prematch"); // prematch -> kickoff -> playing -> et_confirm -> playing_et -> penalties -> done
   const [legIdx, setLegIdx] = useState(0);
   const [penShotIdx, setPenShotIdx] = useState(0);
   const [etVisibleIdx, setEtVisibleIdx] = useState(0);
+  // Events emitted BY the pitch simulation on the canvas during regulation.
+  // These are the scoreboard's single source of truth for the live score,
+  // live minute and the commentary log — the parent never generates its own
+  // match events any more.
+  const [emittedRegEvents, setEmittedRegEvents] = useState([]);
   const finishedRef = useRef(false);
 
   const speed = { delay: EVENT_DELAY_MS };
@@ -109,7 +113,7 @@ export const MatchScreen = ({ match, onClose }) => {
 
   // Reset per leg (excluding prematch which only fires on the first leg entry).
   useEffect(() => {
-    setVisibleIdx(0);
+    setEmittedRegEvents([]);
     setEtVisibleIdx(0);
     setPenShotIdx(0);
     finishedRef.current = false;
@@ -126,30 +130,28 @@ export const MatchScreen = ({ match, onClose }) => {
     setTimeout(() => setPhase("playing"), 800);
   };
 
-  // Regulation event ticker (minutes 1-90). The old cinematic shot-flight
-  // overlay was retired now that the canvas drives all in-play visuals; here
-  // we simply pace the event reveal so the canvas + commentary receive
-  // consistent updates at the user's chosen speed.
-  useEffect(() => {
-    if (phase !== "playing") return;
-    if (visibleIdx >= regulationEvents.length) {
-      const t = setTimeout(() => {
-        sound.whistleEnd();
-        if (isLastLeg && hasExtraTime) setPhase("et_confirm");
-        else if (isLastLeg && hasPenalties && !hasExtraTime) setPhase("penalties");
-        else setPhase("done");
-      }, 400);
-      return () => clearTimeout(t);
-    }
-    const e = regulationEvents[visibleIdx];
-    const t = setTimeout(() => {
-      if (e.type === "GOAL") sound.goal();
-      setVisibleIdx((i) => i + 1);
-    }, speed.delay);
-    return () => clearTimeout(t);
-  }, [phase, visibleIdx, regulationEvents, speed.delay, isLastLeg, hasExtraTime, hasPenalties]);
+  // The canvas is the source of truth. Every physics event lands here first;
+  // we ONLY append to the scoreboard's log — we never invent events.
+  const handleCanvasEvent = (e) => {
+    setEmittedRegEvents((prev) => {
+      // De-dupe by minute+type+text (defensive against a double-tick edge).
+      const key = `${e.minute}-${e.type}-${e.text}`;
+      if (prev.some((p) => `${p.minute}-${p.type}-${p.text}` === key)) return prev;
+      return [...prev, e];
+    });
+    if (e.type === "GOAL") sound.goal();
+  };
 
-  // Extra-time event ticker (minutes 91-120)
+  // Canvas signals the simulation is fully done (natural end or skip button).
+  const handleCanvasEnd = () => {
+    sound.whistleEnd();
+    if (isLastLeg && hasExtraTime) setPhase("et_confirm");
+    else if (isLastLeg && hasPenalties && !hasExtraTime) setPhase("penalties");
+    else setPhase("done");
+  };
+
+  // Extra-time event ticker (minutes 91-120). ET still uses the pre-baked
+  // events from matchEngine — only regulation is physics-driven for now.
   useEffect(() => {
     if (phase !== "playing_et") return;
     if (etVisibleIdx >= extraTimeEvents.length) {
@@ -191,27 +193,24 @@ export const MatchScreen = ({ match, onClose }) => {
     onClose();
   };
 
-  // Skip the visual playback of the current phase and jump straight to the
-  // outcome. Regulation → et_confirm (or penalties, or done). Extra time →
-  // penalties (or done). Users who don't want to watch the sim can bounce to
-  // the next match with a single tap.
+  // Skip lives ON the canvas itself — the CanvasMatch button drives its own
+  // fast-forward through the physics and then calls back via `onEnd`, which
+  // is where we transition the phase. This keeps `handleSkip` a no-op alias
+  // (used when the canvas skip fires but hasn't triggered onEnd yet, e.g.
+  // during kickoff freeze).
   const handleSkip = () => {
-    if (phase === "playing") {
-      setVisibleIdx(regulationEvents.length);
-      if (isLastLeg && hasExtraTime) setPhase("et_confirm");
-      else if (isLastLeg && hasPenalties) setPhase("penalties");
-      else setPhase("done");
+    if (phase === "kickoff") {
+      // Kickoff phase: fast-forward the whole regulation. The canvas isn't
+      // mounted yet for stepping, so we just transition. (Rare path.)
+      setPhase(isLastLeg && hasExtraTime ? "et_confirm"
+             : isLastLeg && hasPenalties ? "penalties"
+             : "done");
     } else if (phase === "playing_et") {
       setEtVisibleIdx(extraTimeEvents.length);
-      if (hasPenalties) setPhase("penalties");
-      else setPhase("done");
-    } else if (phase === "kickoff") {
-      // Jump past kickoff → skip regulation entirely.
-      setVisibleIdx(regulationEvents.length);
-      if (isLastLeg && hasExtraTime) setPhase("et_confirm");
-      else if (isLastLeg && hasPenalties) setPhase("penalties");
-      else setPhase("done");
+      setPhase(hasPenalties ? "penalties" : "done");
     }
+    // For phase === "playing" the CanvasMatch drains the sim itself and
+    // fires handleCanvasEnd → phase transition. Nothing to do here.
   };
 
   const nextLeg = () => {
@@ -224,14 +223,14 @@ export const MatchScreen = ({ match, onClose }) => {
     setPhase("playing_et");
   };
 
-  // Score accumulation
+  // Score accumulation — regulation now reads from CANVAS-EMITTED events.
   const goalsSoFar = useMemo(() => {
     let h = 0, a = 0;
-    regulationEvents.slice(0, visibleIdx).forEach((e) => {
+    emittedRegEvents.forEach((e) => {
       if (e.type === "GOAL") { if (e.side === "home") h++; else a++; }
     });
     return { h, a };
-  }, [regulationEvents, visibleIdx]);
+  }, [emittedRegEvents]);
 
   const etGoalsSoFar = useMemo(() => {
     let h = 0, a = 0;
@@ -247,13 +246,11 @@ export const MatchScreen = ({ match, onClose }) => {
     displayedHomeScore = goalsSoFar.h;
     displayedAwayScore = goalsSoFar.a;
   } else if (phase === "et_confirm") {
-    displayedHomeScore = regulationEvents.reduce((s, e) => s + (e.type === "GOAL" && e.side === "home" ? 1 : 0), 0);
-    displayedAwayScore = regulationEvents.reduce((s, e) => s + (e.type === "GOAL" && e.side === "away" ? 1 : 0), 0);
+    displayedHomeScore = goalsSoFar.h;
+    displayedAwayScore = goalsSoFar.a;
   } else if (phase === "playing_et") {
-    const regH = regulationEvents.reduce((s, e) => s + (e.type === "GOAL" && e.side === "home" ? 1 : 0), 0);
-    const regA = regulationEvents.reduce((s, e) => s + (e.type === "GOAL" && e.side === "away" ? 1 : 0), 0);
-    displayedHomeScore = regH + etGoalsSoFar.h;
-    displayedAwayScore = regA + etGoalsSoFar.a;
+    displayedHomeScore = goalsSoFar.h + etGoalsSoFar.h;
+    displayedAwayScore = goalsSoFar.a + etGoalsSoFar.a;
   } else {
     displayedHomeScore = currentLeg.home.score;
     displayedAwayScore = currentLeg.away.score;
@@ -268,27 +265,17 @@ export const MatchScreen = ({ match, onClose }) => {
 
   const showAggregateBlock = phase === "done" && isKnockout && isLastLeg;
 
-  // Current minute in play — used for the OSM-style live clock badge.
+  // Live clock: regulation reads from the latest CANVAS-EMITTED event,
+  // extra time from the pre-baked ET tick pointer.
   const liveMinute = useMemo(() => {
-    if (phase === "playing" && visibleIdx > 0) {
-      return regulationEvents[Math.min(visibleIdx - 1, regulationEvents.length - 1)]?.minute ?? 0;
+    if (phase === "playing" && emittedRegEvents.length > 0) {
+      return emittedRegEvents[emittedRegEvents.length - 1].minute;
     }
     if (phase === "playing_et" && etVisibleIdx > 0) {
       return extraTimeEvents[Math.min(etVisibleIdx - 1, extraTimeEvents.length - 1)]?.minute ?? 90;
     }
     return null;
-  }, [phase, visibleIdx, etVisibleIdx, regulationEvents, extraTimeEvents]);
-
-  // Combined visible events (regulation + ET) for the interleaved ticker.
-  const shownEvents = useMemo(() => {
-    const arr = regulationEvents.slice(0, visibleIdx).map((e, i) => ({ ...e, _k: `reg-${i}` }));
-    const etCount = (phase === "playing_et") ? etVisibleIdx : ((phase === "done" || phase === "finished") ? extraTimeEvents.length : 0);
-    for (let i = 0; i < etCount; i++) arr.push({ ...extraTimeEvents[i], _k: `et-${i}` });
-    return arr;
-  }, [regulationEvents, visibleIdx, extraTimeEvents, etVisibleIdx, phase]);
-
-  // Freshest event, fed to <CanvasMatch> so its commentary log advances.
-  const latestEvent = shownEvents.length > 0 ? shownEvents[shownEvents.length - 1] : null;
+  }, [phase, emittedRegEvents, etVisibleIdx, extraTimeEvents]);
 
   const isCanvasPhase = phase === "playing" || phase === "playing_et" || phase === "kickoff";
   const stageLabel = `${match.stage ? match.stage : "GRUP AŞAMASI"}${legs.length > 1 ? ` · LEG ${legIdx + 1}/${legs.length} · ${isSecondLeg ? "RÖVANŞ" : "İLK MAÇ"}` : ""}`;
@@ -338,17 +325,27 @@ export const MatchScreen = ({ match, onClose }) => {
           />
         )}
 
-        {/* --- CANVAS MATCH (in-play view: kickoff → playing → playing_et) - */}
+        {/* --- CANVAS MATCH (in-play view) ------------------------------ */}
         {isCanvasPhase && (
           <CanvasMatch
+            key={`leg-${legIdx}`}
             stageLabel={stageLabel}
             homeName={homeName}
             awayName={awayName}
             homeScore={displayedHomeScore}
             awayScore={displayedAwayScore}
             liveMinute={liveMinute}
-            events={shownEvents}
-            latestEvent={latestEvent}
+            matchInputs={{
+              homeName,
+              awayName,
+              seed: currentLeg?.seed ?? 1,
+              _homePlayers: currentLeg?._homePlayers ?? null,
+              _awayPlayers: currentLeg?._awayPlayers ?? null,
+              _homeStrength: currentLeg?._homeStrength,
+              _awayStrength: currentLeg?._awayStrength,
+            }}
+            onEvent={handleCanvasEvent}
+            onEnd={handleCanvasEnd}
             onSkip={handleSkip}
           />
         )}

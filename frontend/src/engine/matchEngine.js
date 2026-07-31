@@ -1,5 +1,6 @@
 import { TACTICS } from "../data/tactics";
 import { pickScorerAndAssist, computePlayerRatings } from "./playerStats";
+import { createPitchState, stepPitch, TOTAL_TICKS } from "./pitchSim";
 
 // After ET events are appended to a leg, recompute the leg's per-side player
 // stats so that goals/assists scored in extra time are credited correctly.
@@ -80,139 +81,74 @@ function applyChemistry(stats, isUser) {
   };
 }
 
-// xG model: each side accumulates expected goals based on attack vs (defense + keeper).
-// Tempo and risk influence variance and number of chances.
-// Optional `homePlayers` / `awayPlayers` arrays (user XI) enable goal attribution.
-export function simulateMatch({ home, away, homeTacticId, awayTacticId, neutral = false, homeIsUser = false, awayIsUser = false, homePlayers = null, awayPlayers = null }) {
+// The single source of truth for a regulation match is now the physical
+// pitch simulation in `pitchSim.js`. `simulateMatch` runs that simulation
+// HEADLESSLY (same code path CanvasMatch uses in real-time) and derives the
+// events + score from the emergent physics. Given the same seed it always
+// produces the exact same events, which is how the canvas replay and the
+// tournament's stored result stay perfectly synchronised.
+//
+// Public API + return shape are intentionally identical to the pre-physics
+// version — tournamentEngine, leagueEngine, TournamentScreen and
+// LeagueTournamentScreen all keep working without any change on their side.
+export function simulateMatch({ home, away, homeTacticId, awayTacticId, neutral = false, homeIsUser = false, awayIsUser = false, homePlayers = null, awayPlayers = null, seed = null }) {
   const A = applyTactic(applyChemistry(home, homeIsUser), homeTacticId);
   const B = applyTactic(applyChemistry(away, awayIsUser), awayTacticId);
 
-  // home advantage
+  // Home advantage baked into home's attack strength.
   const ha = neutral ? 0 : 1.5;
-
-  // Counter modifiers (small)
   const aCounter = counterBonus(homeTacticId, awayTacticId);
   const bCounter = counterBonus(awayTacticId, homeTacticId);
 
-  // Base attacking strength differential
-  const aAtk = A.attack + ha + aCounter;
-  const bAtk = B.attack       + bCounter;
-  const aDef = (A.defense * 0.6 + A.keeper * 0.4);
-  const bDef = (B.defense * 0.6 + B.keeper * 0.4);
-
-  // Chance count from midfield dominance and tempo
-  const tempo = (A.tactic.mods.tempo + B.tactic.mods.tempo) / 2;
-  const midDom = (A.midfield - B.midfield) / 10;
-  const totalChances = Math.max(6, Math.round(13 * tempo + (rng() - 0.5) * 4));
-  const aShare = 0.5 + Math.tanh(midDom / 2) * 0.22;
-  const aShots = Math.max(2, Math.round(totalChances * aShare));
-  const bShots = Math.max(2, totalChances - aShots);
-
-  // xG per shot: depends on (Attack - Defense)
-  const xgPerShot = (atk, def, tacticXgFor, oppoXgAgainst) => {
-    const diff = atk - def;
-    // HARD MODE (C, full): widened cap so elite teams decisively beat weaker sides.
-    let v = 0.10 + Math.max(-0.08, Math.min(0.15, diff * 0.013));
-    v *= tacticXgFor;
-    v *= oppoXgAgainst;
-    return Math.max(0.04, v);
+  const homeStrength = {
+    attack:   A.attack + ha + aCounter,
+    midfield: A.midfield,
+    defense:  A.defense,
+    keeper:   A.keeper,
+  };
+  const awayStrength = {
+    attack:   B.attack + bCounter,
+    midfield: B.midfield,
+    defense:  B.defense,
+    keeper:   B.keeper,
   };
 
-  let aXgPer = xgPerShot(aAtk, bDef, A.tactic.mods.xgFor, B.tactic.mods.xgAgainst);
-  let bXgPer = xgPerShot(bAtk, aDef, B.tactic.mods.xgFor, A.tactic.mods.xgAgainst);
-  // Underdog boost neutralised in HARD MODE — calls retained for signature compat.
-  if (homeIsUser) aXgPer += underdogBoost();
-  if (awayIsUser) bXgPer += underdogBoost();
+  // Deterministic seed — callers may pass one for perfect reproducibility.
+  const usedSeed = (seed != null) ? (seed >>> 0) : (Math.floor(Math.random() * 0x7fffffff) >>> 0);
 
-  const aXg = +(aShots * aXgPer).toFixed(2);
-  const bXg = +(bShots * bXgPer).toFixed(2);
+  const state = createPitchState({
+    homeName: home.name,
+    awayName: away.name,
+    homePlayers,
+    awayPlayers,
+    homeStrength,
+    awayStrength,
+    seed: usedSeed,
+  });
 
-  // Generate minute-by-minute events.
   const events = [];
-  let aScore = 0, bScore = 0;
-  let aOnTarget = 0, bOnTarget = 0;
-
-  const minuteShots = [];
-  for (let i = 0; i < aShots; i++) minuteShots.push({ side: "home", minute: 1 + Math.floor(rng() * 90) });
-  for (let i = 0; i < bShots; i++) minuteShots.push({ side: "away", minute: 1 + Math.floor(rng() * 90) });
-  minuteShots.sort((a, b) => a.minute - b.minute);
-
-  for (const sh of minuteShots) {
-    const xg = sh.side === "home" ? aXgPer : bXgPer;
-    const onTarget = rng() < 0.42 + Math.min(0.18, xg);
-    if (sh.side === "home") {
-      if (onTarget) aOnTarget++;
-    } else {
-      if (onTarget) bOnTarget++;
-    }
-    const goal = onTarget && rng() < xg / Math.max(0.05, xg + 0.18);
-    const shootingPlayers = sh.side === "home" ? homePlayers : awayPlayers;
-    if (goal) {
-      if (sh.side === "home") aScore++;
-      else bScore++;
-      // Attribute scorer/assist when the scoring side has a known XI (the user side).
-      let scorerName = null;
-      let assistName = null;
-      if (shootingPlayers && shootingPlayers.length > 0) {
-        const { scorer, assist } = pickScorerAndAssist(shootingPlayers);
-        if (scorer) scorerName = scorer.name;
-        if (assist) assistName = assist.name;
-      }
-      const teamName = sh.side === "home" ? home.name : away.name;
-      const goalText = scorerName
-        ? `${sh.minute}' GOL! ${scorerName} (${teamName}) ${aScore}-${bScore}${assistName ? ` · asist: ${assistName}` : ""}`
-        : `${sh.minute}' GOL! ${teamName} ${aScore}-${bScore}`;
-      events.push({
-        minute: sh.minute, side: sh.side, type: "GOAL", text: goalText,
-        scorer: scorerName, assist: assistName, critical: true,
-      });
-    } else if (onTarget) {
-      // Attribute a shooter (weighted by scoring tendency × OVR) for the animation panel.
-      let shooterName = null;
-      if (shootingPlayers && shootingPlayers.length > 0) {
-        const pick = pickScorerAndAssist(shootingPlayers);
-        if (pick.scorer) shooterName = pick.scorer.name;
-      }
-      // ~40% of saves are marked "critical" → drive the shot-flight animation.
-      const isCritical = rng() < 0.40;
-      const teamName = sh.side === "home" ? home.name : away.name;
-      const text = shooterName
-        ? `${sh.minute}' Kaçan fırsat: ${shooterName} (${teamName}) — kaleci kurtardı.`
-        : `${sh.minute}' Müthiş kurtarış! ${teamName} pozisyondan dönüyor.`;
-      events.push({
-        minute: sh.minute, side: sh.side, type: "SAVE", text,
-        shooter: shooterName, critical: isCritical,
-      });
-    } else if (rng() < 0.55) {
-      let shooterName = null;
-      if (shootingPlayers && shootingPlayers.length > 0) {
-        const pick = pickScorerAndAssist(shootingPlayers);
-        if (pick.scorer) shooterName = pick.scorer.name;
-      }
-      const teamName = sh.side === "home" ? home.name : away.name;
-      const text = shooterName
-        ? `${sh.minute}' Şut auta gitti — ${shooterName} (${teamName}).`
-        : `${sh.minute}' Şut auta gitti — ${teamName}.`;
-      events.push({
-        minute: sh.minute, side: sh.side, type: "SHOT", text,
-        shooter: shooterName, critical: false,
-      });
-    }
+  let safety = 0;
+  while (!state.gameOver && safety < TOTAL_TICKS + 60) {
+    const out = stepPitch(state);
+    if (out.events.length > 0) events.push(...out.events);
+    safety += 1;
   }
 
-  // Possession from midfield + tempo of tiki-taka
-  const possessionHome = Math.max(28, Math.min(72,
-    50 + (A.midfield - B.midfield) * 0.7 +
-    (A.tactic.id === "TIKI_TAKA" ? 6 : 0) -
-    (B.tactic.id === "TIKI_TAKA" ? 6 : 0) -
-    (A.tactic.id === "PARK_THE_BUS" ? 8 : 0) +
-    (B.tactic.id === "PARK_THE_BUS" ? 8 : 0)
-  ));
-
+  // Filter to the shapes tournamentEngine already understands. Legacy
+  // consumers only look at GOAL / SAVE / SHOT — the physics-only TACKLE
+  // lines stay in the events array too (CanvasMatch shows them as pale
+  // filler; tournament code ignores unknown types).
   events.sort((a, b) => a.minute - b.minute);
 
-  // Per-player ratings for BOTH sides (when their XI is provided).
-  // The user side keeps its legacy `userPlayerStats` alias for back-compat.
+  const aScore = state.aScore;
+  const bScore = state.bScore;
+  // Legacy xG cosmetic — approximate from on-target attempts.
+  const aXg = +(state.aOnTarget * 0.32 + (state.aShots - state.aOnTarget) * 0.05).toFixed(2);
+  const bXg = +(state.bOnTarget * 0.32 + (state.bShots - state.bOnTarget) * 0.05).toFixed(2);
+
+  const totalPoss = state.aPossessionTicks + state.bPossessionTicks || 1;
+  const possessionHome = Math.round((state.aPossessionTicks / totalPoss) * 100);
+
   const homePlayerStats = buildSidePlayerStats(homePlayers, events, "home", aScore, bScore, home.name);
   const awayPlayerStats = buildSidePlayerStats(awayPlayers, events, "away", bScore, aScore, away.name);
   let userPlayerStats = null;
@@ -220,17 +156,22 @@ export function simulateMatch({ home, away, homeTacticId, awayTacticId, neutral 
   else if (awayIsUser && awayPlayerStats) userPlayerStats = awayPlayerStats;
 
   return {
-    home: { name: home.name, score: aScore, shots: aShots, onTarget: aOnTarget, xg: aXg, possession: Math.round(possessionHome) },
-    away: { name: away.name, score: bScore, shots: bShots, onTarget: bOnTarget, xg: bXg, possession: 100 - Math.round(possessionHome) },
+    home: { name: home.name, score: aScore, shots: state.aShots, onTarget: state.aOnTarget, xg: aXg, possession: possessionHome },
+    away: { name: away.name, score: bScore, shots: state.bShots, onTarget: state.bOnTarget, xg: bXg, possession: 100 - possessionHome },
     events,
     full: { aScore, bScore },
-    // Per-side player stats — used for POTM (best of either side).
     homePlayerStats,
     awayPlayerStats,
     userPlayerStats,
     // Stash the player arrays on the leg so ET recompute can rebuild stats.
     _homePlayers: homePlayers,
     _awayPlayers: awayPlayers,
+    // Stash the resolved (tactic+chemistry+HA+counter) strength stats so
+    // CanvasMatch can rebuild the exact same pitch state for its replay.
+    _homeStrength: homeStrength,
+    _awayStrength: awayStrength,
+    // Seed lets CanvasMatch reproduce the exact same physics run visually.
+    seed: usedSeed,
   };
 }
 
