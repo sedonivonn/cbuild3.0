@@ -2,12 +2,11 @@ import React, { useEffect, useState, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
 import { sound } from "../engine/sounds";
 import { FORMATIONS } from "../data/formations";
-import { CanvasMatch } from "./match/CanvasMatch";
+import { ReplayMatch } from "./match/ReplayMatch";
 
-// Single-speed reveal cadence. The speed picker was removed on user request
-// (iter-28) — every match plays at the calm "yavaş" pace now, and users skip
-// the whole simulation via the new MAÇI ATLA button (see `handleSkip`).
-const EVENT_DELAY_MS = 1600;
+// The old canvas simulation was replaced by a text-based reveal driven off
+// the pre-baked events on each leg. Speed is chosen INSIDE ReplayMatch, so
+// no parent-side speed constant is needed any more.
 
 // -----------------------------------------------------------------------------
 // Opponent XI → formation mapping (opponents don't carry a formation, only a
@@ -66,7 +65,9 @@ export const MatchScreen = ({ match, onClose }) => {
   const [emittedRegEvents, setEmittedRegEvents] = useState([]);
   const finishedRef = useRef(false);
 
-  const speed = { delay: EVENT_DELAY_MS };
+  // Fixed cadence for extra-time & penalty reveals. Regulation uses the
+  // ReplayMatch component's own internal speed picker.
+  const ET_DELAY_MS = 900;
 
   const isKnockout = !!match.knockout;
   const legs = useMemo(() => {
@@ -151,7 +152,7 @@ export const MatchScreen = ({ match, onClose }) => {
   };
 
   // Extra-time event ticker (minutes 91-120). ET still uses the pre-baked
-  // events from matchEngine — only regulation is physics-driven for now.
+  // events from matchEngine — regulation is handled by ReplayMatch.
   useEffect(() => {
     if (phase !== "playing_et") return;
     if (etVisibleIdx >= extraTimeEvents.length) {
@@ -166,9 +167,9 @@ export const MatchScreen = ({ match, onClose }) => {
     const t = setTimeout(() => {
       if (e.type === "GOAL") sound.goal();
       setEtVisibleIdx((i) => i + 1);
-    }, speed.delay);
+    }, ET_DELAY_MS);
     return () => clearTimeout(t);
-  }, [phase, etVisibleIdx, extraTimeEvents, speed.delay, hasPenalties]);
+  }, [phase, etVisibleIdx, extraTimeEvents, hasPenalties]);
 
   // Penalty reveal (slow, suspense)
   useEffect(() => {
@@ -178,14 +179,13 @@ export const MatchScreen = ({ match, onClose }) => {
       const t = setTimeout(() => setPhase("done"), 800);
       return () => clearTimeout(t);
     }
-    const baseDelay = Math.max(550, speed.delay * 2);
     const t = setTimeout(() => {
       const s = shots[penShotIdx];
       if (s.scored) sound.goal(); else sound.error();
       setPenShotIdx(penShotIdx + 1);
-    }, baseDelay);
+    }, 1400);
     return () => clearTimeout(t);
-  }, [phase, penShotIdx, tie, speed.delay]);
+  }, [phase, penShotIdx, tie]);
 
   const handleClose = () => {
     if (finishedRef.current) return;
@@ -279,6 +279,7 @@ export const MatchScreen = ({ match, onClose }) => {
 
   const isCanvasPhase = phase === "playing" || phase === "playing_et" || phase === "kickoff";
   const stageLabel = `${match.stage ? match.stage : "GRUP AŞAMASI"}${legs.length > 1 ? ` · LEG ${legIdx + 1}/${legs.length} · ${isSecondLeg ? "RÖVANŞ" : "İLK MAÇ"}` : ""}`;
+  const legBadge = legs.length > 1 ? `MAÇ ${legIdx + 1}/${legs.length}` : null;
 
   // Prematch: allow cancelling by pressing Escape or clicking the backdrop.
   // We only wire these while the animation hasn't started yet — once the
@@ -325,29 +326,29 @@ export const MatchScreen = ({ match, onClose }) => {
           />
         )}
 
-        {/* --- CANVAS MATCH (in-play view) ------------------------------ */}
-        {isCanvasPhase && (
-          <CanvasMatch
+        {/* --- REPLAY MATCH (in-play view — text-based reveal) ---------- */}
+        {phase === "playing" && (
+          <ReplayMatch
             key={`leg-${legIdx}`}
             stageLabel={stageLabel}
+            legLabel={legBadge}
             homeName={homeName}
             awayName={awayName}
-            homeScore={displayedHomeScore}
-            awayScore={displayedAwayScore}
-            liveMinute={liveMinute}
-            matchInputs={{
-              homeName,
-              awayName,
-              seed: currentLeg?.seed ?? 1,
-              _homePlayers: currentLeg?._homePlayers ?? null,
-              _awayPlayers: currentLeg?._awayPlayers ?? null,
-              _homeStrength: currentLeg?._homeStrength,
-              _awayStrength: currentLeg?._awayStrength,
-            }}
+            homeIsUser={!!homeRef?.isUser}
+            awayIsUser={!!awayRef?.isUser}
+            events={regulationEvents}
+            finalStats={{ home: currentLeg?.home, away: currentLeg?.away }}
             onEvent={handleCanvasEvent}
             onEnd={handleCanvasEnd}
             onSkip={handleSkip}
           />
+        )}
+
+        {/* Brief kickoff transition — quick whistle beat before the reveal. */}
+        {phase === "kickoff" && (
+          <div className="py-16 text-center font-display text-3xl text-amber-300 tracking-widest" data-testid="kickoff-badge">
+            KICK-OFF!
+          </div>
         )}
 
         {/* --- Scoreboard for post-match phases (et_confirm / done) ------- */}

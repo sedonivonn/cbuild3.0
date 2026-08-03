@@ -1,0 +1,33 @@
+{
+  "summary": "Verified the new ReplayMatch (text-based) view replaces the old 2D canvas simulation. End-to-end flow: home -> GRUP FORMATI -> draft (roll+assign 11 players) -> tactic TIKI-TAKA -> enter tournament -> MD 1 OYNA -> MAÇI BAŞLAT reaches the match modal and mounts ReplayMatch. All 8 required behaviours pass.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verifications": {
+    "canvas_match_removed": "[data-testid=canvas-match] NOT rendered in playing phase (confirmed false)",
+    "replay_match_mounted": "[data-testid=replay-match] rendered during playing phase",
+    "live_clock_MMSS": "[data-testid=replay-clock] shows MM:SS and advances: observed 01:38 -> 02:51 -> 08:51 as speed switched",
+    "scoreboard": "[data-testid=replay-score] and replay-home-name/replay-away-name populated (DRAFT TAKIMI vs 2021 Manchester City); final score after skip = 2-1 (non-zero)",
+    "events_feed": "[data-testid=replay-events] present with OLAYLAR header; event-row-chance rendered during reveal; event-row-goal/save present after skip",
+    "stats_block": "[data-testid=replay-stats] shows ŞUT / İSABET / XG / TOPLA % with numeric values for both sides",
+    "speed_picker": "[data-testid=replay-speed-picker] with three buttons (slow/normal/fast). Default active = NORMAL (amber-300 class). Clicking replay-speed-slow -> active=slow; clicking replay-speed-fast -> active=fast",
+    "skip_button": "[data-testid=replay-skip-button] click transitions modal to done phase within ~2s: replay-match unmounts, scoreboard shows 2 · 1, close-match-button + potm-card visible",
+    "non_zero_score_evidence": "Final regulation score 2-1 confirms the underlying simulator produces goals (no longer stuck at 0-0)."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ReplayMatch onEvent is invoked from BOTH the RAF elapsed-time effect (via visibleCount effect) and the finished-flush branch — the finished-flush inside the RAF callback calls onEvent for remaining events and the visibleCount effect will not re-fire for them since visibleCount is already events.length. This looks correct, but the same double-flush path exists in handleSkip. Both paths look safe (visibleCount is set to events.length before onEvent loop completes) but worth a quick unit test.",
+    "MatchScreen.handleCanvasEvent still lives on the parent and de-dupes by 'minute-type-text'. Since ReplayMatch now emits every event exactly once through onEvent, the de-dupe is defensive-only. Kept as-is.",
+    "MatchScreen retains `liveMinute` computed from emittedRegEvents but it's no longer displayed anywhere in the playing phase (ReplayMatch owns its own clock). Consider removing dead state to reduce re-renders."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (frontend-only test)", "frontend": "100%" },
+  "seed_data_creation": "",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Draft flow requires selecting a tactic BEFORE the initial roll-dice-button becomes enabled. After the first roll, subsequent spins use [data-testid=roll-dice-button-draft] (or spin-the-wheel-idle wrapper). To fill the pitch, click a pool-player then click a compatible pitch-slot; incompatible clicks deselect the player."
+}
