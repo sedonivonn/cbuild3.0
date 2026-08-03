@@ -1,0 +1,29 @@
+{
+  "summary": "Verified the F5-unlimited-rerolls regression fix. Full flow tested via Playwright against http://localhost:3000. On a fresh draft, F5 keeps pool=null and changes=3/3. After 1 CHANGE, F5 preserves 2/3 and the SAME pool. After exhausting all 3 CHANGEs, F5 preserves 0/3, the SAME pool, both CHANGE buttons remain disabled, and spin-the-wheel-idle is NOT rendered. After placing a player from the pool with 0 credits, SPIN THE WHEEL reappears and a new team is rolled without decrementing the counter (intended behaviour intact).",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verifications": {
+    "SANITY1_fresh_draft_F5": "pool=null, changes=3/3 after F5 on fresh setup screen ✓",
+    "SANITY2_one_change_then_F5": "changes stays 2/3 after F5, pool_club/season identical (Real Madrid 1998) ✓, no spin-the-wheel-idle shown ✓",
+    "REGRESSION_exhausted_then_F5": "Pre-reload PSG 2021 with 0/3, both change-button-draft and change-year-button-draft disabled, no spin-the-wheel-idle. After F5: changes=0/3, SAME pool (PSG 2021), change-button-draft.disabled=true, change-year-button-draft.disabled=true, spin-the-wheel-idle NOT present ✓",
+    "SANITY3_place_player_then_SPIN": "After placing 1 player from the pool: pool becomes null, spin-the-wheel-idle appears, clicking it produces new pool (Napoli 2022) WITHOUT decrementing the counter (stayed at 0/3) ✓",
+    "localStorage_persistence": "ucl_draft_save_v1 correctly contains `pool` field { team, season, players } alongside `changes` after each state change"
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor UX quirk (not a bug per the spec): after F5 while pool is preserved but xi is empty, DraftScreen local `phase` state re-initialises to 'setup' (line 45: useState(() => (xi.some(Boolean) ? 'draft' : 'setup'))). User lands back on the KOMUTA MERKEZİ view with a 'DRAFT'A DEVAM ET' (continue-to-draft-button) instead of directly on the draft grid. Not a regression — handleRoll already guards against re-rolling when pool exists (DraftScreen.jsx:85-89) — but consider persisting `phase` as well so refresh preserves the exact view the user was on.",
+    "handleChangeYear (DraftScreen.jsx:127) silently no-ops if the current club has no other seasons in MERGED_POOL. A user with 0 alternate seasons will lose no credits and also see no feedback. Consider disabling the button when candidates.length === 0 (data-testid=change-year-button-draft)."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (frontend-only)", "frontend": "100%" },
+  "seed_data_creation": "",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reroll credits are stored in localStorage key `ucl_draft_save_v1` with fields { screen, teamName, formationId, xi, changes, pool, tactic, tournament, tournamentMode }. `pool` is now hoisted to App level and persisted. DraftScreen phase ('setup'|'draft') is local-only and re-derives from xi on mount, so after F5 with empty xi the user lands back in setup phase with a 'DRAFT'A DEVAM ET' (continue-to-draft-button) — click it to reach the draft grid where change-button-draft/change-year-button-draft/spin-the-wheel-idle live. handleRoll guards against re-rolling when pool exists (returns to draft phase reusing the same pool).",
+  "rca of the issue": "Original bug: DraftScreen owned `pool` as local component state (`const [pool, setPool] = useState(null)`) so F5 dropped it, and on next render spin-the-wheel-idle would appear regardless of `changes.remaining` — giving the user a free reroll even with 0 credits. Fix: `pool` was lifted to App.js, added to the ucl_draft_save_v1 persistence bundle, and passed down via props to DraftScreen. resetState/handleStart/handleStartLeague/URL-share importer all reset it to null on new drafts. Regression verified — F5 with 0 credits keeps the same pool visible and both CHANGE buttons disabled; no spin-the-wheel-idle is rendered."
+}

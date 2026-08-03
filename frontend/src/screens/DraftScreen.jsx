@@ -34,10 +34,10 @@ export const DraftScreen = ({
   xi, setXi,
   tactic, setTactic,
   changes, onUseChange,
+  pool, setPool,
   onComplete,
 }) => {
   const formation = FORMATIONS[formationId] || FORMATIONS["4-3-3"];
-  const [pool, setPool] = useState(null);
   const [rolling, setRolling] = useState(false);
   const [selectedPlayerIdx, setSelectedPlayerIdx] = useState(-1);
   const [poolOpen, setPoolOpen] = useState(false);

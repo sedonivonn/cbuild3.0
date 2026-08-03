@@ -38,6 +38,10 @@ function App() {
   const [formationId, setFormationId] = useState(initial?.formationId || null);
   const [xi, setXi] = useState(initial?.xi || []);
   const [changes, setChanges] = useState(initial?.changes || { remaining: 3, luckyRemaining: 1 });
+  // Currently-rolled team pool (shown in the CHANGE / place-player panel).
+  // Persisted alongside `changes` so an F5 refresh CAN'T reset the reroll
+  // counter — the same team stays on screen with the same remaining credits.
+  const [pool, setPool] = useState(initial?.pool || null);
   const [tactic, setTactic] = useState(initial?.tactic || null);
   const [tournament, setTournament] = useState(initial?.tournament || null);
   // "group" = legacy 8x4 group phase, "league" = 32-team Swiss-model league phase.
@@ -58,6 +62,7 @@ function App() {
         setFormationId(shared.formationId);
         setXi(shared.xi);
         setChanges({ remaining: 0, luckyRemaining: 0 });
+        setPool(null);
         setTactic(null);
         setTournament(null);
         setScreen("draft");
@@ -69,8 +74,8 @@ function App() {
 
   // Persist
   useEffect(() => {
-    saveState({ screen, teamName, formationId, xi, changes, tactic, tournament, tournamentMode });
-  }, [screen, teamName, formationId, xi, changes, tactic, tournament, tournamentMode]);
+    saveState({ screen, teamName, formationId, xi, changes, pool, tactic, tournament, tournamentMode });
+  }, [screen, teamName, formationId, xi, changes, pool, tactic, tournament, tournamentMode]);
 
   const teamStats = useMemo(() => {
     if (!formationId || xi.length === 0) return null;
@@ -86,6 +91,7 @@ function App() {
     setFormationId("4-3-3");
     setXi(new Array(FORMATIONS["4-3-3"].slots.length).fill(null));
     setChanges({ remaining: 3, luckyRemaining: 1 });
+    setPool(null);
     setTactic(null);
     setTournament(null);
     setTournamentMode("group");
@@ -99,6 +105,7 @@ function App() {
     setFormationId("4-3-3");
     setXi(new Array(FORMATIONS["4-3-3"].slots.length).fill(null));
     setChanges({ remaining: 3, luckyRemaining: 1 });
+    setPool(null);
     setTactic(null);
     setTournament(null);
     setTournamentMode("league");
@@ -123,6 +130,7 @@ function App() {
   const resetState = () => {
     try { localStorage.removeItem(SAVE_KEY); } catch (_) {}
     setTeamName(""); setFormationId(null); setXi([]); setChanges({ remaining: 3, luckyRemaining: 1 });
+    setPool(null);
     setTactic(null); setTournament(null); setActiveMatch(null); setTrophyTeam(null);
     setTournamentMode("group");
   };
@@ -167,6 +175,8 @@ function App() {
           setTactic={setTactic}
           changes={changes}
           onUseChange={handleUseChange}
+          pool={pool}
+          setPool={setPool}
           onComplete={handleDraftComplete}
         />
       )}
