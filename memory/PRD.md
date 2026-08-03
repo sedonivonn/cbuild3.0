@@ -12,6 +12,41 @@ online-related has been removed from the codebase. Single-player flows
 (GRUP FORMATI, LİG FORMATI, Hall of Fame, Auth, Trophy, Match sim,
 Formation/Draft/Tactics) are untouched.
 
+## 2026-01-XX UPDATE — Match sim rewrite + text-based reveal
+User feedback: matches were always ending 0-0 because the 2D pitch canvas
+(pitchSim.js) rarely produced any shots. User asked to (a) drop the pitch
+visualisation entirely, (b) replace it with a text-based event feed like
+the referenced screenshot (OLAYLAR list with GOL/FIRSAT/KURTARIŞ tags),
+(c) show a live match clock at the top of the modal (MM:SS), and
+(d) add a simulation speed picker: YAVAŞ / NORMAL / HIZLI.
+
+### What changed
+- `frontend/src/engine/matchEngine.js` — `simulateMatch()` internals
+  rewritten. Removed the `pitchSim.js` dependency. New model: Poisson-
+  approx shot count per side driven by midfield/attack gaps, per-shot xG
+  resolution into GOAL / SAVE / CHANCE with scorer+assist attribution and
+  minute+second timestamps. Return shape (home/away/events/…) is
+  unchanged so tournamentEngine / leagueEngine keep working. Sanity
+  test across 8 seeds showed 1-2 to 5-0 scorelines — realistic ranges.
+- `frontend/src/screens/match/ReplayMatch.jsx` — NEW. Walks the pre-baked
+  event timeline in wall-clock time. Renders: live clock (MM:SS),
+  scoreboard, MOMENTUM/BASKI bar, running ŞUT / İSABET / XG / TOPLA %
+  stats, OLAYLAR list (home left-aligned, away right-aligned), speed
+  picker (yavaş 45 gs/s, normal 120 gs/s, hızlı 360 gs/s), MAÇI ATLA.
+- `frontend/src/screens/MatchScreen.jsx` — imports ReplayMatch instead of
+  CanvasMatch. Regulation phase now mounts ReplayMatch. Kickoff, ET
+  confirm, ET reveal, penalties and done phases untouched.
+- `frontend/src/screens/match/CanvasMatch.tsx` and
+  `frontend/src/engine/pitchSim.js` — left on disk but no longer imported.
+
+### Verification
+Testing agent iteration 30: 8/8 required behaviours passed
+(canvas removed, ReplayMatch mounted, MM:SS clock advances, scoreboard
+non-zero, events feed with left/right sides, stats block populated,
+speed picker with 3 buttons + click switches active, MAÇI ATLA reaches
+the done phase).
+
+
 ### What was removed
 Backend:
 - `backend/sio_server.py` (Socket.IO server)
