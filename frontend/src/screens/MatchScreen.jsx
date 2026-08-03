@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef } from "react";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { sound } from "../engine/sounds";
 import { FORMATIONS } from "../data/formations";
 import { ReplayMatch } from "./match/ReplayMatch";
@@ -54,6 +55,7 @@ function buildOpponentXi(players) {
 }
 
 export const MatchScreen = ({ match, onClose }) => {
+  const { t } = useTranslation();
   const [phase, setPhase] = useState("prematch"); // prematch -> kickoff -> playing -> et_confirm -> playing_et -> penalties -> done
   const [legIdx, setLegIdx] = useState(0);
   const [penShotIdx, setPenShotIdx] = useState(0);
@@ -278,8 +280,16 @@ export const MatchScreen = ({ match, onClose }) => {
   }, [phase, emittedRegEvents, etVisibleIdx, extraTimeEvents]);
 
   const isCanvasPhase = phase === "playing" || phase === "playing_et" || phase === "kickoff";
-  const stageLabel = `${match.stage ? match.stage : "GRUP AŞAMASI"}${legs.length > 1 ? ` · LEG ${legIdx + 1}/${legs.length} · ${isSecondLeg ? "RÖVANŞ" : "İLK MAÇ"}` : ""}`;
-  const legBadge = legs.length > 1 ? `MAÇ ${legIdx + 1}/${legs.length}` : null;
+  // Translate the stage label — match.stage stores Turkish canonical names
+  // like "Son 16" / "Final" which we look up in tournament.stageNames.
+  const stageTranslated = match.stage
+    ? t(`tournament.stageNames.${match.stage}`, { defaultValue: match.stage })
+    : t("match.stageLabel");
+  const legSuffix = legs.length > 1
+    ? ` · ${t("match.leg")} ${legIdx + 1}/${legs.length} · ${isSecondLeg ? t("match.secondLeg") : t("match.firstLeg")}`
+    : "";
+  const stageLabel = `${stageTranslated}${legSuffix}`;
+  const legBadge = legs.length > 1 ? t("match.matchNOfM", { n: legIdx + 1, m: legs.length }) : null;
 
   // Prematch: allow cancelling by pressing Escape or clicking the backdrop.
   // We only wire these while the animation hasn't started yet — once the
@@ -347,7 +357,7 @@ export const MatchScreen = ({ match, onClose }) => {
         {/* Brief kickoff transition — quick whistle beat before the reveal. */}
         {phase === "kickoff" && (
           <div className="py-16 text-center font-display text-3xl text-amber-300 tracking-widest" data-testid="kickoff-badge">
-            KICK-OFF!
+            {t("match.kickoff")}
           </div>
         )}
 
@@ -356,7 +366,7 @@ export const MatchScreen = ({ match, onClose }) => {
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 mb-3">
             <div className="text-right min-w-0">
               <div className="font-display text-lg md:text-2xl tracking-tight truncate" data-testid="home-name">{homeName}</div>
-              <div className="text-[10px] text-white/40 font-mono tracking-widest">{isKnockout ? "EV SAHİBİ" : ""}</div>
+              <div className="text-[10px] text-white/40 font-mono tracking-widest">{isKnockout ? t("common.homeTeam") : ""}</div>
             </div>
             <div className="text-center flex flex-col items-center">
               <motion.div
@@ -372,7 +382,7 @@ export const MatchScreen = ({ match, onClose }) => {
             </div>
             <div className="min-w-0">
               <div className="font-display text-lg md:text-2xl tracking-tight truncate" data-testid="away-name">{awayName}</div>
-              <div className="text-[10px] text-white/40 font-mono tracking-widest">{isKnockout ? "DEPLASMAN" : ""}</div>
+              <div className="text-[10px] text-white/40 font-mono tracking-widest">{isKnockout ? t("common.awayTeam") : ""}</div>
             </div>
           </div>
         )}
@@ -385,23 +395,23 @@ export const MatchScreen = ({ match, onClose }) => {
             className="mt-4 bg-black/60 border border-amber-300/40 rounded-xl p-5 text-center"
             data-testid="et-confirm-modal"
           >
-            <div className="font-mono text-[10px] tracking-widest text-amber-300 mb-2">90. DAKİKA</div>
-            <div className="font-display text-2xl md:text-3xl text-white mb-2">Maç uzatmalara gidiyor.</div>
-            <div className="text-sm text-white/70 mb-4">Devam etmek ister misin? 30 dakikalık uzatma oynanacak, gerekirse penaltılara gidilecek.</div>
-            <button type="button" className="btn-primary" onClick={startExtraTime} data-testid="et-continue-button">DEVAM ET →</button>
+            <div className="font-mono text-[10px] tracking-widest text-amber-300 mb-2">{t("match.minute90")}</div>
+            <div className="font-display text-2xl md:text-3xl text-white mb-2">{t("match.goingToExtraTime")}</div>
+            <div className="text-sm text-white/70 mb-4">{t("match.etDescription")}</div>
+            <button type="button" className="btn-primary" onClick={startExtraTime} data-testid="et-continue-button">{t("match.continue")}</button>
           </motion.div>
         )}
 
         {/* Penalty reveal */}
         {phase === "penalties" && (
           <div className="bg-black/50 rounded-xl p-4 border border-amber-300/30" data-testid="penalty-block">
-            <div className="text-center font-display text-2xl text-amber-300 tracking-widest mb-3">PENALTI ATIŞLARI</div>
+            <div className="text-center font-display text-2xl text-amber-300 tracking-widest mb-3">{t("match.penalties")}</div>
             <div className="grid grid-cols-2 gap-3 text-center">
               <PenaltyColumn name={penPairHomeName} shots={penShown.filter((s) => s.side === "home")} totalScored={penHomeScored} />
               <PenaltyColumn name={penPairAwayName} shots={penShown.filter((s) => s.side === "away")} totalScored={penAwayScored} />
             </div>
             <div className="text-center mt-3 text-[10px] text-white/40 font-mono tracking-widest">
-              {penShotIdx} / {penShots.length} ATIŞ
+              {t("match.shotAttempts", { n: penShotIdx, total: penShots.length })}
             </div>
           </div>
         )}
@@ -409,9 +419,9 @@ export const MatchScreen = ({ match, onClose }) => {
         {/* Stats */}
         {phase === "done" && currentLeg && phase !== "penalties" && (
           <div className="grid grid-cols-3 gap-3 mt-4 text-center text-xs text-white/70">
-            <StatBar label="ŞUT"      h={currentLeg.home.shots}    a={currentLeg.away.shots} />
-            <StatBar label="İSABETLİ" h={currentLeg.home.onTarget} a={currentLeg.away.onTarget} />
-            <StatBar label="XG"       h={currentLeg.home.xg?.toFixed(2)} a={currentLeg.away.xg?.toFixed(2)} />
+            <StatBar label={t("match.shotsShort")}      h={currentLeg.home.shots}    a={currentLeg.away.shots} />
+            <StatBar label={t("match.onTargetShort")} h={currentLeg.home.onTarget} a={currentLeg.away.onTarget} />
+            <StatBar label={t("match.xgShort")}       h={currentLeg.home.xg?.toFixed(2)} a={currentLeg.away.xg?.toFixed(2)} />
           </div>
         )}
 
@@ -445,7 +455,7 @@ export const MatchScreen = ({ match, onClose }) => {
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1 pr-3">
                   <div className={`font-mono text-[10px] tracking-widest ${labelColor}`}>
-                    PLAYER OF THE MATCH{!isUserPotm && " · RAKİP"}
+                    {t("match.playerOfTheMatch")}{!isUserPotm && ` · ${t("match.opponent")}`}
                   </div>
                   <div className="font-display text-2xl tracking-tight mt-0.5 truncate">{potm.name}</div>
                   {potm.teamName && (
@@ -454,12 +464,12 @@ export const MatchScreen = ({ match, onClose }) => {
                     </div>
                   )}
                   <div className="text-[11px] font-mono text-white/50 tracking-wider mt-0.5">
-                    {potm.slot} · {potm.season} · {isGK ? `${saves} KURTARIŞ` : `${potm.goals} GOL · ${potm.assists} ASİST`}
+                    {potm.slot} · {potm.season} · {isGK ? `${saves} ${t("match.savesLabel")}` : `${potm.goals} ${t("common.goal")} · ${potm.assists} ${t("common.assist")}`}
                   </div>
                 </div>
                 <div className="text-right shrink-0">
                   <div className={`font-display text-4xl ${ratingColor}`}>{potm.rating.toFixed(1)}</div>
-                  <div className="text-[10px] font-mono text-white/50">REYTING</div>
+                  <div className="text-[10px] font-mono text-white/50">{t("match.ratingLabel")}</div>
                 </div>
               </div>
             </motion.div>
@@ -471,28 +481,28 @@ export const MatchScreen = ({ match, onClose }) => {
           <div className="mt-4 text-center" data-testid="aggregate-result">
             {tie?.aggregate && (
               <div className="font-display text-lg tracking-widest text-amber-300">
-                TOPLAM: {match.knockout.home.label} {tie.aggregate.a} - {tie.aggregate.b} {match.knockout.away.label}
+                {t("match.totalScore")} {match.knockout.home.label} {tie.aggregate.a} - {tie.aggregate.b} {match.knockout.away.label}
               </div>
             )}
             {tie?.decidedBy === "penalties" && tie?.penalties && (
               <div className="font-mono text-xs tracking-widest text-amber-300 mt-1">
-                PENALTILAR: {tie.penalties.a} - {tie.penalties.b}
+                {t("match.penaltiesShort")} {tie.penalties.a} - {tie.penalties.b}
               </div>
             )}
             <div className="font-display text-3xl mt-2 text-white" data-testid="user-result">
               {match.spectator
-                ? `KAZANAN: ${tie?.winner === "home" ? match.knockout.home.label : match.knockout.away.label}`
-                : (match.userWon ? "TUR ATLADIN" : "ELENDİN")}
+                ? `${t("match.winner")} ${tie?.winner === "home" ? match.knockout.home.label : match.knockout.away.label}`
+                : (match.userWon ? t("match.userWon") : t("match.userLost"))}
             </div>
           </div>
         )}
 
         <div className="mt-5 flex justify-end gap-2">
           {phase === "done" && legIdx + 1 < legs.length && (
-            <button type="button" className="btn-ghost" onClick={nextLeg} data-testid="next-leg-button">RÖVANŞ MAÇI →</button>
+            <button type="button" className="btn-ghost" onClick={nextLeg} data-testid="next-leg-button">{t("match.replayMatch")}</button>
           )}
           {phase === "done" && legIdx + 1 >= legs.length && (
-            <button type="button" className="btn-primary" onClick={handleClose} data-testid="close-match-button">DEVAM ET</button>
+            <button type="button" className="btn-primary" onClick={handleClose} data-testid="close-match-button">{t("match.close")}</button>
           )}
         </div>
       </motion.div>
@@ -503,37 +513,41 @@ export const MatchScreen = ({ match, onClose }) => {
 // -----------------------------------------------------------------------------
 // PreMatchLineups — two team columns, each with player list and a mini pitch.
 // -----------------------------------------------------------------------------
-const PreMatchLineups = ({ homeName, awayName, homeRef, awayRef, homeLineup, awayLineup, onStart, onCancel }) => (
+const PreMatchLineups = ({ homeName, awayName, homeRef, awayRef, homeLineup, awayLineup, onStart, onCancel }) => {
+  const { t } = useTranslation();
+  return (
   <div data-testid="prematch-lineups">
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
       <TeamLineupPanel
         name={homeName}
-        subtitle={homeRef?.isUser ? "SENİN TAKIMIN" : (homeRef?.season ? `${homeRef.season} · ${homeRef.club || ""}` : (homeRef?.club || ""))}
+        subtitle={homeRef?.isUser ? t("common.yourTeam") : (homeRef?.season ? `${homeRef.season} · ${homeRef.club || ""}` : (homeRef?.club || ""))}
         accent="left"
         lineup={homeLineup}
       />
       <TeamLineupPanel
         name={awayName}
-        subtitle={awayRef?.isUser ? "SENİN TAKIMIN" : (awayRef?.season ? `${awayRef.season} · ${awayRef.club || ""}` : (awayRef?.club || ""))}
+        subtitle={awayRef?.isUser ? t("common.yourTeam") : (awayRef?.season ? `${awayRef.season} · ${awayRef.club || ""}` : (awayRef?.club || ""))}
         accent="right"
         lineup={awayLineup}
       />
     </div>
     <div className="mt-5 flex items-center justify-center gap-3">
       <button type="button" className="btn-ghost" onClick={onCancel} data-testid="prematch-cancel-button">
-        ← GERİ
+        {t("match.back")}
       </button>
       <button type="button" className="btn-primary" onClick={onStart} data-testid="start-match-button">
-        MAÇI BAŞLAT →
+        {t("match.startMatch")}
       </button>
     </div>
     <div className="mt-2 text-center text-[10px] font-mono tracking-widest text-white/40">
-      ESC veya dışarı tıklamak da geri dönüyor
+      {t("match.escOrClickHint")}
     </div>
   </div>
-);
+  );
+};
 
 const TeamLineupPanel = ({ name, subtitle, accent, lineup }) => {
+  const { t } = useTranslation();
   const players = lineup?.xi || [];
   const barClass = accent === "left"
     ? "bg-gradient-to-r from-amber-300/25 to-transparent border-l-4 border-amber-300"
@@ -552,7 +566,7 @@ const TeamLineupPanel = ({ name, subtitle, accent, lineup }) => {
             return (
               <li key={i} className="flex items-center gap-2 text-xs text-white/40">
                 <span className="font-mono w-5 text-right">{i + 1}.</span>
-                <span className="italic">— BOŞ SLOT —</span>
+                <span className="italic">{t("draft.emptySlot")}</span>
               </li>
             );
           }

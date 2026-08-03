@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Trophy, Archive, Crown, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { effOverall } from "../data/ballonDor";
 
 // Pick the best user player across the whole tournament — Ballon d'Or style.
@@ -33,6 +34,7 @@ function pickPlayerOfTournament(tournamentStats, userXi) {
 }
 
 export const TrophyScreen = ({ teamLabel, teamName, userXi, tournamentStats, onRestart, onHallOfFame, onDismiss }) => {
+  const { t } = useTranslation();
   const potTournament = useMemo(
     () => pickPlayerOfTournament(tournamentStats, userXi),
     [tournamentStats, userXi]
@@ -43,7 +45,7 @@ export const TrophyScreen = ({ teamLabel, teamName, userXi, tournamentStats, onR
       className="fixed inset-0 z-50 flex items-start md:items-center justify-center bg-black/95 backdrop-blur-xl px-4 py-8 overflow-y-auto cursor-pointer"
       data-testid="trophy-screen"
       onClick={() => onDismiss && onDismiss()}
-      title="Kapatmak için boş alana tıkla"
+      title={t("trophy.closeTitle")}
     >
       <motion.div
         initial={{ opacity: 0, scale: 0.85, y: 40 }}
@@ -59,14 +61,14 @@ export const TrophyScreen = ({ teamLabel, teamName, userXi, tournamentStats, onR
         >
           <Trophy size={120} className="text-amber-300 drop-shadow-[0_0_25px_rgba(255,215,0,0.6)]" />
         </motion.div>
-        <div className="font-mono text-xs tracking-widest text-amber-300 mt-6">UEFA CHAMPIONS LEAGUE</div>
-        <h1 className="font-display text-6xl md:text-7xl tracking-tight mt-2">ŞAMPİYON!</h1>
+        <div className="font-mono text-xs tracking-widest text-amber-300 mt-6">{t("trophy.ucl")}</div>
+        <h1 className="font-display text-6xl md:text-7xl tracking-tight mt-2">{t("trophy.champion")}</h1>
         <p className="text-white/70 mt-4 text-base max-w-md mx-auto">
-          {teamLabel} tarihin en güçlü karma kadrosunu kurarak Şampiyonlar Ligi kupasını kaldırdı.
+          {t("trophy.subtitle", { team: teamLabel })}
         </p>
         <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-300/15 border border-amber-300/30">
           <Archive size={14} className="text-amber-300" />
-          <span className="text-xs font-mono tracking-widest text-amber-300">KUPA KABİNİNE EKLENDİ</span>
+          <span className="text-xs font-mono tracking-widest text-amber-300">{t("trophy.addedToCabinet")}</span>
         </div>
 
         {/* UCL Player of the Tournament — Ballon d'Or-style award */}
@@ -99,7 +101,7 @@ export const TrophyScreen = ({ teamLabel, teamName, userXi, tournamentStats, onR
               <div className="flex items-center justify-center gap-2 text-amber-300 mb-2">
                 <Sparkles size={14} />
                 <span className="font-mono text-[10px] tracking-[0.35em]">
-                  ŞAMPİYONLAR LİGİ YILIN OYUNCUSU
+                  {t("trophy.potLabel")}
                 </span>
                 <Sparkles size={14} />
               </div>
@@ -117,14 +119,14 @@ export const TrophyScreen = ({ teamLabel, teamName, userXi, tournamentStats, onR
 
               {/* Stat strip */}
               <div className="grid grid-cols-4 gap-2 mt-4">
-                <StatChip label="MAÇ" value={potTournament.matches} />
-                <StatChip label="GOL" value={potTournament.goals} highlight />
-                <StatChip label="ASİST" value={potTournament.assists} />
-                <StatChip label="REYTING" value={potTournament.avgRating.toFixed(1)} accent />
+                <StatChip label={t("common.matches")} value={potTournament.matches} />
+                <StatChip label={t("common.goals")} value={potTournament.goals} highlight />
+                <StatChip label={t("common.assists")} value={potTournament.assists} />
+                <StatChip label={t("common.rating")} value={potTournament.avgRating.toFixed(1)} accent />
               </div>
               {potTournament.mom > 0 && (
                 <div className="mt-3 text-[10px] font-mono text-amber-300/70 tracking-widest">
-                  {potTournament.mom} × PLAYER OF THE MATCH
+                  {potTournament.mom} × {t("trophy.momSuffix")}
                 </div>
               )}
             </div>
@@ -133,14 +135,14 @@ export const TrophyScreen = ({ teamLabel, teamName, userXi, tournamentStats, onR
 
         <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
           <button type="button" onClick={onHallOfFame} data-testid="trophy-view-cabinet-button" className="btn-ghost flex items-center gap-2">
-            <Archive size={16} /> KABİNİ GÖR
+            <Archive size={16} /> {t("trophy.viewCabinet")}
           </button>
           <button type="button" onClick={onRestart} data-testid="trophy-restart-button" className="btn-primary">
-            YENİ DRAFT BAŞLAT
+            {t("trophy.newDraft")}
           </button>
         </div>
         <div className="mt-5 text-[10px] font-mono tracking-widest text-white/35">
-          KADRO İSTATİSTİKLERİNİ GÖRMEK İÇİN BOŞ ALANA TIKLA
+          {t("trophy.clickToDismiss")}
         </div>
       </motion.div>
     </div>

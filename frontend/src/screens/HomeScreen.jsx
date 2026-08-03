@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
 import { Trophy, Shuffle, Swords } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { getAllTrophies, getTopTrophies } from "../engine/hallOfFame";
 import { effOverall } from "../data/ballonDor";
 
@@ -13,6 +14,7 @@ function tierBg(ovr) {
 }
 
 export const HomeScreen = ({ onStart, onStartLeague, hasSave, onContinue, onHallOfFame }) => {
+  const { t } = useTranslation();
   const trophies = useMemo(() => getAllTrophies(), []);
   const topThree = useMemo(() => getTopTrophies(3), []);
   const hasTrophies = trophies.length > 0;
@@ -48,19 +50,18 @@ export const HomeScreen = ({ onStart, onStartLeague, hasSave, onContinue, onHall
           </span>
         </h1>
         <p className="mt-6 text-white/70 text-base md:text-lg max-w-2xl mx-auto leading-relaxed">
-          Tarihin en güçlü karma takımını sen kur. Efsane UCL takımları arasından zar zar oyuncu seç,
-          taktiğini belirle ve 31 efsane şampiyonu eleyerek kupayı kaldır.
+          {t("home.tagline")}
         </p>
         <div className="mt-10 flex flex-wrap gap-3 justify-center">
           <button type="button" onClick={onStart} className="btn-primary" data-testid="start-draft-button">
-            GRUP FORMATI
+            {t("home.groupFormat")}
           </button>
           <button type="button" onClick={onStartLeague} className="btn-primary" data-testid="start-draft-league-button">
-            LİG FORMATI
+            {t("home.leagueFormat")}
           </button>
           {hasSave && (
             <button type="button" onClick={onContinue} className="btn-ghost" data-testid="continue-button">
-              KAYDA DEVAM ET
+              {t("home.continueSave")}
             </button>
           )}
         </div>
@@ -77,7 +78,7 @@ export const HomeScreen = ({ onStart, onStartLeague, hasSave, onContinue, onHall
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2 text-amber-300">
                 <Trophy size={16} />
-                <span className="font-mono text-xs tracking-widest">EN İYİ DRAFT&apos;LARIM</span>
+                <span className="font-mono text-xs tracking-widest">{t("home.bestDrafts")}</span>
               </div>
               <button
                 type="button"
@@ -85,7 +86,7 @@ export const HomeScreen = ({ onStart, onStartLeague, hasSave, onContinue, onHall
                 className="text-[11px] font-mono tracking-widest text-white/60 hover:text-amber-300"
                 data-testid="see-all-trophies-button"
               >
-                TÜMÜNÜ GÖR →
+                {t("home.viewAll")}
               </button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -97,9 +98,9 @@ export const HomeScreen = ({ onStart, onStartLeague, hasSave, onContinue, onHall
         )}
 
         <div className="mt-14 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mx-auto">
-          <Feature icon={<Shuffle size={18} />} label="ZAR SİSTEMİ" sub="Rastgele sezon & takım" />
-          <Feature icon={<Swords size={18} />} label="TAKTİK" sub="Gegenpress / Tiki-Taka / Park the Bus" />
-          <Feature icon={<Trophy size={18} />} label="32 TAKIM" sub="Tüm UCL şampiyonları" />
+          <Feature icon={<Shuffle size={18} />} label={t("home.featureDiceLabel")} sub={t("home.featureDiceSub")} />
+          <Feature icon={<Swords size={18} />} label={t("home.featureTacticLabel")} sub={t("home.featureTacticSub")} />
+          <Feature icon={<Trophy size={18} />} label={t("home.featureTeamsLabel")} sub={t("home.featureTeamsSub")} />
         </div>
       </motion.div>
     </div>

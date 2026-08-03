@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { DiceButton } from "../components/DiceButton";
 import { PlayerCard } from "../components/PlayerCard";
 import { Pitch } from "../components/Pitch";
@@ -37,6 +38,7 @@ export const DraftScreen = ({
   pool, setPool,
   onComplete,
 }) => {
+  const { t } = useTranslation();
   const formation = FORMATIONS[formationId] || FORMATIONS["4-3-3"];
   const [rolling, setRolling] = useState(false);
   const [selectedPlayerIdx, setSelectedPlayerIdx] = useState(-1);
@@ -64,7 +66,7 @@ export const DraftScreen = ({
     if (newId === formationId) return;
     if (filledCount > 0) {
       const ok = window.confirm(
-        `Dizilişi değiştirirsen mevcut ${filledCount} oyuncu silinir. Devam?`
+        t("draft.formationChangeWarn", { count: filledCount })
       );
       if (!ok) return;
     }
@@ -197,14 +199,14 @@ export const DraftScreen = ({
       <div className="flex items-center justify-between flex-wrap gap-3 mb-4">
         <div>
           <div className="font-mono text-xs text-amber-300 tracking-widest">
-            {phase === "setup" ? "KOMUTA MERKEZİ" : "DRAFT MODU"}
+            {phase === "setup" ? t("draft.setupHeading") : t("draft.draftHeading")}
           </div>
           <h2 className="font-display text-2xl md:text-3xl tracking-tight">
             {phase === "setup" ? (
-              "DRAFT & DİZİLİŞ & TAKTİK"
+              t("draft.setupTitle")
             ) : (
               <span className="flex items-center gap-3 flex-wrap">
-                <span className="truncate max-w-[260px]">{teamName || "DRAFT TAKIMI"}</span>
+                <span className="truncate max-w-[260px]">{teamName || t("common.draftTeam")}</span>
                 <span className="text-base text-white/55 font-mono tracking-widest">
                   · {formation.label} {tactic ? `· ${TACTICS[tactic].name}` : ""}
                 </span>
@@ -220,11 +222,11 @@ export const DraftScreen = ({
               data-testid="back-to-setup-button"
               className="btn-ghost text-xs"
             >
-              ← AYARLARA DÖN
+              {t("draft.backToSetup")}
             </button>
           )}
           <div className="text-right">
-            <div className="text-[10px] uppercase tracking-widest text-white/60">CHANGE HAKKI</div>
+            <div className="text-[10px] uppercase tracking-widest text-white/60">{t("draft.changeRights")}</div>
             <div className="font-display text-2xl text-amber-300" data-testid="changes-remaining">{changes.remaining} / 3</div>
           </div>
           <button
@@ -234,13 +236,13 @@ export const DraftScreen = ({
             data-testid="start-tournament-button"
             className="btn-primary disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2"
           >
-            <Play size={16} /> TURNUVAYA BAŞLA
+            <Play size={16} /> {t("draft.startTournament")}
           </button>
           {isDraftComplete && (
             <ShareMenu
               targetRef={pitchRef}
-              draft={{ formationId, teamName: teamName || "DRAFT TAKIMI", xi }}
-              shareText={`${teamName || "DRAFT TAKIMI"} kadrosunu kurdum. Sen bunu yenebilir misin?`}
+              draft={{ formationId, teamName: teamName || t("common.draftTeam"), xi }}
+              shareText={t("draft.shareText", { team: teamName || t("common.draftTeam") })}
               filename={`${(teamName || "draft").replace(/\s+/g, "-").toLowerCase()}.png`}
             />
           )}
@@ -255,13 +257,13 @@ export const DraftScreen = ({
         <div className="lg:col-span-3 space-y-4">
           {/* Team name */}
           <div className="glass rounded-2xl p-4">
-            <label className="text-[10px] text-white/55 tracking-widest font-mono block mb-2">TAKIM ADI</label>
+            <label className="text-[10px] text-white/55 tracking-widest font-mono block mb-2">{t("draft.teamNameLabel")}</label>
             <input
               type="text"
               value={teamName || ""}
               onChange={(e) => setTeamName(e.target.value.slice(0, 24))}
               maxLength={24}
-              placeholder="DRAFT TAKIMI"
+              placeholder={t("common.draftTeam")}
               data-testid="team-name-input"
               className="w-full bg-black/40 border border-white/15 focus:border-amber-300 outline-none rounded-md px-3 py-2 font-display text-lg tracking-tight text-white placeholder:text-white/30"
             />
@@ -269,7 +271,7 @@ export const DraftScreen = ({
 
           {/* Formation */}
           <div className="glass rounded-2xl p-4">
-            <div className="text-[10px] text-white/55 tracking-widest font-mono mb-3">DİZİLİŞ</div>
+            <div className="text-[10px] text-white/55 tracking-widest font-mono mb-3">{t("draft.formationLabel")}</div>
             <div className="grid grid-cols-4 gap-2">
               {Object.values(FORMATIONS).map((f) => {
                 const active = formationId === f.id;
@@ -294,7 +296,7 @@ export const DraftScreen = ({
 
           {/* Tactic */}
           <div className="glass rounded-2xl p-4">
-            <div className="text-[10px] text-white/55 tracking-widest font-mono mb-3">TAKTİK</div>
+            <div className="text-[10px] text-white/55 tracking-widest font-mono mb-3">{t("draft.tacticLabel")}</div>
             <div className="space-y-2">
               {Object.values(TACTICS).map((t) => {
                 const Icon = TACTIC_ICONS[t.icon] || Flame;
@@ -329,7 +331,7 @@ export const DraftScreen = ({
 
           {/* Roll dice */}
           <div className="glass rounded-2xl p-4">
-            <div className="text-[10px] text-white/55 tracking-widest font-mono mb-3">ZAR</div>
+            <div className="text-[10px] text-white/55 tracking-widest font-mono mb-3">{t("draft.diceLabel")}</div>
             {!pool && !isDraftComplete && (
               <>
                 <button
@@ -339,11 +341,11 @@ export const DraftScreen = ({
                   data-testid="roll-dice-button"
                   className="w-full btn-primary text-base py-3 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  🎲 ROLL DICE
+                  {t("draft.rollDice")}
                 </button>
                 {!tactic && (
                   <div className="text-[10px] text-amber-300/80 mt-2 text-center font-mono tracking-widest">
-                    ÖNCE TAKTİK SEÇ
+                    {t("draft.pickTacticFirst")}
                   </div>
                 )}
               </>
@@ -351,7 +353,7 @@ export const DraftScreen = ({
             {pool && !rolling && !isDraftComplete && (
               <>
                 <div className="text-center mb-3 text-[11px] text-white/70 font-mono tracking-widest">
-                  Çekildi: <span className="text-amber-300">{pool.season} {pool.team.club}</span>
+                  {t("draft.drawn")} <span className="text-amber-300">{pool.season} {pool.team.club}</span>
                 </div>
                 <button
                   type="button"
@@ -359,20 +361,20 @@ export const DraftScreen = ({
                   data-testid="continue-to-draft-button"
                   className="w-full btn-primary text-base py-3"
                 >
-                  DRAFT&apos;A DEVAM ET →
+                  {t("draft.continueToDraft")}
                 </button>
                 <div className="text-[10px] text-white/45 mt-2 text-center font-mono tracking-widest">
-                  Aynı takım korunur · yeni zar için CHANGE kullan
+                  {t("draft.keepTeamHint")}
                 </div>
               </>
             )}
             {pool && !rolling && isDraftComplete && (
               <div className="text-center py-2 text-[10px] text-white/55 font-mono tracking-widest">
-                Çekildi: {pool.season} {pool.team.club}
+                {t("draft.drawn")} {pool.season} {pool.team.club}
               </div>
             )}
             {isDraftComplete && (
-              <div className="text-center py-3 font-display text-amber-300 text-base">KADRO TAMAM</div>
+              <div className="text-center py-3 font-display text-amber-300 text-base">{t("draft.squadReady")}</div>
             )}
           </div>
         </div>
@@ -383,9 +385,9 @@ export const DraftScreen = ({
           phase === "setup" ? "lg:col-span-6" : (isDraftComplete ? "lg:col-span-4" : "lg:col-span-5")
         }`}>
           <div className="text-xs text-white/55 mb-3 font-mono tracking-widest flex items-center justify-between">
-            <span>SAHA · {formation.label} {tactic ? `· ${TACTICS[tactic].name}` : ""}</span>
+            <span>{t("draft.pitchHeader")} · {formation.label} {tactic ? `· ${TACTICS[tactic].name}` : ""}</span>
             {selectedPlayer && (
-              <span className="text-amber-300">YEŞİL SLOTA TIKLA</span>
+              <span className="text-amber-300">{t("draft.clickGreenSlot")}</span>
             )}
           </div>
           <div ref={pitchRef} className="rounded-xl overflow-hidden">
@@ -400,7 +402,7 @@ export const DraftScreen = ({
           </div>
           {selectedPlayer && (
             <div className="mt-3 p-2 rounded-lg bg-amber-300/10 border border-amber-300/30 text-xs text-amber-200 flex items-center justify-between">
-              <span>SEÇİLİ: <strong>{selectedPlayer.name}</strong> ({selectedPlayer.primary})</span>
+              <span>{t("draft.selected")} <strong>{selectedPlayer.name}</strong> ({selectedPlayer.primary})</span>
               <button
                 type="button"
                 onClick={() => { setSelectedPlayerIdx(-1); sound.click(); }}
@@ -415,7 +417,7 @@ export const DraftScreen = ({
         {phase === "setup" && (
         <div className="lg:col-span-3 glass rounded-2xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <div className="text-[10px] text-white/55 tracking-widest font-mono">KADRO</div>
+            <div className="text-[10px] text-white/55 tracking-widest font-mono">{t("draft.squad")}</div>
             <div className="font-display text-2xl text-amber-300" data-testid="roster-count">{filledCount}/{totalSlots}</div>
           </div>
           {/* Progress bar */}
@@ -458,14 +460,14 @@ export const DraftScreen = ({
           {liveStats && (
             <div className="mt-4 pt-3 border-t border-white/10">
               <div className="flex items-center justify-between mb-2">
-                <div className="text-[10px] text-white/55 tracking-widest font-mono">TAKIM OVR</div>
+                <div className="text-[10px] text-white/55 tracking-widest font-mono">{t("common.teamOvr")}</div>
                 <div className="font-display text-3xl text-amber-300" data-testid="team-overall">{liveStats.overall}</div>
               </div>
               <div className="grid grid-cols-4 gap-1 text-center">
-                <Stat label="KLC" v={liveStats.keeper} />
-                <Stat label="DEF" v={liveStats.defense} />
-                <Stat label="ORT" v={liveStats.midfield} />
-                <Stat label="HÜC" v={liveStats.attack} />
+                <Stat label={t("common.keeperShort")} v={liveStats.keeper} />
+                <Stat label={t("common.defenseShort")} v={liveStats.defense} />
+                <Stat label={t("common.midfieldShort")} v={liveStats.midfield} />
+                <Stat label={t("common.attackShort")} v={liveStats.attack} />
               </div>
             </div>
           )}
@@ -478,7 +480,7 @@ export const DraftScreen = ({
             {!pool && !rolling && !isDraftComplete && (
               <SpinTheWheelIdle
                 onSpin={handleRoll}
-                hint={`KADRO: ${filledCount}/${totalSlots}`}
+                hint={t("draft.kadroCount", { filled: filledCount, total: totalSlots })}
               />
             )}
 
@@ -508,7 +510,7 @@ export const DraftScreen = ({
                       <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0 }}>●</motion.span>
                       <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0.18 }}>●</motion.span>
                       <motion.span animate={{ opacity: [0.3, 1, 0.3] }} transition={{ duration: 1.1, repeat: Infinity, delay: 0.36 }}>●</motion.span>
-                      <span className="ml-2">ZAR DÖNÜYOR</span>
+                      <span className="ml-2">{t("draft.rollingDice")}</span>
                     </motion.div>
                   )}
                 </motion.div>
@@ -545,7 +547,7 @@ export const DraftScreen = ({
                           />
                           {p._alreadyPicked && (
                             <span className="absolute top-1 right-1 bg-red-500 text-white text-[7px] font-bold tracking-wider px-1 py-0.5 rounded-full z-10">
-                              KADRODA
+                              {t("draft.inSquad")}
                             </span>
                           )}
                         </motion.div>
@@ -567,9 +569,9 @@ export const DraftScreen = ({
                       disabled={changes.remaining <= 0}
                       data-testid="change-year-button-draft"
                       className="flex-1 btn-ghost text-xs py-2 flex items-center justify-center gap-1 disabled:opacity-30"
-                      title="Aynı kulübün farklı sezonu"
+                      title={t("draft.changeYearTitle")}
                     >
-                      <RefreshCw size={12} /> YIL
+                      <RefreshCw size={12} /> {t("draft.changeYearBtn")}
                     </button>
                     <button
                       type="button"
@@ -578,13 +580,13 @@ export const DraftScreen = ({
                       data-testid="change-button-draft"
                       className="flex-1 btn-ghost text-xs py-2 flex items-center justify-center gap-1 disabled:opacity-30"
                     >
-                      <RefreshCw size={12} /> CHANGE
+                      <RefreshCw size={12} /> {t("draft.changeBtn")}
                     </button>
                     <div
                       className="flex-1 text-center"
                       data-testid="change-credits-hint"
                     >
-                      <div className="text-[9px] uppercase tracking-widest text-white/55 font-mono">DEĞİŞTİRME HAKKIN</div>
+                      <div className="text-[9px] uppercase tracking-widest text-white/55 font-mono">{t("draft.changeRightsLower")}</div>
                       <div className="font-display text-xl text-amber-300 leading-tight">{changes.remaining} / 3</div>
                     </div>
                   </motion.div>
@@ -595,11 +597,11 @@ export const DraftScreen = ({
             {isDraftComplete && (
               <div className="flex flex-col h-full" data-testid="final-roster-cards">
                 <div className="text-center mb-3">
-                  <div className="font-mono text-xs tracking-widest text-amber-300 mb-1">🏆 KADRON HAZIR</div>
-                  <div className="font-display text-2xl text-amber-300 leading-tight">{teamName || "DRAFT TAKIMI"}</div>
+                  <div className="font-mono text-xs tracking-widest text-amber-300 mb-1">{t("draft.squadReadyHeader")}</div>
+                  <div className="font-display text-2xl text-amber-300 leading-tight">{teamName || t("common.draftTeam")}</div>
                   {liveStats && (
                     <div className="mt-2 inline-flex items-center gap-3 px-3 py-1 rounded-full bg-black/40 border border-amber-300/30">
-                      <span className="text-[10px] font-mono text-white/55 tracking-widest">TAKIM OVR</span>
+                      <span className="text-[10px] font-mono text-white/55 tracking-widest">{t("common.teamOvr")}</span>
                       <span className="font-display text-2xl text-amber-300 leading-none">{liveStats.overall}</span>
                     </div>
                   )}
@@ -621,14 +623,14 @@ export const DraftScreen = ({
                 </div>
                 {liveStats && (
                   <div className="mt-3 grid grid-cols-4 gap-2">
-                    <Stat label="KLC" v={liveStats.keeper} />
-                    <Stat label="DEF" v={liveStats.defense} />
-                    <Stat label="ORT" v={liveStats.midfield} />
-                    <Stat label="HÜC" v={liveStats.attack} />
+                    <Stat label={t("common.keeperShort")} v={liveStats.keeper} />
+                    <Stat label={t("common.defenseShort")} v={liveStats.defense} />
+                    <Stat label={t("common.midfieldShort")} v={liveStats.midfield} />
+                    <Stat label={t("common.attackShort")} v={liveStats.attack} />
                   </div>
                 )}
                 <div className="mt-3 text-center text-xs text-white/55">
-                  Sağ üstten <span className="text-amber-300 font-display">TURNUVAYA BAŞLA</span>
+                  {t("draft.startFromTopRight")} <span className="text-amber-300 font-display">{t("draft.startFromTopRightBtn")}</span>
                 </div>
               </div>
             )}
@@ -648,6 +650,7 @@ const Stat = ({ label, v }) => (
 
 // Idle state for the right-side Spin panel — empty CLUB/SEASON boxes + Spin button.
 const SpinTheWheelIdle = ({ onSpin, hint }) => {
+  const { t } = useTranslation();
   useEffect(() => {
     const onKey = (e) => {
       if (e.code === "Space" && !e.target.matches("input, textarea")) {
@@ -667,9 +670,9 @@ const SpinTheWheelIdle = ({ onSpin, hint }) => {
     >
       <div className="text-[10px] text-white/40 tracking-widest font-mono mb-1">{hint}</div>
       <div className="flex items-center gap-3 mb-5 mt-2">
-        <SlotBox label="CLUB" empty />
+        <SlotBox label={t("draft.slotClub")} empty />
         <span className="text-white/30 font-display text-xl">×</span>
-        <SlotBox label="SEASON" empty narrow />
+        <SlotBox label={t("draft.slotSeason")} empty narrow />
       </div>
       <button
         type="button"
@@ -677,15 +680,16 @@ const SpinTheWheelIdle = ({ onSpin, hint }) => {
         data-testid="roll-dice-button-draft"
         className="px-6 py-3 rounded-full bg-emerald-500 hover:bg-emerald-400 text-white font-display text-lg tracking-tight shadow-lg shadow-emerald-500/30 transition-transform hover:scale-[1.03] flex items-center gap-2"
       >
-        🎰 Spin the Wheel
+        {t("draft.spinTheWheel")}
       </button>
-      <div className="text-[10px] text-white/35 mt-3 italic">veya boş alana tıkla / Boşluk tuşu</div>
+      <div className="text-[10px] text-white/35 mt-3 italic">{t("draft.orClickOrSpace")}</div>
     </div>
   );
 };
 
 // Spinner during/after roll — two boxes (CLUB & SEASON) animate independently.
 const ClubSeasonSpinner = ({ cycling, season, team }) => {
+  const { t } = useTranslation();
   const [clubIdx, setClubIdx] = useState(() => Math.floor(Math.random() * ALL_TEAM_LABELS.length));
   const [seasonIdx, setSeasonIdx] = useState(() => Math.floor(Math.random() * ALL_TEAM_LABELS.length));
   useEffect(() => {
@@ -706,12 +710,12 @@ const ClubSeasonSpinner = ({ cycling, season, team }) => {
   return (
     <div className="flex flex-col items-center py-2" data-testid="club-season-spinner">
       <div className="flex items-center gap-3 mb-2">
-        <SlotBox label="CLUB" crest={clubCrest} value={clubLabel} testId="rolled-team-name" />
+        <SlotBox label={t("draft.slotClub")} crest={clubCrest} value={clubLabel} testId="rolled-team-name" />
         <span className="text-white/30 font-display text-xl">×</span>
-        <SlotBox label="SEASON" value={seasonLabel} narrow testId="rolled-season" />
+        <SlotBox label={t("draft.slotSeason")} value={seasonLabel} narrow testId="rolled-season" />
       </div>
       {cycling && (
-        <div className="font-mono text-[10px] text-amber-300 tracking-widest mt-1">ÇEKİLİYOR…</div>
+        <div className="font-mono text-[10px] text-amber-300 tracking-widest mt-1">{t("draft.drawing")}</div>
       )}
     </div>
   );

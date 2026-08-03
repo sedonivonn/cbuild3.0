@@ -1,12 +1,15 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Volume2, VolumeX, RotateCcw } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { sound } from "../engine/sounds";
 import { UserMenu } from "./UserMenu";
 
 export const TopBar = ({ onSoundToggle, soundOn, onReset, onLogoClick, onOpenAuth, title }) => {
+  const { t, i18n } = useTranslation();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const wrapperRef = useRef(null);
+  const currentLang = i18n.language === "en" ? "en" : "tr";
 
   // Close the confirmation panel on outside click or Escape.
   useEffect(() => {
@@ -25,6 +28,12 @@ export const TopBar = ({ onSoundToggle, soundOn, onReset, onLogoClick, onOpenAut
     };
   }, [confirmOpen]);
 
+  const setLang = (lng) => {
+    if (i18n.language === lng) return;
+    sound.click();
+    i18n.changeLanguage(lng);
+  };
+
   return (
     <div className="w-full px-5 md:px-10 py-4 flex items-center justify-between border-b border-white/5 sticky top-0 z-30 glass">
       <div className="flex items-center gap-3 ml-2 md:ml-4">
@@ -33,7 +42,7 @@ export const TopBar = ({ onSoundToggle, soundOn, onReset, onLogoClick, onOpenAut
           onClick={() => { sound.click(); onLogoClick && onLogoClick(); }}
           className="px-4 h-12 rounded-md flex items-center justify-center border border-white/10 bg-black/70 transition-all hover:brightness-125 hover:border-amber-300/40 focus:outline-none focus:ring-2 focus:ring-amber-300/50"
           style={{ boxShadow: "0 0 14px rgba(212,175,55,0.2), inset 0 0 7px rgba(212,175,55,0.07)" }}
-          title="Ana sayfaya dön"
+          title={t("topBar.goToHome", { defaultValue: t("common.goToHome") })}
           data-testid="topbar-logo-button"
         >
           <span className="font-display text-xl leading-none tracking-tight flex items-baseline">
@@ -52,11 +61,47 @@ export const TopBar = ({ onSoundToggle, soundOn, onReset, onLogoClick, onOpenAut
           onClick={() => { sound.click(); onSoundToggle && onSoundToggle(); }}
           data-testid="sound-toggle-button"
           className="btn-ghost flex items-center gap-2 !py-1.5 !px-3 text-sm"
-          title={soundOn ? "Sesi kapat" : "Sesi aç"}
+          title={soundOn ? t("topBar.soundOnTitle") : t("topBar.soundOffTitle")}
         >
           {soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
-          <span>{soundOn ? "SES" : "SESSİZ"}</span>
+          <span>{soundOn ? t("topBar.soundOn") : t("topBar.soundOff")}</span>
         </button>
+
+        {/* Language switcher — placed between Sıfırla and the sound icon per user request */}
+        <div
+          role="group"
+          aria-label={t("topBar.languageTitle")}
+          title={t("topBar.languageTitle")}
+          className="inline-flex items-center rounded-full border border-white/12 bg-black/30 p-0.5 text-[11px] font-mono tracking-widest"
+          data-testid="language-switcher"
+        >
+          <button
+            type="button"
+            onClick={() => setLang("tr")}
+            data-testid="lang-tr-button"
+            aria-pressed={currentLang === "tr"}
+            className={`px-2.5 py-1 rounded-full transition-colors ${
+              currentLang === "tr"
+                ? "bg-amber-300 text-black"
+                : "text-white/75 hover:text-white"
+            }`}
+          >
+            TR
+          </button>
+          <button
+            type="button"
+            onClick={() => setLang("en")}
+            data-testid="lang-en-button"
+            aria-pressed={currentLang === "en"}
+            className={`px-2.5 py-1 rounded-full transition-colors ${
+              currentLang === "en"
+                ? "bg-amber-300 text-black"
+                : "text-white/75 hover:text-white"
+            }`}
+          >
+            ENG
+          </button>
+        </div>
 
         <div ref={wrapperRef} className="relative">
           <button
@@ -65,10 +110,10 @@ export const TopBar = ({ onSoundToggle, soundOn, onReset, onLogoClick, onOpenAut
             data-testid="reset-button"
             aria-expanded={confirmOpen}
             className={`btn-ghost flex items-center gap-2 !py-1.5 !px-3 text-sm ${confirmOpen ? "ring-1 ring-amber-300/60" : ""}`}
-            title="Sıfırla"
+            title={t("topBar.resetTitle")}
           >
             <RotateCcw size={16} />
-            <span>SIFIRLA</span>
+            <span>{t("topBar.reset")}</span>
           </button>
 
           <AnimatePresence>
@@ -83,10 +128,10 @@ export const TopBar = ({ onSoundToggle, soundOn, onReset, onLogoClick, onOpenAut
                 data-testid="reset-confirm-panel"
               >
                 <div className="font-display text-base tracking-wide text-white">
-                  Emin misin?
+                  {t("common.areYouSure")}
                 </div>
                 <p className="mt-1 text-[12px] text-white/65 leading-relaxed">
-                  Tüm ilerlemeni sıfırlayıp ana ekrana döner. Bu işlem geri alınamaz.
+                  {t("topBar.resetWarning")}
                 </p>
                 <div className="mt-3 flex items-center justify-end gap-2">
                   <button
@@ -95,7 +140,7 @@ export const TopBar = ({ onSoundToggle, soundOn, onReset, onLogoClick, onOpenAut
                     data-testid="reset-cancel-button"
                     className="btn-ghost !py-1.5 !px-3 text-xs"
                   >
-                    VAZGEÇ
+                    {t("common.cancel")}
                   </button>
                   <button
                     type="button"
@@ -107,7 +152,7 @@ export const TopBar = ({ onSoundToggle, soundOn, onReset, onLogoClick, onOpenAut
                     data-testid="reset-confirm-button"
                     className="btn-primary !py-1.5 !px-3 text-xs"
                   >
-                    EVET, SIFIRLA
+                    {t("common.yesReset")}
                   </button>
                 </div>
               </motion.div>

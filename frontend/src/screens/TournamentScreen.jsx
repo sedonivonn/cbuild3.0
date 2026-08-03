@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { Crest } from "../components/Crest";
 import { computeStandings, buildR16, playGroupMatch, playKnockout } from "../engine/tournamentEngine";
 import { drawGroups, generateGroupFixtures } from "../engine/draftEngine";
@@ -55,6 +56,7 @@ function buildTeamRefs(userTeam) {
 }
 
 export const TournamentScreen = ({ userStats, userTacticId, userTeamName, userXi, onMatch, onTrophy, savedState, onSaveState }) => {
+  const { t } = useTranslation();
   const [state, setState] = useState(savedState || null);
 
   // Aggregated per-player tournament stats (goals/assists/MOM/rating).

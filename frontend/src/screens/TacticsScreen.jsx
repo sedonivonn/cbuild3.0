@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { TACTICS } from "../data/tactics";
 import { Pitch } from "../components/Pitch";
 import { Flame, Network, Shield, Plus, Minus } from "lucide-react";
@@ -9,13 +10,14 @@ import { analyzeTactic } from "../engine/tacticAnalysis";
 const ICONS = { Flame, Network, Shield };
 
 export const TacticsScreen = ({ formationId, xi, teamStats, tactic, setTactic, onContinue }) => {
+  const { t } = useTranslation();
   return (
     <div className="px-5 md:px-12 py-8 max-w-7xl mx-auto">
       <div className="flex items-end justify-between flex-wrap gap-4 mb-6">
         <div>
-          <div className="font-mono text-xs text-amber-300 tracking-widest mb-1">ADIM 3 / 4 · TAKTİK</div>
-          <h2 className="font-display text-4xl md:text-5xl tracking-tight">SAVAŞ PLANINI KUR</h2>
-          <p className="text-white/60 mt-2 max-w-xl">Tek bir taktik seç. Maç boyunca tüm karşılaşmalarda bu plan uygulanacak.</p>
+          <div className="font-mono text-xs text-amber-300 tracking-widest mb-1">{t("tactics.step")}</div>
+          <h2 className="font-display text-4xl md:text-5xl tracking-tight">{t("tactics.title")}</h2>
+          <p className="text-white/60 mt-2 max-w-xl">{t("tactics.subtitle")}</p>
         </div>
         <button
           type="button"
@@ -24,24 +26,24 @@ export const TacticsScreen = ({ formationId, xi, teamStats, tactic, setTactic, o
           data-testid="tactics-continue-button"
           className="btn-primary disabled:opacity-50"
         >
-          TURNUVAYA BAŞLA →
+          {t("tactics.startTournament")}
         </button>
       </div>
 
       <div className="grid lg:grid-cols-12 gap-6">
         {/* Team summary */}
         <div className="lg:col-span-4 glass rounded-2xl p-5">
-          <div className="text-xs text-white/60 font-mono tracking-widest mb-2">DRAFT TAKIMIN</div>
+          <div className="text-xs text-white/60 font-mono tracking-widest mb-2">{t("tactics.draftTeam")}</div>
           <div className="flex items-end gap-3 mb-3">
             <span className="font-display text-5xl text-amber-300" data-testid="team-overall">{teamStats?.overall || 0}</span>
-            <span className="text-white/60 font-mono text-xs">OVR</span>
+            <span className="text-white/60 font-mono text-xs">{t("common.ovr")}</span>
           </div>
           <Pitch formationId={formationId} xi={xi} compact readOnly />
           <div className="grid grid-cols-4 gap-2 mt-4 text-center">
-            <Stat label="KLC" v={teamStats?.keeper} />
-            <Stat label="DEF" v={teamStats?.defense} />
-            <Stat label="ORT" v={teamStats?.midfield} />
-            <Stat label="HÜC" v={teamStats?.attack} />
+            <Stat label={t("common.keeperShort")} v={teamStats?.keeper} />
+            <Stat label={t("common.defenseShort")} v={teamStats?.defense} />
+            <Stat label={t("common.midfieldShort")} v={teamStats?.midfield} />
+            <Stat label={t("common.attackShort")} v={teamStats?.attack} />
           </div>
         </div>
 
@@ -63,6 +65,7 @@ export const TacticsScreen = ({ formationId, xi, teamStats, tactic, setTactic, o
 };
 
 const TacticCard = ({ tactic, active, teamStats, onSelect }) => {
+  const { t } = useTranslation();
   const Icon = ICONS[tactic.icon] || Flame;
   const analysis = useMemo(() => analyzeTactic(teamStats, tactic.id), [teamStats, tactic.id]);
   const pros = analysis.filter((a) => a.sign === "+");
@@ -86,16 +89,16 @@ const TacticCard = ({ tactic, active, teamStats, onSelect }) => {
 
       {/* Base mod table */}
       <div className="grid grid-cols-2 gap-2 mt-4 text-[11px] text-white/70">
-        <Mod label="HÜCUM" v={tactic.mods.attack} />
-        <Mod label="ORTA" v={tactic.mods.midfield} />
-        <Mod label="DEF" v={tactic.mods.defense} />
-        <Mod label="KALECİ" v={tactic.mods.keeper} />
+        <Mod label={t("common.attack")} v={tactic.mods.attack} />
+        <Mod label={t("common.midfield")} v={tactic.mods.midfield} />
+        <Mod label={t("common.defense")} v={tactic.mods.defense} />
+        <Mod label={t("common.keeperFull")} v={tactic.mods.keeper} />
       </div>
 
       {/* DYNAMIC analysis tailored to user XI */}
       {(pros.length > 0 || cons.length > 0) && (
         <div className="mt-4 pt-3 border-t border-white/5">
-          <div className="text-[10px] text-white/40 tracking-widest font-mono mb-2">KADRONA GÖRE</div>
+          <div className="text-[10px] text-white/40 tracking-widest font-mono mb-2">{t("tactics.forYourSquad")}</div>
           <div className="space-y-1.5">
             {pros.map((p, i) => (
               <div key={`p${i}`} className="flex items-start gap-2 text-[11px] leading-snug text-emerald-300" data-testid={`tactic-${tactic.id}-pro-${i}`}>

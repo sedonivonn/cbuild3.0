@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { LogIn, LogOut, User as UserIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../hooks/useAuth";
 import { sound } from "../engine/sounds";
 
@@ -8,6 +9,7 @@ import { sound } from "../engine/sounds";
 // available, shows a GİRİŞ YAP button. When signed in, shows the avatar/
 // name and a dropdown with logout.
 export const UserMenu = ({ onOpenAuth }) => {
+  const { t } = useTranslation();
   const { authAvailable, user, logout } = useAuth();
   const [open, setOpen] = useState(false);
   const wrapperRef = useRef(null);
@@ -37,16 +39,16 @@ export const UserMenu = ({ onOpenAuth }) => {
         onClick={() => { sound.click(); onOpenAuth && onOpenAuth(); }}
         data-testid="topbar-login-button"
         className="btn-ghost flex items-center gap-2 !py-1.5 !px-3 text-sm"
-        title="Giriş yap"
+        title={t("topBar.loginTitle")}
       >
         <LogIn size={14} />
-        <span>GİRİŞ YAP</span>
+        <span>{t("topBar.login")}</span>
       </button>
     );
   }
 
   const initials = ((user.displayName || user.email || "?").trim()[0] || "?").toUpperCase();
-  const label = user.displayName || user.email || "Hesap";
+  const label = user.displayName || user.email || t("topBar.account");
 
   return (
     <div ref={wrapperRef} className="relative">
@@ -106,7 +108,7 @@ export const UserMenu = ({ onOpenAuth }) => {
               className="mt-2 w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm text-white/85 hover:bg-white/5 hover:text-white transition"
             >
               <LogOut size={14} />
-              <span>ÇIKIŞ YAP</span>
+              <span>{t("topBar.logout")}</span>
             </button>
           </motion.div>
         )}

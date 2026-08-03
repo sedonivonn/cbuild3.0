@@ -14,11 +14,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Zap, Target, Hand, SkipForward, Clock } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 
-const SPEEDS = {
-  slow:   { label: "YAVAŞ",  gameSecPerRealSec: 45 },   // 90 gm ≈ 120s
-  normal: { label: "NORMAL", gameSecPerRealSec: 120 },  // 90 gm ≈ 45s
-  fast:   { label: "HIZLI",  gameSecPerRealSec: 360 },  // 90 gm ≈ 15s
+const SPEED_KEYS = ["slow", "normal", "fast"];
+const SPEED_CFG = {
+  slow:   { gameSecPerRealSec: 45 },
+  normal: { gameSecPerRealSec: 120 },
+  fast:   { gameSecPerRealSec: 360 },
 };
 
 const MATCH_MINUTES = 90;
@@ -42,7 +44,6 @@ const eventIcon = (type) => {
   if (type === "SAVE") return <Hand size={12} className="text-sky-300" />;
   return <Zap size={12} className="text-amber-300" />;
 };
-const eventTag = (type) => (type === "GOAL" ? "GOL" : type === "SAVE" ? "KURTARIŞ" : "FIRSAT");
 
 // -----------------------------------------------------------------------------
 // Component
@@ -60,6 +61,7 @@ export const ReplayMatch = ({
   onEnd,                  // () => void, fired once the timeline reaches 90'
   onSkip,                 // () => void
 }) => {
+  const { t } = useTranslation();
   const [speedKey, setSpeedKey] = useState("normal");
   const [elapsedGameSec, setElapsedGameSec] = useState(0);
   const [visibleCount, setVisibleCount] = useState(0);
@@ -80,7 +82,7 @@ export const ReplayMatch = ({
   // Wall-clock driven match clock. We advance `elapsedGameSec` each frame by
   // `gameSecPerRealSec * dt`.
   useEffect(() => {
-    const speed = SPEEDS[speedKey];
+    const speed = SPEED_CFG[speedKey];
     const tick = (ts) => {
       const prev = lastTsRef.current || ts;
       const dt = Math.min(0.1, (ts - prev) / 1000);
@@ -242,10 +244,10 @@ export const ReplayMatch = ({
             onClick={handleSkip}
             data-testid="replay-skip-button"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/8 hover:bg-amber-300 hover:text-black border border-white/15 text-white/85 font-mono text-[10px] md:text-[11px] tracking-widest transition-colors"
-            title="Simülasyonu atla ve sonuca geç"
+            title={t("replay.skipTitle")}
           >
             <SkipForward size={12} />
-            MAÇI ATLA
+            {t("replay.skipMatch")}
           </button>
         </div>
       </div>
@@ -262,7 +264,7 @@ export const ReplayMatch = ({
             {homeName}
           </motion.div>
           <div className="text-[10px] text-white/45 font-mono tracking-widest">
-            {homeIsUser ? "SENİN TAKIMIN · EV" : "EV"}
+            {homeIsUser ? t("common.yourTeamHome") : t("common.homeShort")}
           </div>
         </div>
         <motion.div
@@ -285,14 +287,14 @@ export const ReplayMatch = ({
             {awayName}
           </motion.div>
           <div className="text-[10px] text-white/45 font-mono tracking-widest">
-            {awayIsUser ? "SENİN TAKIMIN · DEP" : "DEP"}
+            {awayIsUser ? t("common.yourTeamAway") : t("common.awayShort")}
           </div>
         </div>
       </div>
 
       {/* ---- Momentum / Baskı bar -------------------------------------- */}
       <div className="mb-1 flex items-center justify-between font-mono text-[10px] tracking-widest text-white/45">
-        <span>MOMENTUM</span><span>BASKI</span>
+        <span>{t("replay.momentum")}</span><span>{t("replay.pressure")}</span>
       </div>
       <div className="h-2 rounded-full bg-white/8 overflow-hidden mb-4 relative" data-testid="replay-momentum">
         <div className="absolute inset-y-0 left-0 bg-amber-300/70" style={{ width: `${momentum}%` }} />
@@ -301,26 +303,26 @@ export const ReplayMatch = ({
 
       {/* ---- Stat rows ------------------------------------------------- */}
       <div className="space-y-2 mb-4" data-testid="replay-stats">
-        <StatRow label="ŞUT"     h={capped.h.shots} a={capped.a.shots} />
-        <StatRow label="İSABET"  h={capped.h.on}    a={capped.a.on} />
-        <StatRow label="XG"      h={capped.h.xg}    a={capped.a.xg} decimals={1} />
-        <StatRow label="TOPLA %" h={`${possession.h}%`} a={`${possession.a}%`} isString />
+        <StatRow label={t("replay.shot")}     h={capped.h.shots} a={capped.a.shots} />
+        <StatRow label={t("replay.onTarget")}  h={capped.h.on}    a={capped.a.on} />
+        <StatRow label={t("replay.xg")}      h={capped.h.xg}    a={capped.a.xg} decimals={1} />
+        <StatRow label={t("replay.possession")} h={`${possession.h}%`} a={`${possession.a}%`} isString />
       </div>
 
       {/* ---- Events list ----------------------------------------------- */}
       <div className="rounded-lg border border-white/10 bg-black/30 overflow-hidden" data-testid="replay-events">
         <div className="px-3 py-2 font-mono text-[10px] tracking-widest text-white/55 border-b border-white/10">
-          OLAYLAR
+          {t("replay.events")}
         </div>
         <div className="max-h-56 overflow-y-auto px-3 py-2 space-y-1.5">
           {eventsToShow.length === 0 ? (
             <div className="text-white/40 font-mono text-[11px] py-3 text-center" data-testid="replay-events-empty">
-              Maç başladı…
+              {t("replay.matchStarted")}
             </div>
           ) : (
             <AnimatePresence initial={false}>
               {eventsToShow.map((e, idx) => (
-                <EventRow key={`${e.minute}-${e.second || 0}-${idx}-${e.type}`} e={e} />
+                <EventRow key={`${e.minute}-${e.second || 0}-${idx}-${e.type}`} e={e} t={t} />
               ))}
             </AnimatePresence>
           )}
@@ -329,8 +331,8 @@ export const ReplayMatch = ({
 
       {/* ---- Speed picker --------------------------------------------- */}
       <div className="mt-4 flex items-center justify-center gap-2" data-testid="replay-speed-picker">
-        <div className="font-mono text-[10px] tracking-widest text-white/45 mr-1">HIZ</div>
-        {Object.entries(SPEEDS).map(([key, cfg]) => (
+        <div className="font-mono text-[10px] tracking-widest text-white/45 mr-1">{t("replay.speed")}</div>
+        {SPEED_KEYS.map((key) => (
           <button
             key={key}
             type="button"
@@ -342,7 +344,7 @@ export const ReplayMatch = ({
                 : "bg-white/6 text-white/75 border-white/12 hover:bg-white/12"
             }`}
           >
-            {cfg.label}
+            {t(`replay.speed${key.charAt(0).toUpperCase() + key.slice(1)}`)}
           </button>
         ))}
       </div>
@@ -377,9 +379,9 @@ const StatRow = ({ label, h, a, decimals = 0, isString = false }) => {
   );
 };
 
-const EventRow = ({ e }) => {
+const EventRow = ({ e, t }) => {
   const isHome = e.side === "home";
-  const tag = eventTag(e.type);
+  const tag = e.type === "GOAL" ? t("replay.tagGoal") : e.type === "SAVE" ? t("replay.tagSave") : t("replay.tagChance");
   const player = e.player || e.scorer || e.shooter || e.teamName || "";
   const tagColor =
     e.type === "GOAL" ? "text-emerald-300" :

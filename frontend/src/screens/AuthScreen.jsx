@@ -1,13 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { LogIn, UserPlus, X, Mail, Lock, User as UserIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useAuth } from "../hooks/useAuth";
 import { sound } from "../engine/sounds";
 
-// Modal login/register screen. Mounted from App.js as an overlay when the
-// user clicks GİRİŞ YAP in the TopBar. Style follows the existing glass/gold
-// language of the app.
 export const AuthScreen = ({ onClose }) => {
+  const { t } = useTranslation();
   const {
     authAvailable,
     error,
@@ -50,7 +49,7 @@ export const AuthScreen = ({ onClose }) => {
         onClose && onClose();
       } else {
         await resetPassword(email.trim());
-        setInfo("Şifre sıfırlama e-postası gönderildi.");
+        setInfo(t("auth.resetSent"));
       }
     } catch (_) {
       /* error surfaced via useAuth().error */
@@ -72,7 +71,7 @@ export const AuthScreen = ({ onClose }) => {
     }
   };
 
-  const titleFor = mode === "login" ? "GİRİŞ YAP" : mode === "register" ? "HESAP OLUŞTUR" : "ŞİFREMİ SIFIRLA";
+  const titleFor = mode === "login" ? t("auth.login") : mode === "register" ? t("auth.register") : t("auth.reset");
 
   return (
     <AnimatePresence>
@@ -100,7 +99,7 @@ export const AuthScreen = ({ onClose }) => {
             onClick={() => { sound.click(); onClose && onClose(); }}
             className="absolute right-3 top-3 text-white/60 hover:text-white transition"
             data-testid="auth-close-button"
-            aria-label="Kapat"
+            aria-label={t("auth.closeAria")}
           >
             <X size={18} />
           </button>
@@ -115,8 +114,7 @@ export const AuthScreen = ({ onClose }) => {
 
           {!authAvailable ? (
             <div className="mt-6 rounded-lg border border-amber-300/25 bg-amber-500/5 p-3 text-sm text-amber-200">
-              Firebase yapılandırılmamış. `.env` dosyasına REACT_APP_FIREBASE_*
-              değerlerini ekleyip frontend&apos;i yeniden başlat.
+              {t("auth.firebaseNotConfigured")}
             </div>
           ) : (
             <>
@@ -127,7 +125,7 @@ export const AuthScreen = ({ onClose }) => {
                     <input
                       type="text"
                       autoComplete="name"
-                      placeholder="Ad (opsiyonel)"
+                      placeholder={t("auth.nameOptional")}
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/40"
@@ -141,7 +139,7 @@ export const AuthScreen = ({ onClose }) => {
                     type="email"
                     autoComplete="email"
                     required
-                    placeholder="E-posta"
+                    placeholder={t("auth.email")}
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/40"
@@ -156,7 +154,7 @@ export const AuthScreen = ({ onClose }) => {
                       autoComplete={mode === "login" ? "current-password" : "new-password"}
                       required
                       minLength={6}
-                      placeholder="Şifre (en az 6 karakter)"
+                      placeholder={t("auth.password")}
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       className="flex-1 bg-transparent text-sm text-white outline-none placeholder:text-white/40"
@@ -185,7 +183,7 @@ export const AuthScreen = ({ onClose }) => {
                   {mode === "login" && <LogIn size={16} />}
                   {mode === "register" && <UserPlus size={16} />}
                   <span>
-                    {busy ? "..." : mode === "login" ? "GİRİŞ YAP" : mode === "register" ? "KAYIT OL" : "SIFIRLAMA GÖNDER"}
+                    {busy ? t("common.loading") : mode === "login" ? t("auth.submitLogin") : mode === "register" ? t("auth.submitRegister") : t("auth.submitReset")}
                   </span>
                 </button>
               </form>
@@ -194,7 +192,7 @@ export const AuthScreen = ({ onClose }) => {
                 <>
                   <div className="my-4 flex items-center gap-2 text-[10px] uppercase tracking-widest text-white/40">
                     <div className="h-px flex-1 bg-white/10" />
-                    <span>VEYA</span>
+                    <span>{t("common.or")}</span>
                     <div className="h-px flex-1 bg-white/10" />
                   </div>
                   <button
@@ -205,7 +203,7 @@ export const AuthScreen = ({ onClose }) => {
                     data-testid="auth-google-button"
                   >
                     <GoogleIcon />
-                    <span>Google ile devam et</span>
+                    <span>{t("auth.google")}</span>
                   </button>
                 </>
               )}
@@ -214,15 +212,15 @@ export const AuthScreen = ({ onClose }) => {
                 {mode === "login" ? (
                   <>
                     <button type="button" className="hover:text-amber-300 transition" onClick={() => setMode("reset")} data-testid="auth-goto-reset">
-                      Şifremi unuttum
+                      {t("auth.forgotPassword")}
                     </button>
                     <button type="button" className="hover:text-amber-300 transition" onClick={() => setMode("register")} data-testid="auth-goto-register">
-                      Hesap oluştur →
+                      {t("auth.createAccount")}
                     </button>
                   </>
                 ) : (
                   <button type="button" className="hover:text-amber-300 transition" onClick={() => setMode("login")} data-testid="auth-goto-login">
-                    ← Girişe dön
+                    {t("auth.backToLogin")}
                   </button>
                 )}
               </div>
